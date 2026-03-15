@@ -67,7 +67,7 @@ export class PurchasesService {
     }
     return {
       productId: (product as any).id,
-      expiresAt,
+      expiresAt: null,
       price: priceProvided ? price : Number((product as any).price),
       priceProvided: priceProvided,
       categoryId,
