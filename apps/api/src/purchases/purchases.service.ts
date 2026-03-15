@@ -41,7 +41,7 @@ export class PurchasesService {
     const name = (item.productName ?? '').trim();
     if (!name) throw new BadRequestException('Cada ítem debe tener producto (nombre o selección).');
 
-    let product = null;
+    let product: any = null;;
     if (item.barcode?.trim()) {
       product = await this.prisma.product.findFirst({
         where: { businessId, barcode: item.barcode.trim(), isActive: true },
