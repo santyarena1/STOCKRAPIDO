@@ -1,0 +1,327 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  CAJERO
+  REPOSITOR
+  LECTOR
+}
+
+model Business {
+  id        String   @id @default(cuid())
+  name      String
+  cuit      String?
+  address   String?
+  currency  String   @default("ARS")
+  posConfig Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  products  Product[]
+  categories Category[]
+  sales     Sale[]
+  cashRegisters CashRegister[]
+  customers Customer[]
+  suppliers  Supplier[]
+  purchases  Purchase[]
+  pausedSales PausedSale[]
+  promos    Promo[]
+}
+
+model Promo {
+  id              String    @id @default(cuid())
+  businessId      String
+  name            String
+  description     String?
+  type            String    // 'percent' | 'fixed' | 'bogo' | 'precio_fijo'
+  value           Decimal   // % descuento, monto fijo, precio total combo, o cantidad gratis (bogo)
+  buyQty          Int?      // para bogo: comprar N
+  getQtyFree      Int?      // para bogo: llevar M gratis
+  minPurchase     Decimal?  @default(0)  // monto mínimo del carrito
+  productIds      String?   // JSON array de IDs (legacy)
+  productItems    String?   // JSON [{ productId, qty }] para combos con cantidades
+  categoryIds     String?   // JSON array de IDs
+  promoCode       String?   // código opcional (ej: VERANO20)
+  validFrom       DateTime?
+  validTo         DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  passwordHash String
+  name       String
+  role       Role     @default(CAJERO)
+  businessId String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business            Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  auditLogs           AuditLog[]
+  sales               Sale[]
+  passwordResetTokens PasswordResetToken[]
+  refreshTokens       RefreshToken[]
+}
+
+model Category {
+  id         String   @id @default(cuid())
+  name       String
+  businessId String
+  createdAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products  Product[]
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  name        String
+  barcode     String?
+  categoryId  String?
+  cost        Decimal?
+  price       Decimal
+  stock       Int       @default(0)
+  minStock    Int       @default(0)
+  stockControl Boolean  @default(true)
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  businessId  String
+  brand       String?
+  iva         Decimal?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business   Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category   Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  saleItems   SaleItem[]
+  stockMoves StockMove[]
+  purchaseItems PurchaseItem[]
+  batches   ProductBatch[]
+}
+
+model Sale {
+  id             String   @id @default(cuid())
+  businessId     String
+  userId         String
+  customerId     String?
+  total          Decimal
+  discount       Decimal  @default(0)
+  totalFinal     Decimal
+  paymentMethod  String?
+  cashRegisterId String?
+  synced         Boolean   @default(true)
+  status         String    @default("completed")
+  createdAt      DateTime  @default(now())
+  voidReason     String?
+  voidedAt       DateTime?
+  voidedById     String?
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id])
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
+  items        SaleItem[]
+}
+
+model SaleItem {
+  id         String   @id @default(cuid())
+  saleId     String
+  productId  String?
+  productName String?  // para ítem manual cuando productId es null
+  qty        Int
+  unitPrice  Decimal
+  subtotal   Decimal
+  discount   Decimal  @default(0)
+
+  sale    Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model CashRegister {
+  id          String    @id @default(cuid())
+  businessId  String
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  openingCash Decimal
+  closingCash Decimal?
+  userId      String?
+  notes       String?
+
+  business  Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sales     Sale[]
+  movements CashMovement[]
+}
+
+model CashMovement {
+  id              String   @id @default(cuid())
+  cashRegisterId String
+  type            String
+  amount          Decimal
+  category        String?
+  note            String?
+  reference       String?
+  createdAt       DateTime @default(now())
+
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  phone       String?
+  notes       String?
+  balance     Decimal  @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business  Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sales     Sale[]
+  payments  CustomerPayment[]
+}
+
+model CustomerPayment {
+  id         String   @id @default(cuid())
+  customerId String
+  amount     Decimal
+  note       String?
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model Supplier {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+}
+
+model Purchase {
+  id         String   @id @default(cuid())
+  businessId String
+  supplierId String
+  total      Decimal
+  createdAt  DateTime  @default(now())
+
+  business  Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  supplier  Supplier      @relation(fields: [supplierId], references: [id])
+  items     PurchaseItem[]
+}
+
+model PurchaseItem {
+  id         String    @id @default(cuid())
+  purchaseId String
+  productId  String
+  qty        Int
+  unitCost   Decimal
+  subtotal   Decimal
+  expiresAt  DateTime? // vencimiento de este lote comprado
+
+  purchase Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id])
+  batches  ProductBatch[]
+}
+
+model ProductBatch {
+  id             String    @id @default(cuid())
+  productId      String
+  businessId     String
+  qty            Int       // cantidad restante en este lote
+  unitCost       Decimal
+  expiresAt      DateTime?
+  purchaseItemId String?
+  createdAt      DateTime  @default(now())
+
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchaseItem PurchaseItem? @relation(fields: [purchaseItemId], references: [id], onDelete: SetNull)
+}
+
+model StockMove {
+  id         String   @id @default(cuid())
+  productId  String
+  qty        Int
+  reason     String
+  reference  String?
+  createdAt  DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entity     String
+  entityId   String?
+  payload    Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PausedSale {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model CatalogProduct {
+  id        String   @id @default(cuid())
+  name      String
+  brand     String?
+  category  String?
+  barcode   String?
+  content   String?
+  keywords  String?
+}
