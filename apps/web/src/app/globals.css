@@ -12,3 +12,33 @@ body {
   background: var(--background);
   font-family: system-ui, sans-serif;
 }
+
+/* Dashboard grid: items fill cell and content can flex/resize */
+.react-grid-layout-wrapper .react-grid-item {
+  overflow: visible;
+}
+.react-grid-layout-wrapper .react-grid-item > div {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.react-grid-layout-wrapper .react-resizable-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  right: 2px;
+  bottom: 2px;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(148, 163, 184, 0.5) 50%);
+}
+.react-grid-layout-wrapper .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid rgba(148, 163, 184, 0.8);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.8);
+}

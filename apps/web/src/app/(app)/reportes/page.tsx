@@ -13,7 +13,7 @@ export default function ReportesPage() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [margin, setMargin] = useState<Margin | null>(null);
   const [lowStock, setLowStock] = useState<{ name: string; stock: number; minStock: number }[]>([]);
-  const [expiring, setExpiring] = useState<{ name: string; expiresAt: string; stock: number }[]>([]);
+  const [expiring, setExpiring] = useState<{ name: string; expiresAt: string; qtyExpiring: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export default function ReportesPage() {
       api<TopProduct[]>(`/reports/top-products?period=${period}`),
       api<Margin>(`/reports/margin?period=${period}`),
       api<{ name: string; stock: number; minStock: number }[]>('/reports/low-stock'),
-      api<{ name: string; expiresAt: string; stock: number }[]>('/reports/expiring?days=30'),
+      api<{ name: string; expiresAt: string; qtyExpiring: number }[]>('/reports/expiring?days=30'),
     ]).then(([sRes, tRes, mRes, lRes, eRes]) => {
       setSales(sRes.status === 'fulfilled' ? sRes.value : null);
       setTopProducts(tRes.status === 'fulfilled' && Array.isArray(tRes.value) ? tRes.value : []);
@@ -122,13 +122,12 @@ export default function ReportesPage() {
           {(Array.isArray(expiring) ? expiring : []).length > 0 && (
             <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
               <h3 className="font-medium text-orange-400 mb-4">Productos por vencer (próximos 30 días)</h3>
-              <p className="text-slate-500 text-sm mb-3">Revisá estos productos para evitar vencimientos</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-slate-500 border-b border-slate-700">
                       <th className="py-2 pr-4">Producto</th>
-                      <th className="py-2 pr-4">Stock</th>
+                      <th className="py-2 pr-4">Cant.</th>
                       <th className="py-2">Vence</th>
                     </tr>
                   </thead>
@@ -139,7 +138,7 @@ export default function ReportesPage() {
                       return (
                         <tr key={i} className="border-b border-slate-700/50">
                           <td className="py-2 pr-4 text-slate-300">{p?.name ?? '-'}</td>
-                          <td className="py-2 pr-4 text-slate-400">{p?.stock ?? 0}</td>
+                          <td className="py-2 pr-4 text-slate-400">{p?.qtyExpiring ?? 0} un.</td>
                           <td className={`py-2 ${dias < 0 ? 'text-red-400' : dias <= 7 ? 'text-amber-400' : 'text-slate-400'}`}>
                             {d.toLocaleDateString('es-AR')}
                             {dias >= 0 && <span className="ml-1 text-xs">({dias} días)</span>}

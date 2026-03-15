@@ -40,7 +40,7 @@ type Purchase = {
     qty: number;
     unitCost: string | number;
     expiresAt?: string | null;
-    product: { name: string; barcode?: string | null };
+    product: { name: string; barcode?: string | null; category?: { id: string; name: string } };
   }[];
 };
 
@@ -77,6 +77,7 @@ export default function ComprasPage() {
   });
   const [viewPurchase, setViewPurchase] = useState<Purchase | null>(null);
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [highlightedResultIndex, setHighlightedResultIndex] = useState<Record<number, number>>({});
 
   const fetchPurchases = useCallback(async () => {
     const params: Record<string, string> = { limit: '100' };
@@ -151,6 +152,25 @@ export default function ComprasPage() {
     });
     setSearchTerm((t) => ({ ...t, [index]: '' }));
     setSearchResults((r) => ({ ...r, [index]: [] }));
+    setHighlightedResultIndex((h) => ({ ...h, [index]: 0 }));
+  };
+
+  const handleProductInputKeyDown = (itemIndex: number, e: React.KeyboardEvent) => {
+    const results = searchResults[itemIndex] ?? [];
+    if (results.length === 0) return;
+    const current = Math.min(highlightedResultIndex[itemIndex] ?? 0, results.length - 1);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedResultIndex((h) => ({ ...h, [itemIndex]: Math.min(current + 1, results.length - 1) }));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedResultIndex((h) => ({ ...h, [itemIndex]: Math.max(current - 1, 0) }));
+    } else if (e.key === 'Enter' && results[current]) {
+      e.preventDefault();
+      selectProduct(itemIndex, results[current]);
+    } else if (e.key === 'Escape') {
+      setHighlightedResultIndex((h) => ({ ...h, [itemIndex]: 0 }));
+    }
   };
 
   const loadPurchaseIntoForm = (p: Purchase, clearExpiry: boolean) => {
@@ -160,7 +180,7 @@ export default function ComprasPage() {
         productId: it.productId,
         productName: it.product.name,
         barcode: it.product?.barcode ?? '',
-        categoryId: '',
+        categoryId: it.product?.category?.id ?? '',
         qty: String(it.qty),
         unitCost: String(it.unitCost),
         price: '',
@@ -313,23 +333,36 @@ export default function ComprasPage() {
                           if (item.productId) setItem(i, { productId: '', productName: v, barcode: '' });
                           else setItem(i, { productName: v });
                           setSearchTerm((t) => ({ ...t, [i]: v }));
+                          setHighlightedResultIndex((h) => ({ ...h, [i]: 0 }));
                         }}
-                        onFocus={() => !item.productId && setSearchTerm((t) => ({ ...t, [i]: item.productName || '' }))}
+                        onFocus={() => {
+                          if (!item.productId) setSearchTerm((t) => ({ ...t, [i]: item.productName || '' }));
+                          setHighlightedResultIndex((h) => ({ ...h, [i]: 0 }));
+                        }}
+                        onKeyDown={(e) => handleProductInputKeyDown(i, e)}
                         placeholder="Nombre o buscar..."
                         className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100 text-sm"
                       />
                       {!item.productId && (searchResults[i]?.length ?? 0) > 0 && (
-                        <ul className="mt-1 border border-slate-600 rounded bg-slate-800 max-h-32 overflow-auto">
-                          {searchResults[i].map((p) => (
+                        <ul
+                          className="mt-1 border border-slate-600 rounded bg-slate-800 max-h-32 overflow-auto"
+                          role="listbox"
+                          aria-label="Resultados de búsqueda"
+                        >
+                          {searchResults[i].map((p, idx) => {
+                            const highlighted = Math.min(highlightedResultIndex[i] ?? 0, searchResults[i].length - 1);
+                            return (
                             <li
                               key={p.id}
-                              className="px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-700 cursor-pointer flex justify-between"
+                              role="option"
+                              aria-selected={idx === highlighted}
+                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-sky-600/30 ring-1 ring-sky-500/50' : 'hover:bg-slate-700'}`}
                               onClick={() => selectProduct(i, p)}
                             >
                               <span>{p.name}</span>
                               {p.barcode && <span className="text-slate-500 text-xs">{p.barcode}</span>}
                             </li>
-                          ))}
+                          );})}
                         </ul>
                       )}
                     </div>

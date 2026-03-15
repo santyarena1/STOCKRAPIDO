@@ -21,9 +21,10 @@ export class PurchasesService {
   private async resolveProductId(
     businessId: string,
     item: PurchaseItemInput,
-  ): Promise<{ productId: string; expiresAt: Date | null; price: number; priceProvided: boolean }> {
+  ): Promise<{ productId: string; expiresAt: Date | null; price: number; priceProvided: boolean; categoryId: string | null }> {
     const priceProvided = item.price != null && item.price !== undefined;
     const price = priceProvided ? Number(item.price) : item.unitCost;
+    const categoryId = item.categoryId?.trim() ? item.categoryId.trim() : null;
     if (item.productId) {
       const p = await this.prisma.product.findFirst({
         where: { id: item.productId, businessId, isActive: true },
@@ -34,6 +35,7 @@ export class PurchasesService {
         expiresAt: item.expiresAt ? new Date(item.expiresAt) : null,
         price: priceProvided ? price : Number(p.price),
         priceProvided,
+        categoryId,
       };
     }
     const name = (item.productName ?? '').trim();
@@ -68,6 +70,7 @@ export class PurchasesService {
       expiresAt: item.expiresAt ? new Date(item.expiresAt) : null,
       price: priceProvided ? price : Number(product.price),
       priceProvided,
+      categoryId,
     };
   }
 
@@ -81,7 +84,7 @@ export class PurchasesService {
     });
     if (!supplier) throw new BadRequestException('Proveedor no encontrado');
 
-    const resolved: { productId: string; qty: number; unitCost: number; expiresAt: Date | null; price: number; priceProvided: boolean }[] = [];
+    const resolved: { productId: string; qty: number; unitCost: number; expiresAt: Date | null; price: number; priceProvided: boolean; categoryId: string | null }[] = [];
     for (const item of items) {
       if (!item.qty || item.qty <= 0) continue;
       const out = await this.resolveProductId(businessId, item);
@@ -92,6 +95,7 @@ export class PurchasesService {
         expiresAt: out.expiresAt,
         price: out.price,
         priceProvided: out.priceProvided,
+        categoryId: out.categoryId,
       });
     }
     if (resolved.length === 0) throw new BadRequestException('Agregá al menos un ítem con cantidad mayor a 0.');
@@ -116,7 +120,7 @@ export class PurchasesService {
         total: new Decimal(total),
         items: { create: createItems },
       },
-      include: { items: { include: { product: true } }, supplier: true },
+      include: { items: { include: { product: { include: { category: true } } } }, supplier: true },
     });
 
     for (let i = 0; i < purchase.items.length; i++) {
@@ -138,6 +142,7 @@ export class PurchasesService {
           stock: { increment: r.qty },
           cost: new Decimal(r.unitCost),
           ...(r.priceProvided ? { price: new Decimal(r.price) } : {}),
+          ...(r.categoryId != null ? { categoryId: r.categoryId } : {}),
         },
       });
       await this.prisma.stockMove.create({
@@ -171,7 +176,7 @@ export class PurchasesService {
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        items: { include: { product: true } },
+        items: { include: { product: { include: { category: true } } } },
         supplier: true,
       },
     });
@@ -226,7 +231,7 @@ export class PurchasesService {
     });
     if (!supplier) throw new BadRequestException('Proveedor no encontrado');
 
-    const resolved: { productId: string; qty: number; unitCost: number; expiresAt: Date | null; price: number; priceProvided: boolean }[] = [];
+    const resolved: { productId: string; qty: number; unitCost: number; expiresAt: Date | null; price: number; priceProvided: boolean; categoryId: string | null }[] = [];
     for (const item of items) {
       if (!item.qty || item.qty <= 0) continue;
       const out = await this.resolveProductId(businessId, item);
@@ -237,6 +242,7 @@ export class PurchasesService {
         expiresAt: out.expiresAt,
         price: out.price,
         priceProvided: out.priceProvided,
+        categoryId: out.categoryId,
       });
     }
     if (resolved.length === 0) throw new BadRequestException('Agregá al menos un ítem con cantidad mayor a 0.');
@@ -265,7 +271,7 @@ export class PurchasesService {
 
     const updated = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
-      include: { items: { include: { product: true } }, supplier: true },
+      include: { items: { include: { product: { include: { category: true } } } }, supplier: true },
     });
     if (!updated) throw new BadRequestException('Error al actualizar');
 
@@ -288,6 +294,7 @@ export class PurchasesService {
           stock: { increment: r.qty },
           cost: new Decimal(r.unitCost),
           ...(r.priceProvided ? { price: new Decimal(r.price) } : {}),
+          ...(r.categoryId != null ? { categoryId: r.categoryId } : {}),
         },
       });
       await this.prisma.stockMove.create({

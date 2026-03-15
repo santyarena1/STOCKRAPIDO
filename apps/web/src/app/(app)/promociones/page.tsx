@@ -327,7 +327,7 @@ export default function PromocionesPage() {
             <label className="block text-sm text-slate-400 mb-1">Tipo de oferta *</label>
             <select
               value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'percent' | 'fixed' | 'bogo' }))}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'percent' | 'fixed' | 'bogo' | 'precio_fijo' }))}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
             >
               {PROMO_TYPES.map((t) => (
@@ -376,7 +376,7 @@ export default function PromocionesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
                 placeholder={form.type === 'precio_fijo' ? '1500' : form.type === 'percent' ? '15' : '500'}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
-                required={form.type !== 'bogo'}
+                required
               />
             </div>
           )}

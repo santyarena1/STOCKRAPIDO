@@ -125,15 +125,27 @@ export default function EditarProductoPage() {
     </div>
   );
 
+  const batches = product.batches ?? [];
+  const nextExpiry = batches.length > 0
+    ? batches.reduce<{ date: string; qty: number } | null>((acc, b) => {
+        if (!b.expiresAt) return acc;
+        const d = new Date(b.expiresAt).toISOString().slice(0, 10);
+        if (!acc) return { date: d, qty: b.qty };
+        if (d < acc.date) return { date: d, qty: b.qty };
+        if (d === acc.date) return { date: acc.date, qty: acc.qty + b.qty };
+        return acc;
+      }, null)
+    : null;
+
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
         <Link href="/productos" className="text-slate-400 hover:text-white">← Productos</Link>
         <h1 className="text-2xl font-bold text-white">{product.name}</h1>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <form data-tour="editar-producto-form" onSubmit={handleSave} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6">
+      <div className="flex flex-col gap-6">
+        <form data-tour="editar-producto-form" onSubmit={handleSave} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 w-full">
           <div>
             <label className="block text-sm text-slate-400 mb-1">Nombre *</label>
             <input
@@ -218,25 +230,47 @@ export default function EditarProductoPage() {
           </button>
         </form>
 
-        <div className="space-y-6">
-          {product.expiresAt && (
-            <div className={`rounded-lg border p-4 ${new Date(product.expiresAt) < new Date() ? 'border-red-700/50 bg-red-900/20' : 'border-amber-700/50 bg-amber-900/20'}`}>
+        <div className="space-y-6 w-full">
+          {(nextExpiry || product.expiresAt) && (
+            <div className={`rounded-lg border p-4 w-full ${nextExpiry && new Date(nextExpiry.date) < new Date() ? 'border-red-700/50 bg-red-900/20' : 'border-amber-700/50 bg-amber-900/20'}`}>
               <h3 className="font-medium text-amber-400 mb-1">Vencimiento</h3>
               <p className="text-slate-200">
-                {new Date(product.expiresAt).toLocaleDateString('es-AR')}
-                {new Date(product.expiresAt) < new Date() ? (
-                  <span className="text-red-400 ml-2">· Vencido</span>
+                {nextExpiry ? (
+                  <>
+                    {new Date(nextExpiry.date).toLocaleDateString('es-AR')}
+                    <span className="text-slate-300 ml-2">· {nextExpiry.qty} unidad{nextExpiry.qty !== 1 ? 'es' : ''} vencen en esa fecha</span>
+                    {new Date(nextExpiry.date) < new Date() ? (
+                      <span className="text-red-400 ml-2">· Vencido</span>
+                    ) : (
+                      <span className="text-amber-400 ml-2">
+                        · Vence en {Math.ceil((new Date(nextExpiry.date).getTime() - Date.now()) / (24 * 60 * 60 * 1000))} días
+                      </span>
+                    )}
+                  </>
                 ) : (
-                  <span className="text-amber-400 ml-2">
-                    · Vence en {Math.ceil((new Date(product.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))} días
-                  </span>
+                  <>
+                    {product.expiresAt && new Date(product.expiresAt).toLocaleDateString('es-AR')}
+                    {new Date(product.expiresAt!) < new Date() ? (
+                      <span className="text-red-400 ml-2">· Vencido</span>
+                    ) : (
+                      <span className="text-amber-400 ml-2">
+                        · Vence en {Math.ceil((new Date(product.expiresAt!).getTime() - Date.now()) / (24 * 60 * 60 * 1000))} días
+                      </span>
+                    )}
+                    <span className="text-slate-500 ml-2 text-sm">(referencia; ver lotes abajo)</span>
+                  </>
                 )}
               </p>
             </div>
           )}
-          <div data-tour="editar-producto-stock" className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+          <div data-tour="editar-producto-stock" className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 w-full">
             <h3 className="font-medium text-slate-200 mb-1">Stock actual</h3>
-            <p className="text-2xl font-bold text-white mb-4">{product.stock} unidades</p>
+            <p className="text-2xl font-bold text-white mb-1">{product.stock} unidades</p>
+            {nextExpiry && (
+              <p className="text-sm text-slate-400 mb-3">
+                Próximo vencimiento: {new Date(nextExpiry.date).toLocaleDateString('es-AR')} ({nextExpiry.qty} un.)
+              </p>
+            )}
             <h4 className="text-sm font-medium text-slate-300 mb-2">Lotes</h4>
             <p className="text-xs text-slate-500 mb-3">
               Mismo producto puede tener distintos vencimientos o costos por compra. Acá se ve cada lote (cantidad, costo, vencimiento). Se descuentan por orden de vencimiento al vender.
@@ -302,7 +336,7 @@ export default function EditarProductoPage() {
               </div>
             </form>
           </div>
-          <div data-tour="editar-producto-movimientos" className="rounded-lg border border-slate-700 overflow-hidden">
+          <div data-tour="editar-producto-movimientos" className="rounded-lg border border-slate-700 overflow-hidden w-full">
             <h3 className="px-4 py-2 bg-slate-800 text-slate-200 font-medium">Historial de movimientos</h3>
             <p className="px-4 py-1 text-slate-500 text-xs">Entradas y salidas de stock con fecha y motivo</p>
             <div className="overflow-x-auto">

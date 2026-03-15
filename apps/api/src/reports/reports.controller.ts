@@ -22,10 +22,82 @@ export class ReportsController {
     return this.reports.topProducts(user.businessId, p, limit ? parseInt(limit, 10) : 10);
   }
 
+  @Get('purchases-by-day')
+  purchasesByDayOfMonth(
+    @CurrentUser() user: User,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+  ) {
+    const y = year ? parseInt(year, 10) : undefined;
+    const m = month ? parseInt(month, 10) - 1 : undefined;
+    return this.reports.purchasesByDayOfMonth(user.businessId, y, m);
+  }
+
+  @Get('expenses-by-day')
+  expensesByDayOfMonth(
+    @CurrentUser() user: User,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+  ) {
+    const y = year ? parseInt(year, 10) : undefined;
+    const m = month ? parseInt(month, 10) - 1 : undefined;
+    return this.reports.expensesByDayOfMonth(user.businessId, y, m);
+  }
+
   @Get('margin')
   margin(@CurrentUser() user: User, @Query('period') period?: string) {
     const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
     return this.reports.marginEstimate(user.businessId, p);
+  }
+
+  @Get('net-profit')
+  netProfit(@CurrentUser() user: User, @Query('period') period?: string) {
+    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
+    return this.reports.netProfit(user.businessId, p);
+  }
+
+  @Get('sales-by-day')
+  salesByDayOfMonth(
+    @CurrentUser() user: User,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+  ) {
+    const y = year ? parseInt(year, 10) : undefined;
+    const m = month ? parseInt(month, 10) - 1 : undefined;
+    return this.reports.salesByDayOfMonth(user.businessId, y, m);
+  }
+
+  @Get('top-products-profit')
+  topProductsByProfit(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
+    return this.reports.topProductsByProfit(user.businessId, p, limit ? parseInt(limit, 10) : 10);
+  }
+
+  @Get('least-sold-products')
+  leastSoldProducts(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = (period === 'week' || period === 'month' ? period : 'month') as 'today' | 'week' | 'month';
+    return this.reports.leastSoldProducts(user.businessId, p, limit ? parseInt(limit, 10) : 10);
+  }
+
+  @Get('top-products-expiring')
+  topProductsExpiring(
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+    @Query('days') days?: string,
+  ) {
+    return this.reports.topProductsExpiringSoon(
+      user.businessId,
+      days ? parseInt(days, 10) : 30,
+      limit ? parseInt(limit, 10) : 10,
+    );
   }
 
   @Get('low-stock')

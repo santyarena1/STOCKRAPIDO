@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
 type Product = {
@@ -18,6 +19,7 @@ type Product = {
 type Category = { id: string; name: string };
 
 export default function ProductosPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +27,7 @@ export default function ProductosPage() {
   const [lowStock, setLowStock] = useState(false);
   const [expiringSoon, setExpiringSoon] = useState(false);
   const [search, setSearch] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
 
   useEffect(() => {
     Promise.allSettled([
@@ -47,6 +50,24 @@ export default function ProductosPage() {
   if (expiringSoon) {
     filtered = filtered.filter((p) => p?.expiresAt && new Date(p.expiresAt) <= limitVencer && new Date(p.expiresAt) >= now);
   }
+  const safeHighlighted = filtered.length > 0 ? Math.min(highlightedIndex, filtered.length - 1) : 0;
+
+  const handleListKeyDown = (e: React.KeyboardEvent) => {
+    if (filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      const p = filtered[safeHighlighted];
+      if (p?.id) {
+        e.preventDefault();
+        router.push(`/productos/${p.id}`);
+      }
+    }
+  };
 
   function diasHastaVencimiento(expiresAt: string | null | undefined): number | null {
     if (!expiresAt) return null;
@@ -72,12 +93,16 @@ export default function ProductosPage() {
           type="text"
           placeholder="Buscar..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setHighlightedIndex(0);
+          }}
+          onKeyDown={handleListKeyDown}
           className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 w-64"
         />
         <select
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          onChange={(e) => { setCategoryId(e.target.value); setHighlightedIndex(0); }}
           className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
         >
           <option value="">Todas las categorías</option>
@@ -88,11 +113,11 @@ export default function ProductosPage() {
           ))}
         </select>
         <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
-          <input type="checkbox" checked={lowStock} onChange={(e) => setLowStock(e.target.checked)} />
+          <input type="checkbox" checked={lowStock} onChange={(e) => { setLowStock(e.target.checked); setHighlightedIndex(0); }} />
           Stock bajo
         </label>
         <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
-          <input type="checkbox" checked={expiringSoon} onChange={(e) => setExpiringSoon(e.target.checked)} />
+          <input type="checkbox" checked={expiringSoon} onChange={(e) => { setExpiringSoon(e.target.checked); setHighlightedIndex(0); }} />
           Por vencer (30 días)
         </label>
       </div>
@@ -114,8 +139,11 @@ export default function ProductosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {(Array.isArray(filtered) ? filtered : []).map((p) => (
-                <tr key={p?.id ?? ''} className="hover:bg-slate-800/50">
+              {(Array.isArray(filtered) ? filtered : []).map((p, idx) => (
+                <tr
+                  key={p?.id ?? ''}
+                  className={`hover:bg-slate-800/50 ${idx === safeHighlighted ? 'bg-sky-600/20 ring-1 ring-inset ring-sky-500/50' : ''}`}
+                >
                   <td className="p-3">
                     <Link href={`/productos/${p?.id ?? ''}`} className="text-sky-400 hover:underline">
                       {p?.name ?? '-'}
