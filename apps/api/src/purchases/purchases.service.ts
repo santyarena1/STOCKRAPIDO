@@ -66,9 +66,10 @@ export class PurchasesService {
       });
     }
     return {
-      productId: product!.id,
-      expiresAt: item.expiresAt ? new Date(item.expiresAt) : null,
-      price: priceProvided ? price : Number(product!.price),
+      productId: (product as any).id,
+      expiresAt,
+      price: priceProvided ? price : Number((product as any).price),
+      priceProvided: priceProvided,
       categoryId,
     };
   }
