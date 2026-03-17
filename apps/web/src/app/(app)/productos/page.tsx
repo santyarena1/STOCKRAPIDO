@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -18,6 +18,8 @@ type Product = {
 };
 type Category = { id: string; name: string };
 
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
+
 export default function ProductosPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
@@ -28,8 +30,14 @@ export default function ProductosPage() {
   const [expiringSoon, setExpiringSoon] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ updated: number; errors: Array<{ row: number; message: string }> } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  const fetchProducts = useCallback(() => {
+    setLoading(true);
     Promise.allSettled([
       api<Product[]>('/products', { params: { categoryId: categoryId || undefined, lowStock: lowStock ? 'true' : undefined } }),
       api<Category[]>('/business/categories'),
@@ -38,6 +46,10 @@ export default function ProductosPage() {
       setCategories(catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) ? catsRes.value : []);
     }).finally(() => setLoading(false));
   }, [categoryId, lowStock]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const DAYS_VENCER = 30;
   const now = new Date();
@@ -75,18 +87,139 @@ export default function ProductosPage() {
     return Math.ceil((d.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
   }
 
+  const handleExportStock = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (exporting) return;
+    setExportMsg('Preparando descarga…');
+    setExporting(true);
+    setImportResult(null);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const url = `${API}/products/export-stock`;
+    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((res) => res.text().then((raw) => ({ ok: res.ok, raw })))
+      .then(({ ok, raw }) => {
+        let parsed: { message?: string; filename?: string; content?: string };
+        try {
+          parsed = JSON.parse(raw) as { message?: string; filename?: string; content?: string };
+        } catch {
+          throw new Error('La respuesta no es JSON válido');
+        }
+        if (!ok) throw new Error(parsed?.message || 'Error al exportar');
+        if (!parsed?.content || typeof parsed.filename !== 'string') {
+          throw new Error(parsed?.message || 'La API no devolvió el archivo');
+        }
+        const base64 = String(parsed.content).replace(/\s/g, '');
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = parsed.filename;
+        link.style.position = 'fixed';
+        link.style.left = '-9999px';
+        link.style.top = '0';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(link.href);
+        }, 2000);
+        setExportMsg(null);
+      })
+      .catch((err) => {
+        setExportMsg(null);
+        alert(err instanceof Error ? err.message : 'Error al exportar');
+      })
+      .finally(() => setExporting(false));
+  };
+
+  const handleImportStock = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setImporting(true);
+      setImportResult(null);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API}/products/import-stock`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { message?: string }).message || res.statusText);
+      setImportResult(data as { updated: number; errors: Array<{ row: number; message: string }> });
+      fetchProducts();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al importar');
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-white">Productos</h1>
-        <Link
-          href="/productos/nuevo"
-          data-tour="productos-nuevo"
-          className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-500"
-        >
-          Nuevo producto
-        </Link>
+        <div className="flex flex-wrap gap-2 items-center">
+          <a
+            href="#"
+            role="button"
+            onClick={(e) => handleExportStock(e)}
+            className="px-4 py-2 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500 disabled:opacity-50 inline-block cursor-pointer select-none no-underline"
+            style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}
+          >
+            {exporting ? 'Exportando…' : 'Exportar stock (Excel)'}
+          </a>
+          {exportMsg && <span className="text-amber-400 text-sm ml-2">{exportMsg}</span>}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="px-4 py-2 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500 disabled:opacity-50"
+          >
+            {importing ? 'Importando…' : 'Importar stock (Excel)'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportStock}
+          />
+          <Link
+            href="/productos/nuevo"
+            data-tour="productos-nuevo"
+            className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-500"
+          >
+            Nuevo producto
+          </Link>
+        </div>
       </div>
+
+      <p className="mb-2 text-slate-500 text-sm">
+        Exportá a Excel para ver y editar columnas. Para importar: editá solo <strong>Stock actual</strong> y/o <strong>Stock mínimo</strong>, guardá el archivo y subilo. No borres las columnas id ni codigo_barras.
+      </p>
+
+      {importResult && (
+        <div className="mb-4 p-3 rounded-lg bg-slate-800 border border-slate-600 text-sm">
+          <p className="text-slate-200">
+            Importación: <strong>{importResult.updated}</strong> producto(s) actualizado(s).
+            {importResult.errors.length > 0 && (
+              <span className="text-amber-400"> Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((e) => `Fila ${e.row}: ${e.message}`).join('; ')}
+                {importResult.errors.length > 5 ? '…' : ''}</span>
+            )}
+          </p>
+        </div>
+      )}
 
       <div data-tour="productos-filters" className="flex flex-wrap gap-2 mb-4">
         <input

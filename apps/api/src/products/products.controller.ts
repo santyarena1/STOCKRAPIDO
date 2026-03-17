@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ProductsService } from './products.service';
@@ -32,6 +33,25 @@ export class ProductsController {
   @Get('stock-moves')
   getAllStockMoves(@CurrentUser() user: User, @Query('limit') limit?: string) {
     return this.products.getAllStockMoves(user.businessId, limit ? parseInt(limit, 10) : 100);
+  }
+
+  @Get('export-stock')
+  async exportStock(@CurrentUser() user: User) {
+    const buffer = await this.products.exportStockExcel(user.businessId);
+    const filename = `stock-productos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    return { filename, content: buffer.toString('base64') };
+  }
+
+  @Post('import-stock')
+  @UseInterceptors(FileInterceptor('file'))
+  async importStock(
+    @CurrentUser() user: User,
+    @UploadedFile() file: { buffer: Buffer } | undefined,
+  ) {
+    if (!file?.buffer) throw new BadRequestException('Subí un archivo Excel (.xlsx)');
+    const rows = this.products.parseExcelStock(file.buffer);
+    if (rows.length === 0) throw new BadRequestException('El Excel no tiene filas válidas. Usá el archivo exportado como plantilla.');
+    return this.products.importStock(user.businessId, rows);
   }
 
   @Get(':id')
