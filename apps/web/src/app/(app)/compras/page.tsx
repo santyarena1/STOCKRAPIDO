@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { SupplierSelector } from '@/components/SupplierSelector';
 import { CategorySelector } from '@/components/CategorySelector';
@@ -255,8 +256,16 @@ export default function ComprasPage() {
 
   return (
     <div className="p-6 max-w-6xl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-white">Compras</h1>
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-white">Compras</h1>
+          <Link
+            href="/compras/ia"
+            className="text-sm text-violet-400 hover:text-violet-300 border border-violet-600/50 rounded-lg px-3 py-1.5"
+          >
+            Compras con IA
+          </Link>
+        </div>
         <button
           type="button"
           onClick={() => { setShowNew(!showNew); setEditingPurchaseId(null); }}

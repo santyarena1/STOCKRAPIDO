@@ -26,7 +26,7 @@ const PAYMENT_METHODS = [
 const SHORTCUTS = [
   { key: 'F2', desc: 'Foco en búsqueda' },
   { key: '↑ / ↓', desc: 'Navegar resultados de búsqueda' },
-  { key: 'ENTER', desc: 'Con resultados: agregar. Sin búsqueda: doble ENTER para cobrar' },
+  { key: 'ENTER', desc: 'Con resultados: agregar. Código de barras completo: se agrega solo. Sin búsqueda: doble ENTER para cobrar' },
   { key: 'F4', desc: 'Aplicar descuento' },
   { key: 'F5', desc: 'Cobrar' },
   { key: '1-6', desc: 'En cobro: elegir forma de pago' },
@@ -118,7 +118,9 @@ function CartItemRow({
 
 export default function POSPage() {
   const [search, setSearch] = useState('');
-  const [results, setResults] = useState<{ id: string; name: string; price: string; stock: number }[]>([]);
+  const [results, setResults] = useState<
+    { id: string; name: string; price: string; stock: number; barcode?: string | null }[]
+  >([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discountTotal, setDiscountTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -143,6 +145,29 @@ export default function POSPage() {
   const lastQtyResultRef = useRef<CartItem[] | null>(null);
   const isUpdateQtyRef = useRef(false);
 
+  /** Caja abierta: las ventas se vinculan para el arqueo (cierre de caja). Fiado no suma efectivo. */
+  const [openCashRegisterId, setOpenCashRegisterId] = useState<string | null>(null);
+
+  const refreshOpenCashRegister = useCallback(async (): Promise<string | null> => {
+    try {
+      const data = await api<{ id: string } | null>('/caja/open');
+      const id = data?.id ?? null;
+      setOpenCashRegisterId(id);
+      return id;
+    } catch {
+      setOpenCashRegisterId(null);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshOpenCashRegister();
+  }, [refreshOpenCashRegister]);
+
+  useEffect(() => {
+    if (showPayment) void refreshOpenCashRegister();
+  }, [showPayment, refreshOpenCashRegister]);
+
   const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
   const total = Math.max(0, subtotal - discountTotal);
 
@@ -164,6 +189,24 @@ export default function POSPage() {
     if (showPaused) void fetchPaused();
   }, [showPaused, fetchPaused]);
 
+  const addToCart = useCallback((product: { id: string; name: string; price: string }, qty = 1) => {
+    const price = parseFloat(product.price) || 0;
+    setCart((prev) => {
+      const i = prev.findIndex((x) => x.productId === product.id);
+      if (i >= 0) {
+        const next = [...prev];
+        next[i].qty += qty;
+        next[i].subtotal = next[i].qty * next[i].unitPrice - (next[i].discount || 0);
+        return next;
+      }
+      const subt = price * qty;
+      return [...prev, { productId: product.id, name: product.name, qty, unitPrice: price, subtotal: subt, discount: 0 }];
+    });
+    setSearch('');
+    setResults([]);
+    searchRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     if (showCustomer) {
       fetch(`${API}/customers`, { headers: { Authorization: `Bearer ${getToken()}` } })
@@ -180,37 +223,55 @@ export default function POSPage() {
       return;
     }
     const term = search.trim();
+    let cancelled = false;
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const data = await api<Array<{ id: string; name: string; price: unknown; stock?: number }>>('/products/search', {
+        const data = await api<
+          Array<{ id: string; name: string; price: unknown; stock?: number; barcode?: string | null }>
+        >('/products/search', {
           params: { q: term, limit: '15' },
         });
+        if (cancelled) return;
         const list = Array.isArray(data) ? data : [];
-        setResults(
-          list.map((p) => ({
-            id: p.id,
-            name: p.name ?? '',
-            price: typeof p.price === 'number' ? String(p.price) : (p.price?.toString?.() ?? '0'),
-            stock: p.stock ?? 0,
-          }))
-        );
+        const mapped = list.map((p) => ({
+          id: p.id,
+          name: p.name ?? '',
+          price: typeof p.price === 'number' ? String(p.price) : (p.price?.toString?.() ?? '0'),
+          stock: p.stock ?? 0,
+          barcode: p.barcode ?? null,
+        }));
+        if (mapped.length === 1 && mapped[0].barcode && mapped[0].barcode === term) {
+          addToCart(mapped[0], 1);
+          return;
+        }
+        setResults(mapped);
         setSelectedResultIndex(0);
       } catch {
-        setResults([]);
-        setSelectedResultIndex(0);
+        if (!cancelled) {
+          setResults([]);
+          setSelectedResultIndex(0);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 180);
-    return () => clearTimeout(t);
-  }, [search]);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [search, addToCart]);
 
   const handleCobrar = useCallback(async (paymentMethod: string) => {
     if (cart.length === 0) return;
     const token = getToken();
     if (!token) return;
     try {
+      const crId = await refreshOpenCashRegister();
+      if (!crId) {
+        alert('Tenés que abrir la caja (menú Caja) antes de registrar ventas.');
+        return;
+      }
       const res = await fetch(`${API}/sales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -223,9 +284,13 @@ export default function POSPage() {
           discount: discountTotal,
           customerId: selectedCustomer?.id,
           paymentMethod,
+          cashRegisterId: crId,
         }),
       });
-      if (!res.ok) throw new Error('Error al registrar venta');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message || 'Error al registrar venta');
+      }
       setCart([]);
       setDiscountTotal(0);
       setSelectedCustomer(null);
@@ -235,7 +300,7 @@ export default function POSPage() {
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error');
     }
-  }, [cart, discountTotal, selectedCustomer?.id]);
+  }, [cart, discountTotal, selectedCustomer?.id, refreshOpenCashRegister]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -277,7 +342,12 @@ export default function POSPage() {
       }
       if (e.key === 'F5') {
         e.preventDefault();
-        if (cart.length > 0) setShowPayment(true);
+        if (cart.length === 0) return;
+        if (!openCashRegisterId) {
+          alert('Abrí la caja desde el menú Caja antes de cobrar.');
+          return;
+        }
+        setShowPayment(true);
         return;
       }
       if (e.key === 'F6') {
@@ -307,6 +377,10 @@ export default function POSPage() {
       // Doble Enter con búsqueda vacía → abrir modal de cobro
       if (searchFocused && e.key === 'Enter' && cart.length > 0 && results.length === 0) {
         e.preventDefault();
+        if (!openCashRegisterId) {
+          alert('Abrí la caja desde el menú Caja antes de cobrar.');
+          return;
+        }
         const now = Date.now();
         if (now - lastEnterForCobrarRef.current <= DOUBLE_ENTER_MS) {
           lastEnterForCobrarRef.current = 0;
@@ -323,25 +397,7 @@ export default function POSPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showShortcuts, showDiscount, showManual, showPaused, showPayment, showCustomer, results, selectedResultIndex, cart.length, handleCobrar]);
-
-  const addToCart = (product: { id: string; name: string; price: string }, qty = 1) => {
-    const price = parseFloat(product.price) || 0;
-    setCart((prev) => {
-      const i = prev.findIndex((x) => x.productId === product.id);
-      if (i >= 0) {
-        const next = [...prev];
-        next[i].qty += qty;
-        next[i].subtotal = next[i].qty * next[i].unitPrice - (next[i].discount || 0);
-        return next;
-      }
-      const subt = price * qty;
-      return [...prev, { productId: product.id, name: product.name, qty, unitPrice: price, subtotal: subt, discount: 0 }];
-    });
-    setSearch('');
-    setResults([]);
-    searchRef.current?.focus();
-  };
+  }, [showShortcuts, showDiscount, showManual, showPaused, showPayment, showCustomer, results, selectedResultIndex, cart.length, handleCobrar, openCashRegisterId, addToCart]);
 
   const updateQty = useCallback((productId: string, delta: number) => {
     isUpdateQtyRef.current = true;
@@ -448,7 +504,18 @@ export default function POSPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
-        <h1 className="text-xl font-bold text-white">POS</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-bold text-white">POS</h1>
+          {openCashRegisterId ? (
+            <span className="text-xs text-emerald-400/90 border border-emerald-700/50 rounded px-2 py-0.5" title="Las ventas (excepto fiado) se suman al cierre de caja">
+              Caja abierta
+            </span>
+          ) : (
+            <span className="text-xs text-slate-500" title="Abrí caja en Caja para vincular ventas al arqueo">
+              Sin caja abierta
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setShowShortcuts(true)}
@@ -564,8 +631,15 @@ export default function POSPage() {
               </button>
               <button
                 type="button"
-                onClick={() => cart.length > 0 && setShowPayment(true)}
-                disabled={cart.length === 0}
+                onClick={() => {
+                  if (cart.length === 0) return;
+                  if (!openCashRegisterId) {
+                    alert('Abrí la caja desde el menú Caja antes de cobrar.');
+                    return;
+                  }
+                  setShowPayment(true);
+                }}
+                disabled={cart.length === 0 || !openCashRegisterId}
                 data-tour="pos-cobrar"
                 className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -619,13 +693,19 @@ export default function POSPage() {
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-white mb-2">¿Cómo pagó el cliente?</h2>
             <p className="text-slate-400 text-sm mb-4">Total a cobrar: ${total.toFixed(0)} · Usá 1-6 para elegir</p>
+            {!openCashRegisterId && (
+              <p className="text-amber-400 text-sm mb-4 border border-amber-700/50 rounded-lg p-3">
+                No hay caja abierta. Andá a <strong className="text-amber-300">Caja</strong> y abrí turno antes de cobrar.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2 mb-4">
               {PAYMENT_METHODS.map((pm, idx) => (
                 <button
                   key={pm.id}
                   type="button"
+                  disabled={!openCashRegisterId}
                   onClick={() => void handleCobrar(pm.id)}
-                  className="px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover:bg-sky-600 hover:text-white font-medium text-left flex items-center gap-2"
+                  className="px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover:bg-sky-600 hover:text-white font-medium text-left flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <span className="w-6 h-6 rounded bg-slate-600 text-sky-400 font-bold text-sm flex items-center justify-center shrink-0">{idx + 1}</span>
                   {pm.label}

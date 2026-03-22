@@ -16,8 +16,11 @@ export class CajaController {
   }
 
   @Post('open')
-  open(@CurrentUser() user: User, @Body() body: { openingCash: number; notes?: string }) {
-    return this.caja.open(user.businessId, user.id, body.openingCash, body.notes);
+  open(
+    @CurrentUser() user: User,
+    @Body() body: { openingCash: number; openingBank?: number; notes?: string },
+  ) {
+    return this.caja.open(user.businessId, user.id, body.openingCash, body.notes, body.openingBank);
   }
 
   @Post('movement')
@@ -28,7 +31,8 @@ export class CajaController {
       cashRegisterId: string;
       type: 'income' | 'expense';
       amount: number;
-      category?: string;
+      /** efectivo = caja física; banco = cuenta bancaria / posición electrónica */
+      channel: 'efectivo' | 'banco';
       note?: string;
       reference?: string;
     },
@@ -38,7 +42,7 @@ export class CajaController {
       body.cashRegisterId,
       body.type,
       body.amount,
-      body.category,
+      body.channel,
       body.note,
       body.reference,
     );
@@ -48,7 +52,7 @@ export class CajaController {
   close(
     @CurrentUser() user: User,
     @Body()
-    body: { cashRegisterId: string; counts: { method: string; expected: number; actual: number }[] },
+    body: { cashRegisterId: string; counts: { channel: 'efectivo' | 'banco'; actual: number }[] },
   ) {
     return this.caja.close(user.businessId, body.cashRegisterId, body.counts);
   }

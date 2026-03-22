@@ -3,9 +3,16 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { randomBytes, createHash } from 'crypto';
+import { sanitizePosConfigForApi } from '../business/pos-config.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
+import { jwtDurationToSeconds, parseJwtDurationToMs } from './jwt-duration.util';
+
+function businessWithSanitizedPos<T extends { posConfig?: unknown } | null>(b: T): T {
+  if (!b) return b;
+  return { ...b, posConfig: sanitizePosConfigForApi(b.posConfig) } as T;
+}
 
 @Injectable()
 export class AuthService {
@@ -48,7 +55,11 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     const tokens = await this.issueTokens(user.id, user.email);
     const { passwordHash: _, ...safe } = user;
-    return { user: safe, ...tokens };
+    const safeUser = {
+      ...safe,
+      business: businessWithSanitizedPos(safe.business),
+    };
+    return { user: safeUser, ...tokens };
   }
 
   async refresh(refreshToken: string) {
@@ -69,7 +80,10 @@ export class AuthService {
       await this.revokeRefreshToken(stored.id);
       const tokens = await this.issueTokens(user.id, user.email);
       const { passwordHash: _, ...safe } = user;
-      return { user: safe, ...tokens };
+      return {
+        user: { ...safe, business: businessWithSanitizedPos(safe.business) },
+        ...tokens,
+      };
     } catch {
       throw new UnauthorizedException('Refresh token inválido');
     }
@@ -123,20 +137,26 @@ export class AuthService {
   private async issueTokens(sub: string, email: string) {
     const secret = this.config.get('JWT_SECRET');
     const refreshSecret = this.config.get('JWT_REFRESH_SECRET') || secret;
+    const accessTtl = this.config.get<string>('JWT_ACCESS_EXPIRES') || '365d';
+    const refreshTtl = this.config.get<string>('JWT_REFRESH_EXPIRES') || '365d';
     const accessToken = this.jwt.sign(
       { sub, email },
-      { secret, expiresIn: '15m' },
+      { secret, expiresIn: accessTtl },
     );
     const refreshToken = this.jwt.sign(
       { sub, email },
-      { secret: refreshSecret, expiresIn: '7d' },
+      { secret: refreshSecret, expiresIn: refreshTtl },
     );
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + parseJwtDurationToMs(refreshTtl));
     const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
     await this.prisma.refreshToken.create({
       data: { userId: sub, tokenHash, expiresAt },
     });
-    return { accessToken, refreshToken, expiresIn: 900 };
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn: jwtDurationToSeconds(accessTtl),
+    };
   }
 
   private async revokeRefreshToken(id: string) {
@@ -153,6 +173,6 @@ export class AuthService {
     });
     if (!user) return null;
     const { passwordHash: _, ...safe } = user;
-    return safe;
+    return { ...safe, business: businessWithSanitizedPos(safe.business) };
   }
 }

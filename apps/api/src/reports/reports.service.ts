@@ -53,7 +53,10 @@ export class ReportsService {
       .slice(0, limit);
   }
 
-  /** Ganancia = (último precio de venta - último costo) × cantidad vendida por ítem. */
+  /**
+   * Ganancia bruta = ingreso neto por línea (subtotal prorrateado con descuento global de la venta) − costo × cantidad.
+   * El costo sale del producto; ítems manuales sin producto cuentan costo 0.
+   */
   async marginEstimate(businessId: string, period: 'today' | 'week' | 'month') {
     const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
@@ -64,12 +67,17 @@ export class ReportsService {
     let cost = 0;
     let margin = 0;
     for (const sale of sales) {
+      const t = Number(sale.total);
+      const tf = Number(sale.totalFinal);
+      const factor = t > 0 ? tf / t : 1;
       for (const item of sale.items) {
-        const price = item.product?.price != null ? Number(item.product.price) : Number(item.unitPrice);
         const unitCost = item.product?.cost != null ? Number(item.product.cost) : 0;
-        revenue += Number(item.subtotal);
-        cost += unitCost * item.qty;
-        margin += (price - unitCost) * item.qty;
+        const lineSub = Number(item.subtotal);
+        const lineNet = lineSub * factor;
+        const lineCost = unitCost * item.qty;
+        revenue += lineNet;
+        cost += lineCost;
+        margin += lineNet - lineCost;
       }
     }
     return { revenue, cost, margin };
@@ -196,7 +204,7 @@ export class ReportsService {
     });
   }
 
-  /** Top productos por ganancia = (último precio venta - último costo) × cantidad vendida. */
+  /** Top productos por ganancia bruta (ingreso neto de línea − costo × cantidad; mismo criterio que /reports/margin). */
   async topProductsByProfit(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
     const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
@@ -205,15 +213,19 @@ export class ReportsService {
     });
     const map = new Map<string, { name: string; qty: number; revenue: number; profit: number }>();
     for (const sale of sales) {
+      const t = Number(sale.total);
+      const tf = Number(sale.totalFinal);
+      const factor = t > 0 ? tf / t : 1;
       for (const item of sale.items) {
         const name = item.product?.name ?? item.productName ?? 'Manual';
         const id = item.productId ?? `manual-${name}`;
-        const price = item.product?.price != null ? Number(item.product.price) : Number(item.unitPrice);
         const unitCost = item.product?.cost != null ? Number(item.product.cost) : 0;
-        const profit = (price - unitCost) * item.qty;
+        const lineSub = Number(item.subtotal);
+        const lineNet = lineSub * factor;
+        const profit = lineNet - unitCost * item.qty;
         const prev = map.get(id) ?? { name, qty: 0, revenue: 0, profit: 0 };
         prev.qty += item.qty;
-        prev.revenue += Number(item.subtotal);
+        prev.revenue += lineNet;
         prev.profit += profit;
         map.set(id, prev);
       }

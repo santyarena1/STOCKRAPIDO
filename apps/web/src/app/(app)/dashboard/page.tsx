@@ -70,8 +70,8 @@ function saveLayout(layout: typeof defaultLayout) {
 export default function DashboardPage() {
   const [salesToday, setSalesToday] = useState<{ total: number; count: number } | null>(null);
   const [salesMonth, setSalesMonth] = useState<{ total: number; count: number } | null>(null);
-  const [netProfitToday, setNetProfitToday] = useState<{ sales: number; purchases: number; expenses: number; ganancia: number } | null>(null);
-  const [netProfitMonth, setNetProfitMonth] = useState<{ sales: number; purchases: number; expenses: number; ganancia: number } | null>(null);
+  const [marginToday, setMarginToday] = useState<{ revenue: number; cost: number; margin: number } | null>(null);
+  const [marginMonth, setMarginMonth] = useState<{ revenue: number; cost: number; margin: number } | null>(null);
   const [salesByDay, setSalesByDay] = useState<ByDay[]>([]);
   const [purchasesByDay, setPurchasesByDay] = useState<ByDay[]>([]);
   const [expensesByDay, setExpensesByDay] = useState<ByDay[]>([]);
@@ -98,8 +98,8 @@ export default function DashboardPage() {
     Promise.allSettled([
       api<{ total: number; count: number }>('/reports/sales?period=today'),
       api<{ total: number; count: number }>('/reports/sales?period=month'),
-      api<{ sales: number; purchases: number; expenses: number; ganancia: number }>('/reports/net-profit?period=today'),
-      api<{ sales: number; purchases: number; expenses: number; ganancia: number }>('/reports/net-profit?period=month'),
+      api<{ revenue: number; cost: number; margin: number }>('/reports/margin?period=today'),
+      api<{ revenue: number; cost: number; margin: number }>('/reports/margin?period=month'),
       api<ByDay[]>(`/reports/sales-by-day?year=${year}&month=${month}`),
       api<ByDay[]>(`/reports/purchases-by-day?year=${year}&month=${month}`),
       api<ByDay[]>(`/reports/expenses-by-day?year=${year}&month=${month}`),
@@ -129,8 +129,8 @@ export default function DashboardPage() {
       ]) => {
         setSalesToday(sToday.status === 'fulfilled' ? sToday.value : null);
         setSalesMonth(sMonth.status === 'fulfilled' ? sMonth.value : null);
-        setNetProfitToday(marginTodayRes.status === 'fulfilled' ? marginTodayRes.value : null);
-        setNetProfitMonth(marginMonthRes.status === 'fulfilled' ? marginMonthRes.value : null);
+        setMarginToday(marginTodayRes.status === 'fulfilled' ? marginTodayRes.value : null);
+        setMarginMonth(marginMonthRes.status === 'fulfilled' ? marginMonthRes.value : null);
         setSalesByDay(byDayRes.status === 'fulfilled' && Array.isArray(byDayRes.value) ? byDayRes.value : []);
         setPurchasesByDay(purchasesByDayRes.status === 'fulfilled' && Array.isArray(purchasesByDayRes.value) ? purchasesByDayRes.value : []);
         setExpensesByDay(expensesByDayRes.status === 'fulfilled' && Array.isArray(expensesByDayRes.value) ? expensesByDayRes.value : []);
@@ -188,8 +188,8 @@ export default function DashboardPage() {
         </div>
         <div className="rounded-xl border border-emerald-700/40 bg-emerald-900/20 p-4">
           <h3 className="text-emerald-400 font-medium mb-1 text-sm">Ganancia hoy</h3>
-          <p className="text-lg font-bold text-emerald-400">${netProfitToday?.ganancia?.toFixed(0) ?? 0}</p>
-          <p className="text-slate-500 text-xs">Ventas − Compras − Gastos</p>
+          <p className="text-lg font-bold text-emerald-400">${marginToday?.margin?.toFixed(0) ?? 0}</p>
+          <p className="text-slate-500 text-xs">Ingresos − costo mercadería</p>
         </div>
         <div data-tour="dashboard-stock-bajo" className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
           <h3 className="text-slate-400 font-medium mb-1 text-sm">Stock bajo</h3>
@@ -206,8 +206,8 @@ export default function DashboardPage() {
         </Link>
         <div className="rounded-xl border border-emerald-700/40 bg-emerald-900/20 p-4">
           <h3 className="text-emerald-400 font-medium mb-1 text-sm">Ganancia mes</h3>
-          <p className="text-lg font-bold text-emerald-400">${netProfitMonth?.ganancia?.toFixed(0) ?? 0}</p>
-          <p className="text-slate-500 text-xs">Ventas − Compras − Gastos</p>
+          <p className="text-lg font-bold text-emerald-400">${marginMonth?.margin?.toFixed(0) ?? 0}</p>
+          <p className="text-slate-500 text-xs">Ingresos − costo mercadería</p>
         </div>
       </div>
 
@@ -305,7 +305,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-emerald-900/30 border border-emerald-700/40 text-base min-w-0">
               <span className="text-emerald-300">Ganancia</span>
-              <span className="font-bold text-emerald-400 text-lg shrink-0">${netProfitMonth?.ganancia?.toFixed(0) ?? 0}</span>
+              <span className="font-bold text-emerald-400 text-lg shrink-0">${marginMonth?.margin?.toFixed(0) ?? 0}</span>
             </div>
           </div>
         </div>

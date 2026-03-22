@@ -62,7 +62,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
-              className={`block px-4 py-2.5 text-sm ${pathname === href ? 'bg-sky-600/20 text-sky-400 border-r-2 border-sky-500' : 'hover:bg-slate-800'}`}
+              className={`block px-4 py-2.5 text-sm ${
+                pathname === href || (href === '/compras' && pathname.startsWith('/compras'))
+                  ? 'bg-sky-600/20 text-sky-400 border-r-2 border-sky-500'
+                  : 'hover:bg-slate-800'
+              }`}
             >
               {label}
             </Link>

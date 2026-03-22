@@ -159,7 +159,9 @@ model CashRegister {
   openedAt    DateTime  @default(now())
   closedAt    DateTime?
   openingCash Decimal
+  openingBank Decimal   @default(0)
   closingCash Decimal?
+  closingBank Decimal?
   userId      String?
   notes       String?
 

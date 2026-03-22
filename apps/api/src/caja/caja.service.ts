@@ -1,27 +1,91 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { movementChannel, MovChannel, saleChannel } from './caja-channels.util';
+
+type RegisterWithRelations = {
+  openingCash: Decimal;
+  openingBank: Decimal;
+  movements: { type: string; amount: Decimal; category: string | null }[];
+  sales: { totalFinal: Decimal; paymentMethod: string | null }[];
+};
 
 @Injectable()
 export class CajaService {
   constructor(private prisma: PrismaService) {}
 
-  async getOpen(businessId: string, userId: string) {
-    return this.prisma.cashRegister.findFirst({
-      where: { businessId, closedAt: null },
-      include: { movements: true },
-      orderBy: { openedAt: 'desc' },
-    });
+  computeExpected(reg: RegisterWithRelations) {
+    let salesEfectivo = 0;
+    let salesBanco = 0;
+    for (const s of reg.sales) {
+      const ch = saleChannel(s.paymentMethod);
+      const t = Number(s.totalFinal);
+      if (ch === 'efectivo') salesEfectivo += t;
+      else if (ch === 'banco') salesBanco += t;
+    }
+    let movEfectivoIncome = 0;
+    let movEfectivoExpense = 0;
+    let movBancoIncome = 0;
+    let movBancoExpense = 0;
+    for (const m of reg.movements) {
+      const ch = movementChannel(m.category);
+      const amt = Number(m.amount);
+      if (m.type === 'income') {
+        if (ch === 'efectivo') movEfectivoIncome += amt;
+        else movBancoIncome += amt;
+      } else {
+        if (ch === 'efectivo') movEfectivoExpense += amt;
+        else movBancoExpense += amt;
+      }
+    }
+    const openingEfectivo = Number(reg.openingCash);
+    const openingBanco = Number(reg.openingBank ?? 0);
+    const expectedEfectivo =
+      openingEfectivo + salesEfectivo + movEfectivoIncome - movEfectivoExpense;
+    const expectedBanco = openingBanco + salesBanco + movBancoIncome - movBancoExpense;
+    return {
+      openingEfectivo,
+      openingBanco,
+      salesEfectivo,
+      salesBanco,
+      movEfectivoIncome,
+      movEfectivoExpense,
+      movBancoIncome,
+      movBancoExpense,
+      expectedEfectivo,
+      expectedBanco,
+    };
   }
 
-  async open(businessId: string, userId: string, openingCash: number, notes?: string) {
-    const existing = await this.getOpen(businessId, userId);
+  async getOpen(businessId: string, userId: string) {
+    const reg = await this.prisma.cashRegister.findFirst({
+      where: { businessId, closedAt: null },
+      include: { movements: true, sales: true },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!reg) return null;
+    const preview = this.computeExpected(reg);
+    return { ...reg, preview };
+  }
+
+  async open(
+    businessId: string,
+    userId: string,
+    openingCash: number,
+    notes?: string,
+    openingBank?: number,
+  ) {
+    const existing = await this.prisma.cashRegister.findFirst({
+      where: { businessId, closedAt: null },
+    });
     if (existing) throw new BadRequestException('Ya hay una caja abierta');
+    const bank = openingBank != null && !Number.isNaN(openingBank) ? openingBank : 0;
     return this.prisma.cashRegister.create({
       data: {
         businessId,
         userId,
         openingCash: new Decimal(openingCash),
+        openingBank: new Decimal(bank),
         notes,
       },
     });
@@ -32,7 +96,7 @@ export class CajaService {
     cashRegisterId: string,
     type: 'income' | 'expense',
     amount: number,
-    category?: string,
+    channel: MovChannel,
     note?: string,
     reference?: string,
   ) {
@@ -45,7 +109,7 @@ export class CajaService {
         cashRegisterId,
         type,
         amount: new Decimal(amount),
-        category,
+        category: channel,
         note,
         reference,
       },
@@ -55,7 +119,7 @@ export class CajaService {
   async close(
     businessId: string,
     cashRegisterId: string,
-    counts: { method: string; expected: number; actual: number }[],
+    counts: { channel: MovChannel; actual: number }[],
   ) {
     const reg = await this.prisma.cashRegister.findFirst({
       where: { id: cashRegisterId, businessId, closedAt: null },
@@ -63,28 +127,32 @@ export class CajaService {
     });
     if (!reg) throw new BadRequestException('Caja no encontrada o ya cerrada');
 
-    const salesTotal = reg.sales.reduce((s, v) => s + Number(v.totalFinal), 0);
-    const incomeMov = reg.movements.filter((m) => m.type === 'income').reduce((s, m) => s + Number(m.amount), 0);
-    const expenseMov = reg.movements.filter((m) => m.type === 'expense').reduce((s, m) => s + Number(m.amount), 0);
-    const expectedCash = Number(reg.openingCash) + salesTotal + incomeMov - expenseMov;
+    const actualEfectivo = counts.find((c) => c.channel === 'efectivo')?.actual;
+    const actualBanco = counts.find((c) => c.channel === 'banco')?.actual;
+    if (actualEfectivo === undefined || actualBanco === undefined) {
+      throw new BadRequestException('Debés informar el monto contado de efectivo y de banco/electrónicos.');
+    }
 
-    const actualTotal = counts.reduce((s, c) => s + c.actual, 0);
-    const closingCash = new Decimal(actualTotal);
+    const preview = this.computeExpected(reg);
+    const diffEfectivo = actualEfectivo - preview.expectedEfectivo;
+    const diffBanco = actualBanco - preview.expectedBanco;
 
     await this.prisma.cashRegister.update({
       where: { id: cashRegisterId },
-      data: { closedAt: new Date(), closingCash },
+      data: {
+        closedAt: new Date(),
+        closingCash: new Decimal(actualEfectivo),
+        closingBank: new Decimal(actualBanco),
+      },
     });
     return {
       cashRegister: await this.prisma.cashRegister.findUnique({ where: { id: cashRegisterId } }),
       summary: {
-        openingCash: Number(reg.openingCash),
-        salesTotal,
-        incomeMov,
-        expenseMov,
-        expectedCash,
-        actualTotal,
-        difference: actualTotal - expectedCash,
+        ...preview,
+        actualEfectivo,
+        actualBanco,
+        differenceEfectivo: diffEfectivo,
+        differenceBanco: diffBanco,
         counts,
       },
     };

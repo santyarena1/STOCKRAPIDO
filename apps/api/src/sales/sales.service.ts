@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ProductsService } from '../products/products.service';
@@ -20,6 +20,14 @@ export class SalesService {
     items: SaleItemInput[],
     options?: { customerId?: string; discount?: number; paymentMethod?: string; cashRegisterId?: string },
   ) {
+    if (!options?.cashRegisterId?.trim()) {
+      throw new BadRequestException('Tenés que tener la caja abierta para registrar ventas.');
+    }
+    const reg = await this.prisma.cashRegister.findFirst({
+      where: { id: options.cashRegisterId.trim(), businessId, closedAt: null },
+    });
+    if (!reg) throw new BadRequestException('Caja no encontrada o cerrada. Abrí caja desde el menú Caja.');
+
     const discount = options?.discount ?? 0;
     let total = 0;
     const saleItems = items.map((i) => {
@@ -45,7 +53,7 @@ export class SalesService {
         discount: new Decimal(discount),
         totalFinal: new Decimal(totalFinal),
         paymentMethod: options?.paymentMethod,
-        cashRegisterId: options?.cashRegisterId,
+        cashRegisterId: options.cashRegisterId.trim(),
         items: { create: saleItems },
       },
       include: { items: { include: { product: true } }, customer: true },
