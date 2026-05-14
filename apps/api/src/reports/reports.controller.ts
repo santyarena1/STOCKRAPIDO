@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { saleDateRangeFromQuery } from '../common/argentina-date-range';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ReportsService } from './reports.service';
@@ -105,6 +106,35 @@ export class ReportsController {
     return this.reports.lowStock(user.businessId);
   }
 
+  @Get('critical-stock-pos')
+  criticalStockPos(@CurrentUser() user: User, @Query('max') max?: string) {
+    const m = max != null && max !== '' ? parseInt(max, 10) : 3;
+    return this.reports.criticalStockForPos(user.businessId, m);
+  }
+
+  @Get('stock-summary')
+  stockSummary(@CurrentUser() user: User, @Query('days') days?: string) {
+    return this.reports.stockSummary(user.businessId, days ? parseInt(days, 10) : 30);
+  }
+
+  @Get('sales-history-stats')
+  salesHistoryStats(
+    @CurrentUser() user: User,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('customerId') customerId?: string,
+    @Query('productId') productId?: string,
+  ) {
+    const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
+    return this.reports.salesHistoryStats(
+      user.businessId,
+      fromD,
+      toD,
+      customerId,
+      productId?.trim() || undefined,
+    );
+  }
+
   @Get('expiring')
   expiring(@CurrentUser() user: User, @Query('days') days?: string) {
     return this.reports.expiringSoon(user.businessId, days ? parseInt(days, 10) : 30);
@@ -124,8 +154,9 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('download') download?: string,
   ) {
-    const f = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const t = to ? new Date(to) : new Date();
+    const r = saleDateRangeFromQuery(from, to);
+    const f = r.from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const t = r.to ?? new Date();
     const csv = await this.reports.salesCsv(user.businessId, f, t);
     return { csv, filename: `ventas-${f.toISOString().slice(0, 10)}-${t.toISOString().slice(0, 10)}.csv` };
   }

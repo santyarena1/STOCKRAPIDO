@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api, getToken } from '@/lib/api';
+import {
+  broadcastCustomerDisplay,
+  openCustomerDisplayWindow,
+  paymentNeedsCustomerConfirmStep,
+} from '@/lib/customer-display-sync';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
 
@@ -13,6 +18,9 @@ type CartItem = {
   subtotal: number;
   discount: number;
 };
+
+/** Mismo umbral que reportes críticos: aviso solo al agregar ese producto al carrito */
+const LOW_STOCK_THRESHOLD = 3;
 
 const PAYMENT_METHODS = [
   { id: 'efectivo', label: 'Efectivo' },
@@ -110,7 +118,7 @@ function CartItemRow({
           aria-label="Precio"
         />
       </div>
-      <span className="text-sky-400 font-medium w-16 text-right shrink-0">${(item.subtotal - (item.discount || 0)).toFixed(0)}</span>
+      <span className="text-brand font-medium w-16 text-right shrink-0">${(item.subtotal - (item.discount || 0)).toFixed(0)}</span>
       <button type="button" onClick={onRemove} className="text-slate-500 hover:text-red-400 shrink-0" title="Quitar">×</button>
     </li>
   );
@@ -119,7 +127,14 @@ function CartItemRow({
 export default function POSPage() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<
-    { id: string; name: string; price: string; stock: number; barcode?: string | null }[]
+    {
+      id: string;
+      name: string;
+      price: string;
+      stock: number;
+      stockControl: boolean;
+      barcode?: string | null;
+    }[]
   >([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discountTotal, setDiscountTotal] = useState(0);
@@ -129,6 +144,8 @@ export default function POSPage() {
   const [showManual, setShowManual] = useState(false);
   const [showPaused, setShowPaused] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
+  const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; balance: string | number }[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
@@ -147,6 +164,53 @@ export default function POSPage() {
 
   /** Caja abierta: las ventas se vinculan para el arqueo (cierre de caja). Fiado no suma efectivo. */
   const [openCashRegisterId, setOpenCashRegisterId] = useState<string | null>(null);
+  const [showOpenCaja, setShowOpenCaja] = useState(false);
+  const [openCajaCash, setOpenCajaCash] = useState('');
+  const [openCajaBank, setOpenCajaBank] = useState('0');
+  const [openCajaNotes, setOpenCajaNotes] = useState('');
+  const [openCajaBusy, setOpenCajaBusy] = useState(false);
+  /** Tras abrir caja desde F5/doble Enter, abrir modal de cobro automáticamente */
+  const pendingPaymentAfterOpenRef = useRef(false);
+
+  /** Aviso no intrusivo solo si acabás de agregar un ítem con stock ≤ umbral */
+  const [lowStockNotice, setLowStockNotice] = useState<{ name: string; stock: number } | null>(null);
+  const lowStockNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (lowStockNoticeTimerRef.current) clearTimeout(lowStockNoticeTimerRef.current);
+    };
+  }, []);
+
+  /** Pantalla cliente (segundo monitor): estado en tiempo real vía BroadcastChannel */
+  useEffect(() => {
+    const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
+    const total = Math.max(0, subtotal - discountTotal);
+    const phase: 'idle' | 'cart' | 'payment' = showPayment
+      ? 'payment'
+      : cart.length > 0
+        ? 'cart'
+        : 'idle';
+    broadcastCustomerDisplay({
+      kind: 'sale',
+      phase,
+      selectedPaymentMethod: showPayment ? paymentMethodPending : null,
+      items: cart.map((i) => ({
+        name: i.name,
+        qty: i.qty,
+        unitPrice: i.unitPrice,
+        lineTotal: i.subtotal - (i.discount || 0),
+      })),
+      subtotal,
+      discount: discountTotal,
+      total,
+      fiadoCustomerName: selectedCustomer?.name ?? null,
+    });
+  }, [cart, discountTotal, showPayment, paymentMethodPending, selectedCustomer?.name]);
+
+  useEffect(() => {
+    if (!showPayment) setPaymentMethodPending(null);
+  }, [showPayment]);
 
   const refreshOpenCashRegister = useCallback(async (): Promise<string | null> => {
     try {
@@ -167,6 +231,37 @@ export default function POSPage() {
   useEffect(() => {
     if (showPayment) void refreshOpenCashRegister();
   }, [showPayment, refreshOpenCashRegister]);
+
+  const handleOpenCaja = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cash = parseFloat(openCajaCash.replace(',', '.')) || 0;
+    const bank = parseFloat(openCajaBank.replace(',', '.')) || 0;
+    if (cash < 0 || bank < 0) return;
+    setOpenCajaBusy(true);
+    try {
+      const reg = await api<{ id: string }>('/caja/open', {
+        method: 'POST',
+        body: JSON.stringify({
+          openingCash: cash,
+          openingBank: bank,
+          notes: openCajaNotes.trim() || undefined,
+        }),
+      });
+      setOpenCashRegisterId(reg.id);
+      setOpenCajaCash('');
+      setOpenCajaBank('0');
+      setOpenCajaNotes('');
+      setShowOpenCaja(false);
+      if (pendingPaymentAfterOpenRef.current && cart.length > 0) {
+        pendingPaymentAfterOpenRef.current = false;
+        setShowPayment(true);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al abrir caja');
+    } finally {
+      setOpenCajaBusy(false);
+    }
+  };
 
   const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
   const total = Math.max(0, subtotal - discountTotal);
@@ -189,10 +284,34 @@ export default function POSPage() {
     if (showPaused) void fetchPaused();
   }, [showPaused, fetchPaused]);
 
-  const addToCart = useCallback((product: { id: string; name: string; price: string }, qty = 1) => {
+  const addToCart = useCallback(
+    (
+      product: { id: string; name: string; price: string; stock?: number; stockControl?: boolean },
+      qty = 1,
+    ) => {
     const price = parseFloat(product.price) || 0;
+    const trackStock = product.stockControl !== false;
+    const st = product.stock;
+
     setCart((prev) => {
       const i = prev.findIndex((x) => x.productId === product.id);
+      const isNewLine = i < 0;
+      if (
+        isNewLine &&
+        trackStock &&
+        typeof st === 'number' &&
+        st <= LOW_STOCK_THRESHOLD &&
+        !product.id.startsWith('manual-')
+      ) {
+        queueMicrotask(() => {
+          if (lowStockNoticeTimerRef.current) clearTimeout(lowStockNoticeTimerRef.current);
+          setLowStockNotice({ name: product.name, stock: st });
+          lowStockNoticeTimerRef.current = setTimeout(() => {
+            setLowStockNotice(null);
+            lowStockNoticeTimerRef.current = null;
+          }, 7000);
+        });
+      }
       if (i >= 0) {
         const next = [...prev];
         next[i].qty += qty;
@@ -228,7 +347,14 @@ export default function POSPage() {
       setLoading(true);
       try {
         const data = await api<
-          Array<{ id: string; name: string; price: unknown; stock?: number; barcode?: string | null }>
+          Array<{
+            id: string;
+            name: string;
+            price: unknown;
+            stock?: number;
+            stockControl?: boolean;
+            barcode?: string | null;
+          }>
         >('/products/search', {
           params: { q: term, limit: '15' },
         });
@@ -239,6 +365,7 @@ export default function POSPage() {
           name: p.name ?? '',
           price: typeof p.price === 'number' ? String(p.price) : (p.price?.toString?.() ?? '0'),
           stock: p.stock ?? 0,
+          stockControl: p.stockControl !== false,
           barcode: p.barcode ?? null,
         }));
         if (mapped.length === 1 && mapped[0].barcode && mapped[0].barcode === term) {
@@ -291,6 +418,15 @@ export default function POSPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message || 'Error al registrar venta');
       }
+      const subtotalDone = cart.reduce((s, i) => s + i.subtotal, 0);
+      const totalFinal = Math.max(0, subtotalDone - discountTotal);
+      const paymentLabel = PAYMENT_METHODS.find((p) => p.id === paymentMethod)?.label ?? paymentMethod;
+      broadcastCustomerDisplay({
+        kind: 'success',
+        total: totalFinal,
+        paymentMethod,
+        paymentLabel,
+      });
       setCart([]);
       setDiscountTotal(0);
       setSelectedCustomer(null);
@@ -302,6 +438,23 @@ export default function POSPage() {
     }
   }, [cart, discountTotal, selectedCustomer?.id, refreshOpenCashRegister]);
 
+  const pickPaymentMethod = useCallback(
+    (methodId: string) => {
+      if (!openCashRegisterId) return;
+      if (paymentNeedsCustomerConfirmStep(methodId)) {
+        setPaymentMethodPending(methodId);
+      } else {
+        void handleCobrar(methodId);
+      }
+    },
+    [openCashRegisterId, handleCobrar],
+  );
+
+  const confirmPendingPayment = useCallback(() => {
+    if (!paymentMethodPending || !openCashRegisterId) return;
+    void handleCobrar(paymentMethodPending);
+  }, [paymentMethodPending, openCashRegisterId, handleCobrar]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
@@ -311,7 +464,7 @@ export default function POSPage() {
       // No aplicar atajos si el foco está en el carrito (evitar acoplamiento con inputs de cantidad/precio)
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest?.('[data-pos-cart]')) return;
-      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showCustomer) {
+      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showCustomer || showOpenCaja) {
         if (e.key === 'Escape') {
           setShowShortcuts(false);
           setShowDiscount(false);
@@ -319,13 +472,24 @@ export default function POSPage() {
           setShowPaused(false);
           setShowPayment(false);
           setShowCustomer(false);
+          setShowOpenCaja(false);
           e.preventDefault();
+        }
+        if (
+          showPayment &&
+          e.key === 'Enter' &&
+          paymentMethodPending &&
+          openCashRegisterId
+        ) {
+          e.preventDefault();
+          confirmPendingPayment();
+          return;
         }
         if (showPayment && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
           const idx = parseInt(e.key, 10) - 1;
           if (PAYMENT_METHODS[idx]) {
             e.preventDefault();
-            void handleCobrar(PAYMENT_METHODS[idx].id);
+            pickPaymentMethod(PAYMENT_METHODS[idx].id);
           }
         }
         return;
@@ -344,7 +508,8 @@ export default function POSPage() {
         e.preventDefault();
         if (cart.length === 0) return;
         if (!openCashRegisterId) {
-          alert('Abrí la caja desde el menú Caja antes de cobrar.');
+          pendingPaymentAfterOpenRef.current = true;
+          setShowOpenCaja(true);
           return;
         }
         setShowPayment(true);
@@ -378,7 +543,8 @@ export default function POSPage() {
       if (searchFocused && e.key === 'Enter' && cart.length > 0 && results.length === 0) {
         e.preventDefault();
         if (!openCashRegisterId) {
-          alert('Abrí la caja desde el menú Caja antes de cobrar.');
+          pendingPaymentAfterOpenRef.current = true;
+          setShowOpenCaja(true);
           return;
         }
         const now = Date.now();
@@ -397,7 +563,23 @@ export default function POSPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showShortcuts, showDiscount, showManual, showPaused, showPayment, showCustomer, results, selectedResultIndex, cart.length, handleCobrar, openCashRegisterId, addToCart]);
+  }, [
+    showShortcuts,
+    showDiscount,
+    showManual,
+    showPaused,
+    showPayment,
+    showCustomer,
+    showOpenCaja,
+    results,
+    selectedResultIndex,
+    cart.length,
+    pickPaymentMethod,
+    confirmPendingPayment,
+    paymentMethodPending,
+    openCashRegisterId,
+    addToCart,
+  ]);
 
   const updateQty = useCallback((productId: string, delta: number) => {
     isUpdateQtyRef.current = true;
@@ -511,21 +693,70 @@ export default function POSPage() {
               Caja abierta
             </span>
           ) : (
-            <span className="text-xs text-slate-500" title="Abrí caja en Caja para vincular ventas al arqueo">
-              Sin caja abierta
-            </span>
+            <>
+              <span className="text-xs text-slate-500" title="Abrí turno para vincular ventas al arqueo">
+                Sin caja abierta
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  pendingPaymentAfterOpenRef.current = false;
+                  setShowOpenCaja(true);
+                }}
+                className="text-xs px-2.5 py-1 rounded-lg bg-amber-600/90 text-white font-medium hover:bg-amber-500"
+              >
+                Abrir caja
+              </button>
+            </>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowShortcuts(true)}
-          data-tour="pos-shortcuts"
-          className="text-slate-400 hover:text-white text-sm px-2 py-1 rounded"
-          title="Atajos (?)"
-        >
-          ?
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openCustomerDisplayWindow()}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 font-semibold tracking-wide"
+            title="Abre la pantalla para el cliente (segundo monitor)"
+          >
+            VISTA CLIENTE
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowShortcuts(true)}
+            data-tour="pos-shortcuts"
+            className="text-slate-400 hover:text-white text-sm px-2 py-1 rounded"
+            title="Atajos (?)"
+          >
+            ?
+          </button>
+        </div>
       </div>
+
+      {lowStockNotice && (
+        <div
+          className="shrink-0 mx-4 mb-1 rounded-lg border border-amber-600/35 bg-amber-950/25 px-3 py-2 text-amber-100/95 text-sm flex flex-wrap items-center justify-between gap-2"
+          role="status"
+          aria-live="polite"
+        >
+          <span>
+            <span className="font-semibold text-amber-300">Stock bajo: </span>
+            <span className="text-amber-100/90">
+              “{lowStockNotice.name}” — quedan {lowStockNotice.stock} u. (≤{LOW_STOCK_THRESHOLD})
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (lowStockNoticeTimerRef.current) clearTimeout(lowStockNoticeTimerRef.current);
+              lowStockNoticeTimerRef.current = null;
+              setLowStockNotice(null);
+            }}
+            className="text-amber-400/80 hover:text-amber-200 text-lg leading-none px-1"
+            aria-label="Cerrar aviso"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-4 min-h-0">
         <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -537,7 +768,7 @@ export default function POSPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               data-tour="pos-search"
-              className="flex-1 px-4 py-3 text-lg rounded-lg bg-slate-800 border border-slate-600 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500"
+              className="flex-1 px-4 py-3 text-lg rounded-lg bg-slate-800 border border-slate-600 text-slate-100 placeholder-slate-500 focus-brand"
               autoFocus
             />
             <button
@@ -558,10 +789,10 @@ export default function POSPage() {
                     <button
                       type="button"
                       onClick={() => addToCart(p)}
-                      className={`w-full text-left px-4 py-3 flex justify-between items-center hover:bg-slate-700/50 ${idx === selectedResultIndex ? 'bg-sky-600/30 ring-1 ring-sky-500/50' : ''}`}
+                      className={`w-full text-left px-4 py-3 flex justify-between items-center hover:bg-slate-700/50 ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
                     >
                       <span className="text-slate-200">{p.name}</span>
-                      <span className="text-sky-400 font-medium">${parseFloat(p.price).toFixed(0)}</span>
+                      <span className="text-brand font-medium">${parseFloat(p.price).toFixed(0)}</span>
                     </button>
                   </li>
                 ))}
@@ -634,12 +865,13 @@ export default function POSPage() {
                 onClick={() => {
                   if (cart.length === 0) return;
                   if (!openCashRegisterId) {
-                    alert('Abrí la caja desde el menú Caja antes de cobrar.');
+                    pendingPaymentAfterOpenRef.current = true;
+                    setShowOpenCaja(true);
                     return;
                   }
                   setShowPayment(true);
                 }}
-                disabled={cart.length === 0 || !openCashRegisterId}
+                disabled={cart.length === 0}
                 data-tour="pos-cobrar"
                 className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -650,6 +882,64 @@ export default function POSPage() {
         </div>
       </div>
 
+      {showOpenCaja && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-white mb-1">Abrir caja</h2>
+            <p className="text-slate-500 text-sm mb-4">Ingresá el efectivo y banco inicial del turno (podés dejar 0).</p>
+            <form onSubmit={handleOpenCaja} className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Efectivo inicial</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={openCajaCash}
+                  onChange={(e) => setOpenCajaCash(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Banco inicial (opcional)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={openCajaBank}
+                  onChange={(e) => setOpenCajaBank(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Notas (opcional)</label>
+                <input
+                  type="text"
+                  value={openCajaNotes}
+                  onChange={(e) => setOpenCajaNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}
+                  className="flex-1 py-2.5 rounded-lg bg-slate-600 text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={openCajaBusy}
+                  className="flex-1 py-2.5 rounded-lg btn-brand font-medium disabled:opacity-50"
+                >
+                  {openCajaBusy ? 'Abriendo…' : 'Abrir turno'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showShortcuts && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowShortcuts(false)}>
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
@@ -657,7 +947,7 @@ export default function POSPage() {
             <ul className="space-y-2 text-slate-300">
               {SHORTCUTS.map(({ key, desc }) => (
                 <li key={key} className="flex justify-between">
-                  <kbd className="px-2 py-0.5 rounded bg-slate-700 text-sky-400 font-mono text-sm">{key}</kbd>
+                  <kbd className="px-2 py-0.5 rounded bg-slate-700 text-brand font-mono text-sm">{key}</kbd>
                   <span>{desc}</span>
                 </li>
               ))}
@@ -682,7 +972,7 @@ export default function POSPage() {
             />
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowDiscount(false)} className="flex-1 py-2 rounded-lg bg-slate-600 text-white">Cancelar</button>
-              <button type="button" onClick={applyDiscount} className="flex-1 py-2 rounded-lg bg-sky-600 text-white">Aplicar</button>
+              <button type="button" onClick={applyDiscount} className="flex-1 py-2 rounded-lg btn-brand">Aplicar</button>
             </div>
           </div>
         </div>
@@ -692,11 +982,25 @@ export default function POSPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPayment(false)}>
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-white mb-2">¿Cómo pagó el cliente?</h2>
-            <p className="text-slate-400 text-sm mb-4">Total a cobrar: ${total.toFixed(0)} · Usá 1-6 para elegir</p>
+            <p className="text-slate-400 text-sm mb-4">
+              Total a cobrar: ${total.toFixed(0)} · Efectivo/Fiado cierra en un paso · Transferencia, MP o tarjeta: elegí método
+              (el cliente ve datos en la pantalla) y después «Confirmar cobro» o Enter
+            </p>
             {!openCashRegisterId && (
-              <p className="text-amber-400 text-sm mb-4 border border-amber-700/50 rounded-lg p-3">
-                No hay caja abierta. Andá a <strong className="text-amber-300">Caja</strong> y abrí turno antes de cobrar.
-              </p>
+              <div className="text-amber-400 text-sm mb-4 border border-amber-700/50 rounded-lg p-3 space-y-2">
+                <p>No hay caja abierta. Abrí turno antes de cobrar.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPayment(false);
+                    pendingPaymentAfterOpenRef.current = true;
+                    setShowOpenCaja(true);
+                  }}
+                  className="w-full py-2 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-500"
+                >
+                  Abrir caja desde el POS
+                </button>
+              </div>
             )}
             <div className="grid grid-cols-2 gap-2 mb-4">
               {PAYMENT_METHODS.map((pm, idx) => (
@@ -704,14 +1008,39 @@ export default function POSPage() {
                   key={pm.id}
                   type="button"
                   disabled={!openCashRegisterId}
-                  onClick={() => void handleCobrar(pm.id)}
-                  className="px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover:bg-sky-600 hover:text-white font-medium text-left flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => pickPaymentMethod(pm.id)}
+                  className={`px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover-brand-primary font-medium text-left flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    paymentMethodPending === pm.id ? 'ring-2 ring-brand ring-offset-2 ring-offset-slate-900' : ''
+                  }`}
                 >
-                  <span className="w-6 h-6 rounded bg-slate-600 text-sky-400 font-bold text-sm flex items-center justify-center shrink-0">{idx + 1}</span>
+                  <span className="w-6 h-6 rounded bg-slate-600 text-brand font-bold text-sm flex items-center justify-center shrink-0">{idx + 1}</span>
                   {pm.label}
                 </button>
               ))}
             </div>
+            {paymentMethodPending && paymentNeedsCustomerConfirmStep(paymentMethodPending) && (
+              <div className="space-y-2 mb-4 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-3">
+                <p className="text-emerald-300/90 text-sm">
+                  Pantalla cliente mostrando datos de pago. Cuando el cliente haya pagado, confirmá acá.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => confirmPendingPayment()}
+                    className="flex-1 py-3 rounded-lg btn-brand font-semibold"
+                  >
+                    Confirmar cobro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethodPending(null)}
+                    className="px-4 py-3 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 text-sm"
+                  >
+                    Cambiar método
+                  </button>
+                </div>
+              </div>
+            )}
             <button type="button" onClick={() => setShowPayment(false)} className="w-full py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800">
               Cancelar
             </button>
@@ -740,7 +1069,7 @@ export default function POSPage() {
             />
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowManual(false)} className="flex-1 py-2 rounded-lg bg-slate-600 text-white">Cancelar</button>
-              <button type="button" onClick={addManualProduct} className="flex-1 py-2 rounded-lg bg-sky-600 text-white">Agregar</button>
+              <button type="button" onClick={addManualProduct} className="flex-1 py-2 rounded-lg btn-brand">Agregar</button>
             </div>
           </div>
         </div>
@@ -754,7 +1083,7 @@ export default function POSPage() {
               <button
                 type="button"
                 onClick={savePaused}
-                className="w-full py-2 rounded-lg bg-sky-600 text-white mb-4"
+                className="w-full py-2 rounded-lg btn-brand mb-4"
               >
                 Guardar venta actual en espera
               </button>
@@ -771,7 +1100,7 @@ export default function POSPage() {
                     <button
                       type="button"
                       onClick={() => restorePaused(p.payload as { items: CartItem[]; discount?: number })}
-                      className="px-3 py-1 rounded bg-sky-600 text-white text-sm"
+                      className="px-3 py-1 rounded btn-brand text-sm"
                     >
                       Retomar
                     </button>

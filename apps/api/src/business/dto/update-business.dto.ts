@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class BusinessAiInvoiceDto {
   @IsOptional()
@@ -15,11 +15,75 @@ export class BusinessAiInvoiceDto {
   webhookSecret?: string;
 }
 
+export class BusinessBrandingDto {
+  @IsOptional()
+  @IsString()
+  accentColor?: string;
+
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  appTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  linkColor?: string;
+
+  @IsOptional()
+  @IsString()
+  primaryButtonColor?: string;
+
+  @IsOptional()
+  @IsString()
+  focusRingColor?: string;
+
+  @IsOptional()
+  @IsString()
+  navActiveColor?: string;
+
+  @IsOptional()
+  @IsString()
+  selectionColor?: string;
+
+  @IsOptional()
+  @IsString()
+  shadowTintColor?: string;
+}
+
+export class BusinessCustomerDisplayDto {
+  @IsOptional()
+  @IsString()
+  mercadopagoAlias?: string;
+
+  @IsOptional()
+  @IsString()
+  mercadopagoQrUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  promoImageUrls?: string[];
+}
+
 export class BusinessPosConfigDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => BusinessAiInvoiceDto)
   aiInvoice?: BusinessAiInvoiceDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BusinessBrandingDto)
+  branding?: BusinessBrandingDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BusinessCustomerDisplayDto)
+  customerDisplay?: BusinessCustomerDisplayDto;
 }
 
 export class UpdateBusinessDto {

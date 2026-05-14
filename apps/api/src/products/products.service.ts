@@ -98,7 +98,8 @@ export class ProductsService {
     iva?: number;
     expiresAt?: string;
   }) {
-    return this.prisma.product.create({
+    const initialStock = Math.max(0, Math.floor(data.stock ?? 0));
+    const product = await this.prisma.product.create({
       data: {
         businessId,
         name: data.name,
@@ -106,7 +107,7 @@ export class ProductsService {
         categoryId: data.categoryId,
         cost: data.cost != null ? new Decimal(data.cost) : null,
         price: new Decimal(data.price),
-        stock: data.stock ?? 0,
+        stock: 0,
         minStock: data.minStock ?? 0,
         stockControl: data.stockControl ?? true,
         brand: data.brand,
@@ -115,6 +116,17 @@ export class ProductsService {
       },
       include: { category: true },
     });
+    if (initialStock > 0) {
+      return this.adjustStock(product.id, businessId, initialStock, 'stock_inicial');
+    }
+    await this.prisma.stockMove.create({
+      data: {
+        productId: product.id,
+        qty: 0,
+        reason: 'alta_producto',
+      },
+    });
+    return product;
   }
 
   async update(id: string, businessId: string, data: Partial<{
@@ -183,14 +195,20 @@ export class ProductsService {
     return p;
   }
 
-  async getAllStockMoves(businessId: string, limit = 100) {
-    const products = await this.prisma.product.findMany({
-      where: { businessId },
-      select: { id: true },
-    });
-    const ids = products.map((p) => p.id);
+  /**
+   * `kind=altas`: solo altas de producto y stock inicial al crear (no compiten con cientos de ventas).
+   * `kind=all`: últimos N movimientos de cualquier tipo (ventas, compras, etc.).
+   */
+  async getAllStockMoves(businessId: string, limit = 300, kind: 'all' | 'altas' = 'all') {
+    const where =
+      kind === 'altas'
+        ? {
+            product: { businessId },
+            reason: { in: ['alta_producto', 'stock_inicial'] },
+          }
+        : { product: { businessId } };
     return this.prisma.stockMove.findMany({
-      where: { productId: { in: ids } },
+      where,
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: { product: { select: { name: true, barcode: true } } },

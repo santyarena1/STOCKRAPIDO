@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { saleDateRangeFromQuery } from '../common/argentina-date-range';
 import { CajaService } from './caja.service';
 
 type User = { businessId: string; id: string };
@@ -64,10 +65,11 @@ export class CajaController {
     @Query('to') to?: string,
     @Query('limit') limit?: string,
   ) {
+    const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
     return this.caja.list(
       user.businessId,
-      from ? new Date(from) : undefined,
-      to ? new Date(to) : undefined,
+      fromD,
+      toD,
       limit ? parseInt(limit, 10) : 30,
     );
   }

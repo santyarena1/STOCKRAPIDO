@@ -43,7 +43,7 @@ function ProductSearchRow({ product, onAdd }: { product: Product; onAdd: (qty: n
         <button
           type="button"
           onClick={() => onAdd(qty)}
-          className="px-2 py-1 rounded bg-sky-600 text-white text-sm whitespace-nowrap"
+          className="px-2 py-1 rounded btn-brand text-sm whitespace-nowrap"
         >
           Agregar
         </button>
@@ -289,7 +289,7 @@ export default function PromocionesPage() {
               setShowForm(true);
             }}
             data-tour="promos-nueva"
-            className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium"
+            className="px-4 py-2 rounded-lg btn-brand font-medium"
           >
             Nueva promoción
           </button>
@@ -518,7 +518,7 @@ export default function PromocionesPage() {
           </label>
 
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium">
+            <button type="submit" className="px-4 py-2 rounded-lg btn-brand font-medium">
               {editingId ? 'Guardar cambios' : 'Crear promoción'}
             </button>
             <button
@@ -560,7 +560,7 @@ export default function PromocionesPage() {
                   <tr key={p.id} className="hover:bg-slate-800/50">
                     <td className="p-3 text-slate-200">{p.name}</td>
                     <td className="p-3 text-slate-400 capitalize">{p.type}</td>
-                    <td className="p-3 text-sky-400 font-medium">{formatPromoValue(p)}</td>
+                    <td className="p-3 text-brand font-medium">{formatPromoValue(p)}</td>
                     <td className="p-3 text-slate-400 font-mono">{p.promoCode || '—'}</td>
                     <td className="p-3 text-slate-400 text-xs">
                       {p.validFrom || p.validTo
@@ -573,7 +573,7 @@ export default function PromocionesPage() {
                       </span>
                     </td>
                     <td className="p-3 text-right">
-                      <button type="button" onClick={() => handleEdit(p)} className="text-sky-400 hover:underline mr-2">Editar</button>
+                      <button type="button" onClick={() => handleEdit(p)} className="text-brand hover:underline mr-2">Editar</button>
                       <button type="button" onClick={() => handleDelete(p.id)} className="text-red-400 hover:underline">Eliminar</button>
                     </td>
                   </tr>

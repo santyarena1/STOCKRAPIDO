@@ -188,7 +188,7 @@ export function TutorialOverlay({ open, onClose }: { open: boolean; onClose: () 
       {measured.map((m, i) => (
         <div
           key={i}
-          className="absolute rounded-lg pointer-events-none border-2 border-sky-400 shadow-lg shadow-sky-500/30"
+          className="absolute rounded-lg pointer-events-none tour-spotlight"
           style={{
             zIndex: 2,
             left: m.rect.left - 2,
@@ -213,7 +213,7 @@ export function TutorialOverlay({ open, onClose }: { open: boolean; onClose: () 
         <button
           type="button"
           onClick={onClose}
-          className="px-6 py-2.5 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-500"
+          className="px-6 py-2.5 rounded-lg btn-brand font-medium"
         >
           Cerrar tutorial
         </button>

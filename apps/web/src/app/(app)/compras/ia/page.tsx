@@ -467,7 +467,7 @@ export default function ComprasIaPage() {
         <div>
           <div className="flex justify-between items-center mb-2">
             <label className="text-sm text-slate-400">Ítems de la compra</label>
-            <button type="button" onClick={addItem} className="text-sky-400 text-sm hover:underline">
+            <button type="button" onClick={addItem} className="text-brand text-sm hover:underline">
               + Agregar ítem
             </button>
           </div>
@@ -523,7 +523,7 @@ export default function ComprasIaPage() {
                               key={p.id}
                               role="option"
                               aria-selected={idx === highlighted}
-                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-sky-600/30 ring-1 ring-sky-500/50' : 'hover:bg-slate-700'}`}
+                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-brand-highlight' : 'hover:bg-slate-700'}`}
                               onClick={() => selectProduct(i, p)}
                             >
                               <span>{p.name}</span>
@@ -607,7 +607,7 @@ export default function ComprasIaPage() {
         <button
           type="submit"
           disabled={form.items.length === 0 || !form.supplierId}
-          className="px-4 py-2 rounded-lg bg-sky-600 text-white disabled:opacity-50"
+          className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50"
         >
           Confirmar compra
         </button>

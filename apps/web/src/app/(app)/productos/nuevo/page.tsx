@@ -168,7 +168,7 @@ export default function NuevoProductoPage() {
           Controlar stock
         </label>
         <div data-tour="nuevo-producto-guardar" className="flex gap-2 pt-4">
-          <button type="submit" disabled={loading} className="px-4 py-2 rounded-lg bg-sky-600 text-white disabled:opacity-50">
+          <button type="submit" disabled={loading} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {loading ? 'Guardando...' : 'Guardar'}
           </button>
           <Link href="/productos" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300">

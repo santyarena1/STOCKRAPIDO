@@ -269,7 +269,7 @@ export default function ComprasPage() {
         <button
           type="button"
           onClick={() => { setShowNew(!showNew); setEditingPurchaseId(null); }}
-          className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium"
+          className="px-4 py-2 rounded-lg btn-brand font-medium"
         >
           {showNew ? 'Cerrar' : 'Nueva compra'}
         </button>
@@ -305,7 +305,7 @@ export default function ComprasPage() {
           <div data-tour="compras-items">
             <div className="flex justify-between items-center mb-2">
               <label className="text-sm text-slate-400">Ítems de la compra</label>
-              <button type="button" onClick={addItem} className="text-sky-400 text-sm hover:underline">
+              <button type="button" onClick={addItem} className="text-brand text-sm hover:underline">
                 + Agregar ítem
               </button>
             </div>
@@ -365,7 +365,7 @@ export default function ComprasPage() {
                               key={p.id}
                               role="option"
                               aria-selected={idx === highlighted}
-                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-sky-600/30 ring-1 ring-sky-500/50' : 'hover:bg-slate-700'}`}
+                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-brand-highlight' : 'hover:bg-slate-700'}`}
                               onClick={() => selectProduct(i, p)}
                             >
                               <span>{p.name}</span>
@@ -449,7 +449,7 @@ export default function ComprasPage() {
             type="submit"
             data-tour="compras-guardar"
             disabled={form.items.length === 0 || !form.supplierId}
-            className="px-4 py-2 rounded-lg bg-sky-600 text-white disabled:opacity-50"
+            className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50"
           >
             {editingPurchaseId ? 'Guardar cambios' : 'Confirmar compra'}
           </button>
@@ -534,7 +534,7 @@ export default function ComprasPage() {
                         <button
                           type="button"
                           onClick={() => handleRepetir(p)}
-                          className="text-sky-400 hover:underline text-sm"
+                          className="text-brand hover:underline text-sm"
                         >
                           Repetir
                         </button>

@@ -76,7 +76,7 @@ export function SupplierSelector({
             className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
             autoFocus
           />
-          <button type="button" onClick={handleAdd} className="px-3 py-2 rounded-lg bg-sky-600 text-white text-sm">
+          <button type="button" onClick={handleAdd} className="px-3 py-2 rounded-lg btn-brand text-sm">
             Crear
           </button>
           <button

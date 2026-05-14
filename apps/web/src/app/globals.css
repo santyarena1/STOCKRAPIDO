@@ -5,6 +5,9 @@
 :root {
   --background: #0f172a;
   --foreground: #f1f5f9;
+  /* Marca: el layout asigna --brand-* al cargar /business/me */
+  --accent: #0ea5e9;
+  --brand-accent: #0ea5e9;
 }
 
 body {
@@ -41,4 +44,47 @@ body {
   height: 5px;
   border-right: 1px solid rgba(148, 163, 184, 0.8);
   border-bottom: 1px solid rgba(148, 163, 184, 0.8);
+}
+
+/* Utilidades de marca (variables definidas en layout desde Configuración) */
+@layer components {
+  .btn-brand {
+    @apply text-white font-medium transition disabled:opacity-50;
+    background-color: var(--brand-primary-btn, var(--brand-accent, #0ea5e9));
+  }
+  .btn-brand:not(:disabled):hover {
+    filter: brightness(1.09);
+  }
+  .text-brand {
+    color: var(--brand-link, var(--brand-accent, #0ea5e9));
+  }
+  .focus-brand {
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-0;
+    --tw-ring-color: var(--brand-focus, var(--brand-accent, #0ea5e9));
+  }
+  .bg-brand-highlight {
+    background-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 42%, transparent);
+  }
+  .bg-brand-highlight-soft {
+    background-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 18%, transparent);
+  }
+  .tour-spotlight {
+    border-width: 2px;
+    border-style: solid;
+    border-color: var(--brand-selection, var(--brand-accent, #0ea5e9));
+    box-shadow:
+      0 10px 15px -3px color-mix(in srgb, var(--brand-shadow, var(--brand-accent, #0ea5e9)) 32%, transparent),
+      0 4px 6px -4px color-mix(in srgb, var(--brand-shadow, var(--brand-accent, #0ea5e9)) 22%, transparent);
+  }
+  .bg-brand-dot {
+    background-color: var(--brand-link, var(--brand-accent, #0ea5e9));
+  }
+  .border-brand-card-hover:hover {
+    border-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 55%, transparent);
+  }
+  .hover-brand-primary:hover {
+    background-color: var(--brand-primary-btn, var(--brand-accent, #0ea5e9)) !important;
+    color: #fff !important;
+  }
 }

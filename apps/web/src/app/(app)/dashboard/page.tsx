@@ -165,7 +165,7 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => setIsEditing((e) => !e)}
-          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'bg-sky-600 border-sky-500 text-white' : 'border-slate-600 text-slate-300 hover:bg-slate-800'}`}
+          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-slate-600 text-slate-300 hover:bg-slate-800'}`}
         >
           {isEditing ? 'Listo (guardado)' : 'Editar dashboard'}
         </button>
@@ -176,9 +176,9 @@ export default function DashboardPage() {
         <Link
           href="/pos"
           data-tour="dashboard-pos"
-          className="rounded-xl border border-slate-700 bg-slate-800/60 p-4 hover:border-sky-500/70 transition-all"
+          className="rounded-xl border border-slate-700 bg-slate-800/60 p-4 border-brand-card-hover transition-all"
         >
-          <h3 className="text-sky-400 font-semibold mb-1 text-sm">POS</h3>
+          <h3 className="text-brand font-semibold mb-1 text-sm">POS</h3>
           <p className="text-slate-400 text-xs">Ir al punto de venta</p>
         </Link>
         <div data-tour="dashboard-ventas-hoy" className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
@@ -312,7 +312,7 @@ export default function DashboardPage() {
 
         <div key="top-vendidos" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg overflow-auto">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
-          <h3 className="text-sky-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-sky-400" />Más vendidos</h3>
+          <h3 className="text-brand font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-brand-dot" />Más vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topSold.length === 0 ? <li className="text-slate-500">Sin datos</li> : topSold.map((p, i) => (
               <li key={i} className="flex justify-between gap-2"><span className="text-slate-300 truncate" title={p.name}>{p.name}</span><span className="text-slate-400 whitespace-nowrap">{p.qty} un.</span></li>
@@ -360,12 +360,12 @@ export default function DashboardPage() {
         {openCaja ? (
           <div data-tour="dashboard-caja" className="rounded-xl border border-emerald-700/50 bg-emerald-900/20 p-4">
             <p className="text-emerald-400 font-medium">Caja abierta</p>
-            <Link href="/caja" className="text-sky-400 hover:underline text-sm">Ver caja →</Link>
+            <Link href="/caja" className="text-brand hover:underline text-sm">Ver caja →</Link>
           </div>
         ) : (
           <div data-tour="dashboard-caja" className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-4">
             <p className="text-amber-400 font-medium">Caja cerrada</p>
-            <Link href="/caja" className="text-sky-400 hover:underline text-sm">Abrir caja →</Link>
+            <Link href="/caja" className="text-brand hover:underline text-sm">Abrir caja →</Link>
           </div>
         )}
         <div data-tour="dashboard-links" className="flex flex-wrap gap-2">

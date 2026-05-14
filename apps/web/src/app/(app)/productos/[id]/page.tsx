@@ -120,7 +120,7 @@ export default function EditarProductoPage() {
   if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
   if (!product) return (
     <div className="p-6">
-      <Link href="/productos" className="text-sky-400 hover:underline">← Productos</Link>
+      <Link href="/productos" className="text-brand hover:underline">← Productos</Link>
       <p className="mt-4 text-slate-400">Producto no encontrado</p>
     </div>
   );
@@ -225,7 +225,7 @@ export default function EditarProductoPage() {
             <input type="checkbox" checked={form.stockControl} onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))} />
             Controlar stock
           </label>
-          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-sky-600 text-white disabled:opacity-50">
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </form>
@@ -332,7 +332,7 @@ export default function EditarProductoPage() {
                     ))}
                   </select>
                 </div>
-                <button type="submit" className="px-3 py-1.5 rounded bg-sky-600 text-white text-sm">Ajustar</button>
+                <button type="submit" className="px-3 py-1.5 rounded btn-brand text-sm">Ajustar</button>
               </div>
             </form>
           </div>

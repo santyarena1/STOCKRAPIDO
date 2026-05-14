@@ -271,7 +271,7 @@ export function TutorialModal({ open, onClose }: { open: boolean; onClose: () =>
           ) : (
             sections.map((sec) => (
               <section key={sec.title}>
-                <h3 className="text-sky-400 font-semibold mb-3">{sec.title}</h3>
+                <h3 className="text-brand font-semibold mb-3">{sec.title}</h3>
                 <ul className="space-y-3">
                   {sec.items.map((item) => (
                     <li key={item.label} className="flex gap-3">

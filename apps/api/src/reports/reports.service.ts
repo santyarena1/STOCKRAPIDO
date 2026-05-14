@@ -126,6 +126,24 @@ export class ReportsService {
     return list.filter((p) => p.stock <= p.minStock);
   }
 
+  /** POS: productos con stock ≤ maxUnits (por defecto 3), solo con control de stock. */
+  async criticalStockForPos(businessId: string, maxUnits = 3) {
+    const threshold =
+      Number.isFinite(maxUnits) && maxUnits >= 0 ? Math.min(Math.floor(maxUnits), 500) : 3;
+    const items = await this.prisma.product.findMany({
+      where: {
+        businessId,
+        isActive: true,
+        stockControl: true,
+        stock: { lte: threshold },
+      },
+      select: { id: true, name: true, stock: true },
+      orderBy: [{ stock: 'asc' }, { name: 'asc' }],
+      take: 100,
+    });
+    return { maxUnits: threshold, count: items.length, items };
+  }
+
   /** Por producto: solo cantidad de lotes que vencen en la fecha más cercana (mismo día). No usa product.stock. */
   async expiringSoon(businessId: string, days = 30): Promise<{ name: string; expiresAt: string; qtyExpiring: number }[]> {
     const now = new Date();
@@ -163,6 +181,168 @@ export class ReportsService {
     return Array.from(byProduct.values())
       .map((x) => ({ name: x.name, expiresAt: x.nextKey, qtyExpiring: x.qty }))
       .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+  }
+
+  /** Valorización y estadísticas de inventario (productos activos). */
+  async stockSummary(businessId: string, expiringDays = 30) {
+    const products = await this.prisma.product.findMany({
+      where: { businessId, isActive: true },
+      select: {
+        stock: true,
+        cost: true,
+        price: true,
+        minStock: true,
+        stockControl: true,
+      },
+    });
+
+    let totalUnits = 0;
+    let valueAtCostProduct = 0;
+    let valueAtSale = 0;
+    let productsWithStock = 0;
+    let productsNoStock = 0;
+    let lowStockCount = 0;
+    let productsWithoutCostWithStock = 0;
+
+    for (const p of products) {
+      const st = p.stock;
+      totalUnits += st;
+      if (st > 0) productsWithStock += 1;
+      else productsNoStock += 1;
+      const costNum = p.cost != null ? Number(p.cost) : 0;
+      if (st > 0 && p.cost == null) productsWithoutCostWithStock += 1;
+      valueAtCostProduct += st * costNum;
+      valueAtSale += st * Number(p.price);
+      if (p.stockControl && st <= p.minStock) lowStockCount += 1;
+    }
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const limit = new Date();
+    limit.setDate(limit.getDate() + expiringDays);
+    limit.setHours(23, 59, 59, 999);
+
+    const [batchCostRows, expiringAgg, expiringBatches, expiringByProduct] = await Promise.all([
+      this.prisma.productBatch.findMany({
+        where: { businessId, qty: { gt: 0 } },
+        select: { qty: true, unitCost: true },
+      }),
+      this.prisma.productBatch.aggregate({
+        where: {
+          businessId,
+          expiresAt: { not: null, gte: now, lte: limit },
+          qty: { gt: 0 },
+        },
+        _sum: { qty: true },
+      }),
+      this.prisma.productBatch.findMany({
+        where: {
+          businessId,
+          expiresAt: { not: null, gte: now, lte: limit },
+          qty: { gt: 0 },
+        },
+        select: {
+          id: true,
+          qty: true,
+          expiresAt: true,
+          unitCost: true,
+          product: { select: { id: true, name: true } },
+        },
+        orderBy: [{ expiresAt: 'asc' }],
+      }),
+      this.expiringSoon(businessId, expiringDays),
+    ]);
+
+    const valueAtCostBatches = batchCostRows.reduce((s, b) => s + b.qty * Number(b.unitCost), 0);
+
+    return {
+      productCount: products.length,
+      productsWithStock,
+      productsNoStock,
+      totalUnits,
+      /** Costo según campo costo del producto × stock */
+      valueAtCostProduct,
+      /** Costo según lotes (compras); más preciso si usás lotes */
+      valueAtCostBatches,
+      valueAtSale,
+      potentialMargin: valueAtSale - valueAtCostProduct,
+      lowStockCount,
+      expiringDaysWindow: expiringDays,
+      expiringProductsCount: expiringByProduct.length,
+      expiringUnitsInWindow: expiringAgg._sum.qty ?? 0,
+      productsWithoutCostWithStock,
+      expiringByProduct,
+      expiringBatches: expiringBatches.map((b) => ({
+        id: b.id,
+        productId: b.product.id,
+        productName: b.product.name,
+        qty: b.qty,
+        expiresAt: (b.expiresAt as Date).toISOString(),
+        unitCost: Number(b.unitCost),
+      })),
+    };
+  }
+
+  /**
+   * Estadísticas del historial de ventas con los mismos filtros que GET /sales (sin límite de filas).
+   */
+  async salesHistoryStats(businessId: string, from?: Date, to?: Date, customerId?: string, productId?: string) {
+    const where: Record<string, unknown> = { businessId };
+    if (from || to) {
+      where.createdAt = {};
+      if (from) (where.createdAt as Record<string, Date>).gte = from;
+      if (to) (where.createdAt as Record<string, Date>).lte = to;
+    }
+    if (customerId) where.customerId = customerId;
+    const pid = productId?.trim();
+    if (pid) where.items = { some: { productId: pid } };
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      select: {
+        total: true,
+        totalFinal: true,
+        discount: true,
+        paymentMethod: true,
+        items: { select: { qty: true, productId: true } },
+      },
+    });
+
+    let sumSubtotal = 0;
+    let sumDiscount = 0;
+    let sumTotalFinal = 0;
+    let unitsSold = 0;
+    const byPayment: Record<string, { count: number; total: number }> = {};
+
+    for (const s of sales) {
+      sumSubtotal += Number(s.total);
+      sumDiscount += Number(s.discount);
+      sumTotalFinal += Number(s.totalFinal);
+      if (pid) {
+        for (const it of s.items) {
+          if (it.productId === pid) unitsSold += it.qty;
+        }
+      } else {
+        for (const it of s.items) unitsSold += it.qty;
+      }
+      const pm = s.paymentMethod?.trim() || '_sin_metodo';
+      if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
+      byPayment[pm].count += 1;
+      byPayment[pm].total += Number(s.totalFinal);
+    }
+
+    const saleCount = sales.length;
+    const averageTicket = saleCount > 0 ? sumTotalFinal / saleCount : 0;
+
+    return {
+      saleCount,
+      sumSubtotal,
+      sumDiscount,
+      sumTotalFinal,
+      unitsSold,
+      averageTicket,
+      byPaymentMethod: byPayment,
+    };
   }
 
   async cajaByDay(businessId: string, from: Date, to: Date) {

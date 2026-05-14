@@ -60,7 +60,7 @@ export default function ReportesPage() {
             <option value="week">Semana</option>
             <option value="month">Mes</option>
           </select>
-          <button data-tour="reportes-export" onClick={handleExportCsv} className="px-4 py-2 rounded-lg bg-sky-600 text-white">
+          <button data-tour="reportes-export" onClick={handleExportCsv} className="px-4 py-2 rounded-lg btn-brand">
             Exportar CSV
           </button>
         </div>
@@ -99,7 +99,7 @@ export default function ReportesPage() {
               {(Array.isArray(topProducts) ? topProducts : []).slice(0, 10).map((p, i) => (
                 <li key={i} className="flex justify-between text-sm">
                   <span className="text-slate-300">{p?.name ?? '-'}</span>
-                  <span className="text-sky-400">{p?.qty ?? 0} und · ${Number(p?.total ?? 0).toFixed(0)}</span>
+                  <span className="text-brand">{p?.qty ?? 0} und · ${Number(p?.total ?? 0).toFixed(0)}</span>
                 </li>
               ))}
             </ul>

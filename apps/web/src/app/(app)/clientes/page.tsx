@@ -74,7 +74,7 @@ export default function ClientesPage() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-white">Clientes / Fiados</h1>
-        <button type="button" onClick={() => setShowForm(!showForm)} data-tour="clientes-nuevo" className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium">
+        <button type="button" onClick={() => setShowForm(!showForm)} data-tour="clientes-nuevo" className="px-4 py-2 rounded-lg btn-brand font-medium">
           {showForm ? 'Cerrar' : 'Nuevo cliente'}
         </button>
       </div>
@@ -114,7 +114,7 @@ export default function ClientesPage() {
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 text-white">Guardar</button>
+          <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Guardar</button>
         </form>
       )}
 

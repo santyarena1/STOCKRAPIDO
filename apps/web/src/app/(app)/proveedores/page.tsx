@@ -39,7 +39,7 @@ export default function ProveedoresPage() {
           type="button"
           onClick={() => setShowForm(!showForm)}
           data-tour="proveedores-nuevo"
-          className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium"
+          className="px-4 py-2 rounded-lg btn-brand font-medium"
         >
           {showForm ? 'Cerrar' : 'Nuevo proveedor'}
         </button>
@@ -76,7 +76,7 @@ export default function ProveedoresPage() {
             onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 text-white">Guardar</button>
+          <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Guardar</button>
         </form>
       )}
 

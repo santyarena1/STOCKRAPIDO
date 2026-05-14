@@ -31,8 +31,15 @@ export class ProductsController {
   }
 
   @Get('stock-moves')
-  getAllStockMoves(@CurrentUser() user: User, @Query('limit') limit?: string) {
-    return this.products.getAllStockMoves(user.businessId, limit ? parseInt(limit, 10) : 100);
+  getAllStockMoves(
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+    /** altas = solo creación de productos (alta + stock inicial) */
+    @Query('kind') kind?: string,
+  ) {
+    const k = kind === 'altas' ? 'altas' : 'all';
+    const n = limit ? parseInt(limit, 10) : 300;
+    return this.products.getAllStockMoves(user.businessId, Number.isFinite(n) && n > 0 ? n : 300, k);
   }
 
   @Get('export-stock')

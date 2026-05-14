@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { saleDateRangeFromQuery } from '../common/argentina-date-range';
 import { PurchasesService } from './purchases.service';
 
 type User = { businessId: string };
@@ -63,12 +64,13 @@ export class PurchasesController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
+    const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
     return this.purchases.list(
       user.businessId,
       supplierId,
       limit ? parseInt(limit, 10) : 50,
-      from ? new Date(from) : undefined,
-      to ? new Date(to) : undefined,
+      fromD,
+      toD,
     );
   }
 

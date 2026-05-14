@@ -249,7 +249,7 @@ export default function CajaPage() {
                 </div>
                 <div>
                   <p className="text-slate-500 text-xs">Banco / electrónico esperado</p>
-                  <p className="text-lg font-semibold text-sky-300">${preview.expectedBanco.toFixed(0)}</p>
+                  <p className="text-lg font-semibold text-brand">${preview.expectedBanco.toFixed(0)}</p>
                   <p className="text-xs text-slate-500 mt-1">
                     Ventas (tarjeta/transf./MP) ${preview.salesBanco.toFixed(0)} · mov.{' '}
                     {(preview.movBancoIncome - preview.movBancoExpense).toFixed(0)}
@@ -294,7 +294,7 @@ export default function CajaPage() {
                 onChange={(e) => setMovNote(e.target.value)}
                 className="flex-1 min-w-[120px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
               />
-              <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 text-white">
+              <button type="submit" className="px-4 py-2 rounded-lg btn-brand">
                 Agregar
               </button>
             </div>

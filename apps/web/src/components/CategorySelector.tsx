@@ -70,7 +70,7 @@ export function CategorySelector({ value, onChange, categories, onCategoriesChan
             className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
             autoFocus
           />
-          <button type="button" onClick={handleAdd} className="px-3 py-2 rounded-lg bg-sky-600 text-white text-sm">Crear</button>
+          <button type="button" onClick={handleAdd} className="px-3 py-2 rounded-lg btn-brand text-sm">Crear</button>
           <button type="button" onClick={() => { setAdding(false); setNewName(''); }} className="px-3 py-2 rounded-lg border border-slate-600 text-slate-400 text-sm">Cancelar</button>
         </div>
       )}

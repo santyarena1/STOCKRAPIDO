@@ -1,5 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { mergePosConfigUpdate, sanitizePosConfigForApi } from './pos-config.util';
 import { UpdateBusinessDto } from './dto/update-business.dto';
@@ -25,10 +24,16 @@ export class BusinessService {
     });
     if (!existing) throw new NotFoundException('Negocio no encontrado');
 
-    const mergedPos = mergePosConfigUpdate(existing.posConfig, {
-      posConfig: data.posConfig,
-      clearAiInvoiceWebhookSecret: data.clearAiInvoiceWebhookSecret,
-    });
+    let mergedPos: Record<string, unknown> | undefined;
+    try {
+      mergedPos = mergePosConfigUpdate(existing.posConfig, {
+        posConfig: data.posConfig,
+        clearAiInvoiceWebhookSecret: data.clearAiInvoiceWebhookSecret,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Configuración inválida';
+      throw new BadRequestException(msg);
+    }
 
     const updated = await this.prisma.business.update({
       where: { id: businessId },
@@ -36,7 +41,7 @@ export class BusinessService {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.cuit !== undefined && { cuit: data.cuit }),
         ...(data.address !== undefined && { address: data.address }),
-        ...(mergedPos !== undefined && { posConfig: mergedPos as Prisma.InputJsonValue }),
+        ...(mergedPos !== undefined && { posConfig: mergedPos as any }),
       },
     });
     return {

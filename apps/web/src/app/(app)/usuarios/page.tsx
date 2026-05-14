@@ -47,7 +47,7 @@ export default function UsuariosPage() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-white">Usuarios</h1>
-        <button type="button" onClick={() => setShowForm(!showForm)} data-tour="usuarios-nuevo" className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium">
+        <button type="button" onClick={() => setShowForm(!showForm)} data-tour="usuarios-nuevo" className="px-4 py-2 rounded-lg btn-brand font-medium">
           {showForm ? 'Cerrar' : 'Nuevo usuario'}
         </button>
       </div>
@@ -88,7 +88,7 @@ export default function UsuariosPage() {
             <option value="REPOSITOR">Repositor</option>
             <option value="LECTOR">Lector</option>
           </select>
-          <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 text-white">Crear usuario</button>
+          <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Crear usuario</button>
         </form>
       )}
 
@@ -120,7 +120,7 @@ export default function UsuariosPage() {
                       <button
                         type="button"
                         onClick={() => handleToggleActive(u.id, u.isActive)}
-                        className="text-sky-400 hover:underline text-xs"
+                        className="text-brand hover:underline text-xs"
                       >
                         {u.isActive ? 'Desactivar' : 'Activar'}
                       </button>

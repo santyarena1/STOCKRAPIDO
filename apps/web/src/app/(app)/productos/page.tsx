@@ -13,10 +13,45 @@ type Product = {
   cost?: string | number;
   stock: number;
   minStock: number;
+  stockControl?: boolean;
+  brand?: string | null;
   category?: { name: string };
   expiresAt?: string | null;
 };
 type Category = { id: string; name: string };
+
+type StockSummary = {
+  productCount: number;
+  productsWithStock: number;
+  productsNoStock: number;
+  totalUnits: number;
+  valueAtCostProduct: number;
+  valueAtCostBatches: number;
+  valueAtSale: number;
+  potentialMargin: number;
+  lowStockCount: number;
+  expiringDaysWindow: number;
+  expiringProductsCount: number;
+  expiringUnitsInWindow: number;
+  productsWithoutCostWithStock: number;
+  expiringByProduct: { name: string; expiresAt: string; qtyExpiring: number }[];
+  expiringBatches: {
+    id: string;
+    productId: string;
+    productName: string;
+    qty: number;
+    expiresAt: string;
+    unitCost: number;
+  }[];
+};
+
+function formatMoneyArs(n: number) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
 
@@ -34,6 +69,7 @@ export default function ProductosPage() {
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: number; errors: Array<{ row: number; message: string }> } | null>(null);
+  const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(() => {
@@ -41,9 +77,11 @@ export default function ProductosPage() {
     Promise.allSettled([
       api<Product[]>('/products', { params: { categoryId: categoryId || undefined, lowStock: lowStock ? 'true' : undefined } }),
       api<Category[]>('/business/categories'),
-    ]).then(([prodsRes, catsRes]) => {
+      api<StockSummary>('/reports/stock-summary'),
+    ]).then(([prodsRes, catsRes, sumRes]) => {
       setProducts(prodsRes.status === 'fulfilled' && Array.isArray(prodsRes.value) ? prodsRes.value : []);
       setCategories(catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) ? catsRes.value : []);
+      setStockSummary(sumRes.status === 'fulfilled' ? sumRes.value : null);
     }).finally(() => setLoading(false));
   }, [categoryId, lowStock]);
 
@@ -139,6 +177,77 @@ export default function ProductosPage() {
       .finally(() => setExporting(false));
   };
 
+  /**
+   * Lista visible con los filtros actuales.
+   * CSV con punto y coma: Excel en español usa ; como separador; el .txt con tabs suele abrirse como una sola columna.
+   */
+  const handleExportTxt = () => {
+    if (filtered.length === 0) {
+      alert('No hay productos para exportar con los filtros actuales.');
+      return;
+    }
+    const plain = (s: string) =>
+      String(s)
+        .replace(/\t/g, ' ')
+        .replace(/\r?\n/g, ' ')
+        .trim();
+    const csvCell = (raw: string | number) => {
+      const s = String(raw);
+      if (/[";\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const SEP = ';';
+    const header = [
+      'id',
+      'nombre',
+      'codigo_barras',
+      'stock',
+      'stock_minimo',
+      'categoria',
+      'precio_venta',
+      'costo',
+      'marca',
+      'vencimiento',
+      'control_stock',
+    ];
+    const lines = filtered.map((p) => {
+      const price = typeof p.price === 'number' ? p.price : parseFloat(String(p.price ?? '0')) || 0;
+      const costRaw = p.cost;
+      const costNum =
+        costRaw != null && costRaw !== ''
+          ? (typeof costRaw === 'number' ? costRaw : parseFloat(String(costRaw))) || 0
+          : null;
+      const ven = p.expiresAt ? new Date(p.expiresAt).toISOString().slice(0, 10) : '';
+      const row = [
+        csvCell(p.id ?? ''),
+        csvCell(plain(p.name ?? '')),
+        csvCell(plain(p.barcode ?? '')),
+        csvCell(String(p.stock ?? 0)),
+        csvCell(String(p.minStock ?? 0)),
+        csvCell(plain(p.category?.name ?? '')),
+        csvCell(price.toFixed(2)),
+        csvCell(costNum == null ? '' : costNum.toFixed(2)),
+        csvCell(plain(p.brand ?? '')),
+        csvCell(ven),
+        csvCell(p.stockControl === false ? 'No' : 'Sí'),
+      ];
+      return row.join(SEP);
+    });
+    const content = `\uFEFF${header.join(SEP)}\n${lines.join('\n')}`;
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `stock-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.style.position = 'fixed';
+    link.style.left = '-9999px';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }, 500);
+  };
+
   const handleImportStock = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -179,6 +288,14 @@ export default function ProductosPage() {
           >
             {exporting ? 'Exportando…' : 'Exportar stock (Excel)'}
           </a>
+          <button
+            type="button"
+            onClick={handleExportTxt}
+            className="px-4 py-2 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500"
+            title="CSV separado por punto y coma (UTF-8): abre en Excel con todas las columnas. Respeta filtros de la tabla."
+          >
+            Exportar lista (CSV)
+          </button>
           {exportMsg && <span className="text-amber-400 text-sm ml-2">{exportMsg}</span>}
           <button
             type="button"
@@ -198,7 +315,7 @@ export default function ProductosPage() {
           <Link
             href="/productos/nuevo"
             data-tour="productos-nuevo"
-            className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-500"
+            className="px-4 py-2 rounded-lg btn-brand font-medium"
           >
             Nuevo producto
           </Link>
@@ -206,7 +323,10 @@ export default function ProductosPage() {
       </div>
 
       <p className="mb-2 text-slate-500 text-sm">
-        Exportá a Excel para ver y editar columnas. Para importar: editá solo <strong>Stock actual</strong> y/o <strong>Stock mínimo</strong>, guardá el archivo y subilo. No borres las columnas id ni codigo_barras.
+        <strong>Exportar stock (Excel)</strong> descarga el catálogo completo para editar e importar.{' '}
+        <strong>Exportar lista (CSV)</strong> usa los filtros actuales de la tabla e incluye id, código, precio, costo,
+        categoría, marca y más (separador <code className="text-slate-400">;</code> para Excel en español). Para importar:
+        editá solo <strong>Stock actual</strong> y/o <strong>Stock mínimo</strong> en el Excel de exportación masiva, guardá y subilo. No borres las columnas id ni codigo_barras.
       </p>
 
       {importResult && (
@@ -218,6 +338,133 @@ export default function ProductosPage() {
                 {importResult.errors.length > 5 ? '…' : ''}</span>
             )}
           </p>
+        </div>
+      )}
+
+      {!loading && stockSummary && (
+        <div data-tour="productos-stock-summary" className="mb-8 space-y-6">
+          <div>
+            <h2 className="text-lg font-semibold text-white mb-1">Valorización y estadísticas de stock</h2>
+            <p className="text-slate-500 text-sm">
+              Productos activos. Costo según precio de compra cargado en el producto; si usás lotes, también mostramos valorización por lotes.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+              <p className="text-slate-400 text-xs mb-1">Productos en catálogo</p>
+              <p className="text-2xl font-bold text-white">{stockSummary.productCount}</p>
+              <p className="text-slate-500 text-xs mt-1">Con stock: {stockSummary.productsWithStock} · Sin stock: {stockSummary.productsNoStock}</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+              <p className="text-slate-400 text-xs mb-1">Unidades totales</p>
+              <p className="text-2xl font-bold text-brand">{stockSummary.totalUnits}</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+              <p className="text-slate-400 text-xs mb-1">Valor stock (costo producto)</p>
+              <p className="text-xl font-bold text-white">{formatMoneyArs(stockSummary.valueAtCostProduct)}</p>
+              {stockSummary.productsWithoutCostWithStock > 0 && (
+                <p className="text-amber-400/90 text-xs mt-1">{stockSummary.productsWithoutCostWithStock} con stock sin costo cargado</p>
+              )}
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+              <p className="text-slate-400 text-xs mb-1">Valor stock (costo lotes)</p>
+              <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stockSummary.valueAtCostBatches)}</p>
+              <p className="text-slate-500 text-xs mt-1">Suma de cantidad × costo unitario por lote</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+              <p className="text-slate-400 text-xs mb-1">Valor stock (precio venta)</p>
+              <p className="text-xl font-bold text-white">{formatMoneyArs(stockSummary.valueAtSale)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+              <p className="text-slate-400 text-xs mb-1">Margen potencial</p>
+              <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stockSummary.potentialMargin)}</p>
+              <p className="text-slate-500 text-xs mt-1">Venta − costo (campo producto)</p>
+            </div>
+            <div className="rounded-xl border border-amber-700/40 bg-amber-900/15 p-4">
+              <p className="text-amber-400/90 text-xs mb-1">Stock bajo / mínimo</p>
+              <p className="text-2xl font-bold text-amber-400">{stockSummary.lowStockCount}</p>
+            </div>
+            <div className="rounded-xl border border-rose-700/40 bg-rose-900/15 p-4">
+              <p className="text-rose-400 text-xs mb-1">Por vencer ({stockSummary.expiringDaysWindow} días)</p>
+              <p className="text-2xl font-bold text-rose-300">{stockSummary.expiringUnitsInWindow}</p>
+              <p className="text-slate-500 text-xs mt-1">{stockSummary.expiringProductsCount} productos con lotes en ventana</p>
+            </div>
+          </div>
+
+          {(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              {stockSummary.expiringBatches.length > 0 && (
+                <div className="rounded-xl border border-slate-700 overflow-hidden">
+                  <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700">
+                    <h3 className="font-semibold text-white text-sm">Lotes por vencer (detalle)</h3>
+                    <p className="text-slate-500 text-xs">Cantidad por lote en los próximos {stockSummary.expiringDaysWindow} días</p>
+                  </div>
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b border-slate-700 bg-slate-900/50">
+                          <th className="px-3 py-2">Producto</th>
+                          <th className="px-3 py-2 text-right">Cant.</th>
+                          <th className="px-3 py-2">Vence</th>
+                          <th className="px-3 py-2 text-right">Costo u.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/60">
+                        {stockSummary.expiringBatches.map((b) => (
+                          <tr key={b.id} className="hover:bg-slate-800/40">
+                            <td className="px-3 py-2">
+                              <Link href={`/productos/${b.productId}`} className="text-brand hover:underline">
+                                {b.productName}
+                              </Link>
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-200">{b.qty}</td>
+                            <td className="px-3 py-2 text-slate-400">{new Date(b.expiresAt).toLocaleDateString('es-AR')}</td>
+                            <td className="px-3 py-2 text-right text-slate-500">{formatMoneyArs(b.unitCost)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {stockSummary.expiringByProduct.length > 0 && (
+                <div className="rounded-xl border border-slate-700 overflow-hidden">
+                  <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700">
+                    <h3 className="font-semibold text-white text-sm">Próximo vencimiento por producto</h3>
+                    <p className="text-slate-500 text-xs">Cantidad en la fecha de vencimiento más cercana</p>
+                  </div>
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b border-slate-700 bg-slate-900/50">
+                          <th className="px-3 py-2">Producto</th>
+                          <th className="px-3 py-2 text-right">Cant.</th>
+                          <th className="px-3 py-2">Vence</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/60">
+                        {stockSummary.expiringByProduct.map((row, i) => (
+                          <tr key={`${row.name}-${row.expiresAt}-${i}`} className="hover:bg-slate-800/40">
+                            <td className="px-3 py-2 text-slate-200">{row.name}</td>
+                            <td className="px-3 py-2 text-right">{row.qtyExpiring}</td>
+                            <td className="px-3 py-2 text-slate-400">{new Date(row.expiresAt + 'T12:00:00').toLocaleDateString('es-AR')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {stockSummary.expiringBatches.length === 0 && stockSummary.expiringByProduct.length === 0 && (
+            <p className="text-slate-500 text-sm border border-slate-700/80 rounded-lg px-4 py-3 bg-slate-900/30">
+              No hay lotes registrados por vencer en los próximos {stockSummary.expiringDaysWindow} días. Si cargás compras con vencimiento, aparecerán aquí.
+            </p>
+          )}
         </div>
       )}
 
@@ -275,10 +522,10 @@ export default function ProductosPage() {
               {(Array.isArray(filtered) ? filtered : []).map((p, idx) => (
                 <tr
                   key={p?.id ?? ''}
-                  className={`hover:bg-slate-800/50 ${idx === safeHighlighted ? 'bg-sky-600/20 ring-1 ring-inset ring-sky-500/50' : ''}`}
+                  className={`hover:bg-slate-800/50 ${idx === safeHighlighted ? 'bg-brand-highlight' : ''}`}
                 >
                   <td className="p-3">
-                    <Link href={`/productos/${p?.id ?? ''}`} className="text-sky-400 hover:underline">
+                    <Link href={`/productos/${p?.id ?? ''}`} className="text-brand hover:underline">
                       {p?.name ?? '-'}
                     </Link>
                     {p?.barcode && <span className="text-slate-500 text-xs block">{p.barcode}</span>}
@@ -301,7 +548,7 @@ export default function ProductosPage() {
                     )}
                   </td>
                   <td className="p-3">
-                    <Link href={`/productos/${p?.id ?? ''}`} className="text-sky-400 hover:underline text-xs">
+                    <Link href={`/productos/${p?.id ?? ''}`} className="text-brand hover:underline text-xs">
                       Editar
                     </Link>
                   </td>
