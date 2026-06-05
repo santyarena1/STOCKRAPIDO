@@ -17,6 +17,10 @@ type Product = {
   brand?: string | null;
   category?: { name: string };
   expiresAt?: string | null;
+  imageUrl?: string | null;
+  unitsPerBox?: string | null;
+  weight?: string | null;
+  format?: string | null;
 };
 type Category = { id: string; name: string };
 
@@ -509,8 +513,11 @@ export default function ProductosPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-slate-300">
               <tr>
+                <th className="p-3 w-12"></th>
                 <th className="text-left p-3">Producto</th>
                 <th className="text-left p-3">Categoría</th>
+                <th className="text-left p-3">Marca</th>
+                <th className="text-right p-3">Costo</th>
                 <th className="text-right p-3">Precio</th>
                 <th className="text-right p-3">Stock</th>
                 <th className="text-right p-3">Mín.</th>
@@ -524,13 +531,27 @@ export default function ProductosPage() {
                   key={p?.id ?? ''}
                   className={`hover:bg-slate-800/50 ${idx === safeHighlighted ? 'bg-brand-highlight' : ''}`}
                 >
+                  <td className="p-2">
+                    {p?.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5" />
+                    ) : (
+                      <div className="w-9 h-9 rounded bg-slate-800" />
+                    )}
+                  </td>
                   <td className="p-3">
                     <Link href={`/productos/${p?.id ?? ''}`} className="text-brand hover:underline">
                       {p?.name ?? '-'}
                     </Link>
-                    {p?.barcode && <span className="text-slate-500 text-xs block">{p.barcode}</span>}
+                    {(p?.barcode || p?.weight || p?.unitsPerBox) && (
+                      <span className="text-slate-500 text-xs block">
+                        {[p?.barcode, p?.weight ? `${p.weight}g` : null, p?.unitsPerBox ? `x${p.unitsPerBox}` : null].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
                   </td>
                   <td className="p-3 text-slate-400">{p?.category?.name || '-'}</td>
+                  <td className="p-3 text-slate-400">{p?.brand || '-'}</td>
+                  <td className="p-3 text-right text-slate-500">{p?.cost != null ? `$${Number(p.cost).toFixed(0)}` : '-'}</td>
                   <td className="p-3 text-right text-slate-200">${Number(p?.price ?? 0).toFixed(0)}</td>
                   <td className={`p-3 text-right ${(p?.stock ?? 0) <= (p?.minStock ?? 0) ? 'text-amber-400' : ''}`}>{p?.stock ?? 0}</td>
                   <td className="p-3 text-right text-slate-500">{p?.minStock ?? 0}</td>

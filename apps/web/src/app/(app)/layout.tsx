@@ -37,6 +37,7 @@ const nav = [
   { href: '/movimientos', label: 'Movimientos' },
   { href: '/compras', label: 'Compras' },
   { href: '/proveedores', label: 'Proveedores' },
+  { href: '/sincronizaciones', label: 'Sincronizaciones' },
   { href: '/clientes', label: 'Clientes / Fiados' },
   { href: '/reportes', label: 'Reportes' },
   { href: '/promociones', label: 'Promociones' },

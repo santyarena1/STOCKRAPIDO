@@ -193,7 +193,11 @@ export default function CustomerDisplayPage() {
               </div>
               <ul className="divide-y divide-slate-800">
                 {sale.items.map((line, idx) => (
-                  <li key={idx} className="px-6 py-4 flex flex-wrap justify-between gap-2 text-base md:text-lg">
+                  <li key={idx} className="px-6 py-4 flex flex-wrap items-center justify-between gap-2 text-base md:text-lg">
+                    {line.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={line.imageUrl} alt="" className="w-12 h-12 object-contain rounded bg-white/5 shrink-0" />
+                    ) : null}
                     <span className="text-slate-200 font-medium flex-1 min-w-0">{line.name}</span>
                     <span className="text-slate-500 tabular-nums">× {line.qty}</span>
                     <span className="text-slate-400 tabular-nums w-28 text-right">

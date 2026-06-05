@@ -29,7 +29,7 @@ export type CustomerDisplayBroadcast =
       phase: 'idle' | 'cart' | 'payment';
       /** En cobro: método elegido por el cajero para mostrar alias/QR antes de confirmar la venta */
       selectedPaymentMethod?: string | null;
-      items: { name: string; qty: number; unitPrice: number; lineTotal: number }[];
+      items: { name: string; qty: number; unitPrice: number; lineTotal: number; imageUrl?: string | null }[];
       subtotal: number;
       discount: number;
       total: number;

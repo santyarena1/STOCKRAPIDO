@@ -15,6 +15,7 @@ import { PromosModule } from './promos/promos.module';
 import { UsersModule } from './users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MailModule } from './mail/mail.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MailModule } from './mail/mail.module';
     ReportsModule,
     PromosModule,
     UsersModule,
+    SyncModule,
   ],
 })
 export class AppModule {}

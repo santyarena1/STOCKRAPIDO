@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "prisma generate && nest build && mkdir -p public && echo \"StockRapido API\" > public/index.html",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "dist/**",
+      "maxDuration": 120
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index.js" }
+  ],
+  "crons": [
+    { "path": "/sync/cron", "schedule": "0 6 * * *" }
+  ]
+}

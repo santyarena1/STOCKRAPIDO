@@ -5,3 +5,7 @@ node_modules/
 apps/api/prisma/dev.db
 dist/
 .next/
+.vercel
+
+.vercel
+public/

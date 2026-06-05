@@ -62,8 +62,9 @@ export class ProductsService {
         businessId,
         isActive: true,
         OR: [
-          { name: { contains: term } },
+          { name: { contains: term, mode: 'insensitive' } },
           { barcode: { contains: term } },
+          { brand: { contains: term, mode: 'insensitive' } },
         ],
       },
       take: limit,

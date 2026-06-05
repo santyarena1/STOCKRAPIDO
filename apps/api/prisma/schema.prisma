@@ -1,10 +1,15 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" para build local; rhel-openssl-3.0.x para el runtime serverless de Vercel
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled (pgBouncer de Neon) para el runtime serverless
+  url       = env("DATABASE_URL")
+  // Conexion directa para migraciones (prisma migrate / db push)
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -35,6 +40,7 @@ model Business {
   purchases  Purchase[]
   pausedSales PausedSale[]
   promos    Promo[]
+  syncConnections SyncConnection[]
 }
 
 model Promo {
@@ -104,6 +110,15 @@ model Product {
   businessId  String
   brand       String?
   iva         Decimal?
+  imageUrl    String?
+  unitsPerBox String?
+  weight      String?
+  format      String?
+  flavor      String?
+  presentation String?
+  subcategory String?
+  supplierSku String?
+  externalId  String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -326,4 +341,71 @@ model CatalogProduct {
   barcode   String?
   content   String?
   keywords  String?
+}
+
+// ===== Módulo de Sincronización con APIs de proveedores =====
+
+model SyncConnection {
+  id              String    @id @default(cuid())
+  businessId      String
+  provider        String    // "mondelez"
+  name            String
+  enabled         Boolean   @default(true)
+  config          Json?     // credenciales/params del proveedor (ej. teléfono, password)
+  priceMarkup     Decimal   @default(0)  // % de markup sobre el costo del proveedor -> precio de venta
+  defaultMinStock Int       @default(0)
+  autoSync        Boolean   @default(false)
+  lastSyncAt      DateTime?
+  lastStatus      String?   // success | error | running
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items    SyncedProduct[]
+  runs     SyncRun[]
+}
+
+model SyncedProduct {
+  id              String    @id @default(cuid())
+  businessId      String
+  connectionId    String
+  externalId      String    // VTEX productId
+  sku             String?   // VTEX skuId
+  ean             String?
+  name            String
+  brand           String?
+  category        String?
+  subcategory     String?
+  cost            Decimal?  // costo real del proveedor (B2B) si está disponible
+  listPrice       Decimal?
+  available       Boolean   @default(true)
+  stock           Int?
+  unitsPerBox     String?
+  weight          String?
+  format          String?
+  flavor          String?
+  presentation    String?
+  imageUrl        String?
+  link            String?
+  raw             Json?     // payload completo del proveedor
+  linkedProductId String?   // Product.id si ya fue importado
+  syncedAt        DateTime  @default(now())
+
+  connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalId])
+}
+
+model SyncRun {
+  id            String    @id @default(cuid())
+  connectionId  String
+  status        String    // running | success | error
+  itemsFetched  Int       @default(0)
+  itemsUpserted Int       @default(0)
+  itemsImported Int       @default(0)
+  message       String?
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+
+  connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }

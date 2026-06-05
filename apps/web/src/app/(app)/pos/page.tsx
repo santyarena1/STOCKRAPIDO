@@ -17,6 +17,7 @@ type CartItem = {
   unitPrice: number;
   subtotal: number;
   discount: number;
+  imageUrl?: string | null;
 };
 
 /** Mismo umbral que reportes críticos: aviso solo al agregar ese producto al carrito */
@@ -71,6 +72,12 @@ function CartItemRow({
   };
   return (
     <li className="flex items-center justify-between gap-2 text-sm flex-wrap">
+      {item.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.imageUrl} alt="" className="w-8 h-8 object-contain rounded bg-white/5 shrink-0" />
+      ) : (
+        <div className="w-8 h-8 rounded bg-slate-700 shrink-0" />
+      )}
       <span className="text-slate-300 truncate flex-1 min-w-0 basis-full sm:basis-0">{item.name}</span>
       <div className="flex items-center gap-1 shrink-0">
         <button type="button" onClick={handleMinus} className="w-7 h-7 rounded bg-slate-600 text-slate-200 hover:bg-slate-500" aria-label="Menos">
@@ -134,6 +141,7 @@ export default function POSPage() {
       stock: number;
       stockControl: boolean;
       barcode?: string | null;
+      imageUrl?: string | null;
     }[]
   >([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -200,6 +208,7 @@ export default function POSPage() {
         qty: i.qty,
         unitPrice: i.unitPrice,
         lineTotal: i.subtotal - (i.discount || 0),
+        imageUrl: i.imageUrl ?? null,
       })),
       subtotal,
       discount: discountTotal,
@@ -286,7 +295,7 @@ export default function POSPage() {
 
   const addToCart = useCallback(
     (
-      product: { id: string; name: string; price: string; stock?: number; stockControl?: boolean },
+      product: { id: string; name: string; price: string; stock?: number; stockControl?: boolean; imageUrl?: string | null },
       qty = 1,
     ) => {
     const price = parseFloat(product.price) || 0;
@@ -319,7 +328,7 @@ export default function POSPage() {
         return next;
       }
       const subt = price * qty;
-      return [...prev, { productId: product.id, name: product.name, qty, unitPrice: price, subtotal: subt, discount: 0 }];
+      return [...prev, { productId: product.id, name: product.name, qty, unitPrice: price, subtotal: subt, discount: 0, imageUrl: product.imageUrl ?? null }];
     });
     setSearch('');
     setResults([]);
@@ -354,6 +363,7 @@ export default function POSPage() {
             stock?: number;
             stockControl?: boolean;
             barcode?: string | null;
+            imageUrl?: string | null;
           }>
         >('/products/search', {
           params: { q: term, limit: '15' },
@@ -367,6 +377,7 @@ export default function POSPage() {
           stock: p.stock ?? 0,
           stockControl: p.stockControl !== false,
           barcode: p.barcode ?? null,
+          imageUrl: p.imageUrl ?? null,
         }));
         if (mapped.length === 1 && mapped[0].barcode && mapped[0].barcode === term) {
           addToCart(mapped[0], 1);
@@ -789,10 +800,18 @@ export default function POSPage() {
                     <button
                       type="button"
                       onClick={() => addToCart(p)}
-                      className={`w-full text-left px-4 py-3 flex justify-between items-center hover:bg-slate-700/50 ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
+                      className={`w-full text-left px-4 py-3 flex justify-between items-center gap-3 hover:bg-slate-700/50 ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
                     >
-                      <span className="text-slate-200">{p.name}</span>
-                      <span className="text-brand font-medium">${parseFloat(p.price).toFixed(0)}</span>
+                      <span className="flex items-center gap-3 min-w-0">
+                        {p.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5 shrink-0" />
+                        ) : (
+                          <span className="w-9 h-9 rounded bg-slate-700 shrink-0" />
+                        )}
+                        <span className="text-slate-200 truncate">{p.name}</span>
+                      </span>
+                      <span className="text-brand font-medium shrink-0">${parseFloat(p.price).toFixed(0)}</span>
                     </button>
                   </li>
                 ))}
