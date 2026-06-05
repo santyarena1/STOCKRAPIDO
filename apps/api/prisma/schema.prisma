@@ -363,6 +363,43 @@ model SyncConnection {
   business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   items    SyncedProduct[]
   runs     SyncRun[]
+  orders   MondelezOrder[]
+  drafts   OrderDraft[]
+}
+
+model MondelezOrder {
+  id           String    @id @default(cuid())
+  connectionId String
+  businessId   String
+  externalId   String    // orderId de Mondelez
+  sequence     String?
+  status       String?
+  statusText   String?
+  total        Decimal?
+  totalItems   Int?
+  payment      String?
+  shippingEta  String?
+  creationDate DateTime?
+  raw          Json?
+  createdAt    DateTime  @default(now())
+
+  connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalId])
+}
+
+model OrderDraft {
+  id            String   @id @default(cuid())
+  connectionId  String
+  businessId    String
+  status        String   @default("draft") // draft | confirmed | placing | placed | error
+  items         Json     // [{ sku, ean, name, quantity }]
+  resultOrderId String?
+  message       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }
 
 model SyncedProduct {

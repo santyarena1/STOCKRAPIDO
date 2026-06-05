@@ -27,6 +27,13 @@ type Product = {
   stockControl: boolean;
   expiresAt?: string | null;
   batches?: ProductBatch[];
+  imageUrl?: string | null;
+  unitsPerBox?: string | null;
+  weight?: string | null;
+  format?: string | null;
+  flavor?: string | null;
+  presentation?: string | null;
+  subcategory?: string | null;
 };
 type Category = { id: string; name: string };
 type StockMove = { id: string; qty: number; reason: string; reference?: string; createdAt: string };
@@ -40,7 +47,7 @@ export default function EditarProductoPage() {
   const [moves, setMoves] = useState<StockMove[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, expiresAt: '' });
+  const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
 
@@ -65,6 +72,13 @@ export default function EditarProductoPage() {
           brand: p.brand || '',
           stockControl: p.stockControl,
           expiresAt: p.expiresAt ? new Date(p.expiresAt).toISOString().slice(0, 10) : '',
+          imageUrl: p.imageUrl || '',
+          unitsPerBox: p.unitsPerBox || '',
+          weight: p.weight || '',
+          format: p.format || '',
+          flavor: p.flavor || '',
+          presentation: p.presentation || '',
+          subcategory: p.subcategory || '',
         });
       }
       setCategories(cats);
@@ -88,6 +102,13 @@ export default function EditarProductoPage() {
           brand: form.brand || undefined,
           stockControl: form.stockControl,
           expiresAt: form.expiresAt || undefined,
+          imageUrl: form.imageUrl || undefined,
+          unitsPerBox: form.unitsPerBox || undefined,
+          weight: form.weight || undefined,
+          format: form.format || undefined,
+          flavor: form.flavor || undefined,
+          presentation: form.presentation || undefined,
+          subcategory: form.subcategory || undefined,
         }),
       });
       router.push('/productos');
@@ -221,6 +242,55 @@ export default function EditarProductoPage() {
             />
             <p className="text-xs text-slate-500 mt-0.5">El vencimiento por lote se define en cada compra (ver Lotes abajo)</p>
           </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Marca</label>
+            <input
+              value={form.brand}
+              onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            />
+          </div>
+
+          <div className="border-t border-slate-700 pt-3">
+            <p className="text-sm font-medium text-slate-300 mb-2">Datos de catálogo</p>
+            <div className="flex items-start gap-3 mb-3">
+              {form.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.imageUrl} alt="" className="w-16 h-16 object-contain rounded bg-white/5 shrink-0" />
+              ) : (
+                <div className="w-16 h-16 rounded bg-slate-800 shrink-0" />
+              )}
+              <div className="flex-1">
+                <label className="block text-sm text-slate-400 mb-1">URL de imagen</label>
+                <input
+                  value={form.imageUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  placeholder="https://…"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                ['unitsPerBox', 'Unidades por bulto'],
+                ['weight', 'Peso'],
+                ['format', 'Formato'],
+                ['flavor', 'Sabor'],
+                ['presentation', 'Presentación'],
+                ['subcategory', 'Subcategoría'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className="block text-sm text-slate-400 mb-1">{label}</label>
+                  <input
+                    value={form[key]}
+                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
           <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
             <input type="checkbox" checked={form.stockControl} onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))} />
             Controlar stock

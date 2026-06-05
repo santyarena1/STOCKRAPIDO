@@ -98,6 +98,15 @@ export class ProductsService {
     brand?: string;
     iva?: number;
     expiresAt?: string;
+    imageUrl?: string;
+    unitsPerBox?: string;
+    weight?: string;
+    format?: string;
+    flavor?: string;
+    presentation?: string;
+    subcategory?: string;
+    supplierSku?: string;
+    externalId?: string;
   }) {
     const initialStock = Math.max(0, Math.floor(data.stock ?? 0));
     const product = await this.prisma.product.create({
@@ -114,6 +123,15 @@ export class ProductsService {
         brand: data.brand,
         iva: data.iva != null ? new Decimal(data.iva) : null,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        imageUrl: data.imageUrl,
+        unitsPerBox: data.unitsPerBox,
+        weight: data.weight,
+        format: data.format,
+        flavor: data.flavor,
+        presentation: data.presentation,
+        subcategory: data.subcategory,
+        supplierSku: data.supplierSku,
+        externalId: data.externalId,
       },
       include: { category: true },
     });
@@ -142,6 +160,15 @@ export class ProductsService {
     brand: string;
     iva: number;
     expiresAt: string;
+    imageUrl: string;
+    unitsPerBox: string;
+    weight: string;
+    format: string;
+    flavor: string;
+    presentation: string;
+    subcategory: string;
+    supplierSku: string;
+    externalId: string;
   }>) {
     const update: Record<string, unknown> = { ...data };
     if (data.cost != null) update.cost = new Decimal(data.cost);
