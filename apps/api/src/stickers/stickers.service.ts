@@ -250,26 +250,50 @@ export class StickersService {
       orderBy: { name: 'asc' },
       include: {
         stickers: {
-          where: { stock: { gt: 0 } },
           orderBy: { number: 'asc' },
           select: { id: true, number: true, stock: true },
         },
       },
     });
 
-    return {
-      business: { name: share.business.name },
-      countries: countries
-        .filter((c) => c.stickers.length > 0)
-        .map((c) => ({
+    const mapped = countries
+      .filter((c) => c.stickers.length > 0)
+      .map((c) => {
+        const availableCount = c.stickers.filter((s) => s.stock > 0).length;
+        const totalUnits = c.stickers.reduce((acc, s) => acc + s.stock, 0);
+        const maxNumber = c.stickers.reduce((max, s) => Math.max(max, s.number), 0);
+        return {
           id: c.id,
           name: c.name,
           code: c.code,
           flag: c.flag,
           flagUrl: c.flagUrl,
           priceUnit: c.priceUnit,
+          maxNumber,
+          availableCount,
+          totalUnits,
           stickers: c.stickers,
-        })),
+        };
+      });
+
+    const totalSlots = mapped.reduce((acc, c) => acc + c.stickers.length, 0);
+    const availableSlots = mapped.reduce((acc, c) => acc + c.availableCount, 0);
+    const availableUnits = mapped.reduce((acc, c) => acc + c.totalUnits, 0);
+
+    return {
+      business: { name: share.business.name },
+      meta: {
+        title: 'Álbum de Figuritas — Mundial 2026',
+        description:
+          'Elegí las figuritas que te faltan, armá tu pedido y retiralo en el local. Las casillas doradas están disponibles.',
+      },
+      stats: {
+        countries: mapped.length,
+        totalSlots,
+        availableSlots,
+        availableUnits,
+      },
+      countries: mapped,
     };
   }
 

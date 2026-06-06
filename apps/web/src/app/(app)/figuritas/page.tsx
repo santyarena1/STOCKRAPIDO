@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import {
   buildFiguritasOrderWhatsApp,
@@ -9,6 +9,9 @@ import {
   whatsappUrl,
 } from '@/lib/figuritas';
 import { getPublicAppUrl } from '@/lib/env-urls';
+import { AlbumSpread } from '@/components/figuritas/AlbumSpread';
+import { CountryPicker } from '@/components/figuritas/PublicHero';
+import type { CountryRow } from '@/components/figuritas/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -223,14 +226,17 @@ function TabInventario() {
   const [selected, setSelected] = useState('');
   const [maxN, setMaxN] = useState('20');
   const [stickers, setStickers] = useState<Sticker[]>([]);
-  const [stocks, setStocks] = useState<Record<string, string>>({});
+  const [stocks, setStocks] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [quickNumber, setQuickNumber] = useState('');
   const [quickQty, setQuickQty] = useState('1');
 
   useEffect(() => {
-    api<Country[]>('/stickers/countries').then(setCountries).catch(() => {});
+    api<Country[]>('/stickers/countries').then((data) => {
+      setCountries(data);
+      setSelected((prev) => prev || data[0]?.id || '');
+    }).catch(() => {});
   }, []);
 
   const loadStickers = useCallback(async (countryId: string) => {
@@ -238,17 +244,58 @@ function TabInventario() {
     try {
       const data = await api<Sticker[]>(`/stickers/countries/${countryId}/stickers`);
       setStickers(data);
-      const init: Record<string, string> = {};
-      data.forEach((s) => { init[s.id] = String(s.stock); });
+      const init: Record<string, number> = {};
+      data.forEach((s) => { init[s.id] = s.stock; });
       setStocks(init);
     } catch (e) { setMsg((e as Error).message); }
   }, []);
 
+  useEffect(() => {
+    if (selected) loadStickers(selected);
+  }, [selected, loadStickers]);
+
   const onSelectCountry = (id: string) => {
     setSelected(id);
     setMsg(null);
-    loadStickers(id);
   };
+
+  const countryMeta = countries.find((c) => c.id === selected);
+
+  const albumCountry: CountryRow | null = useMemo(() => {
+    if (!countryMeta) return null;
+    const stickerRows = stickers.map((s) => ({
+      id: s.id,
+      number: s.number,
+      stock: stocks[s.id] ?? s.stock,
+    }));
+    const availableCount = stickerRows.filter((s) => s.stock > 0).length;
+    return {
+      id: countryMeta.id,
+      name: countryMeta.name,
+      code: countryMeta.code,
+      flag: countryMeta.flag,
+      flagUrl: countryMeta.flagUrl,
+      priceUnit: countryMeta.priceUnit,
+      stickers: stickerRows,
+      availableCount,
+      totalUnits: stickerRows.reduce((a, s) => a + s.stock, 0),
+    };
+  }, [countryMeta, stickers, stocks]);
+
+  const pickerCountries: CountryRow[] = useMemo(
+    () =>
+      countries.map((c) => ({
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        flag: c.flag,
+        flagUrl: c.flagUrl,
+        priceUnit: c.priceUnit,
+        stickers: [],
+        availableCount: c._count?.stickers ?? 0,
+      })),
+    [countries],
+  );
 
   const ensureStickers = async () => {
     if (!selected) return;
@@ -258,24 +305,23 @@ function TabInventario() {
         method: 'POST',
         body: JSON.stringify({ maxNumber: Number(maxN) }),
       });
-      setMsg(`Figuritas 1–${maxN} generadas.`);
+      setMsg(`Figuritas 1–${maxN} generadas en el álbum.`);
       await loadStickers(selected);
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
 
-  const quickAdd = async () => {
-    if (!selected || !quickNumber) return;
-    const number = Number(quickNumber);
-    const delta = Number(quickQty) || 1;
-    if (number < 1) return;
+  const quickAdd = async (number?: number, delta?: number) => {
+    const num = number ?? Number(quickNumber);
+    const qty = delta ?? (Number(quickQty) || 1);
+    if (!selected || num < 1) return;
     setBusy(true); setMsg(null);
     try {
       await api(`/stickers/countries/${selected}/stickers/bulk`, {
         method: 'POST',
-        body: JSON.stringify({ entries: [{ number, delta }] }),
+        body: JSON.stringify({ entries: [{ number: num, delta: qty }] }),
       });
-      setMsg(`+#${number} ×${delta} agregadas al stock.`);
-      setQuickNumber('');
+      setMsg(`+#${num} ×${qty} agregadas al stock.`);
+      if (!number) setQuickNumber('');
       await loadStickers(selected);
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
@@ -284,104 +330,122 @@ function TabInventario() {
     if (!selected) return;
     setBusy(true); setMsg(null);
     try {
-      const changed = stickers.filter((s) => String(s.stock) !== stocks[s.id]);
+      const changed = stickers.filter((s) => s.stock !== stocks[s.id]);
       await Promise.all(
         changed.map((s) =>
           api(`/stickers/countries/${selected}/stickers/${s.number}`, {
             method: 'PATCH',
-            body: JSON.stringify({ stock: Number(stocks[s.id]) }),
-          })
-        )
+            body: JSON.stringify({ stock: stocks[s.id] ?? 0 }),
+          }),
+        ),
       );
-      setMsg(`${changed.length} figuritas actualizadas.`);
+      setMsg(`${changed.length} figuritas guardadas en el álbum.`);
       await loadStickers(selected);
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
 
+  const onStockChange = (stickerId: string, stock: number) => {
+    setStocks((p) => ({ ...p, [stickerId]: stock }));
+  };
+
+  const dirtyCount = stickers.filter((s) => s.stock !== stocks[s.id]).length;
+
   return (
-    <div className="space-y-4">
-      <div className="flex gap-3 flex-wrap items-end">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">País</label>
-          <select
-            value={selected}
-            onChange={(e) => onSelectCountry(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 min-w-[200px]"
-          >
-            <option value="">— Seleccioná un país —</option>
-            {countries.map((c) => (
-              <option key={c.id} value={c.id}>{c.flag} {c.name}</option>
-            ))}
-          </select>
-        </div>
-        {selected && (
-          <>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Generar 1 a N</label>
-              <div className="flex gap-2">
-                <input
-                  type="number" min={1} value={maxN}
-                  onChange={(e) => setMaxN(e.target.value)}
-                  className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
-                />
-                <button onClick={ensureStickers} disabled={busy} className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm disabled:opacity-50">
-                  Generar
-                </button>
-              </div>
-            </div>
-            <button onClick={saveStocks} disabled={busy || !stickers.length} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50">
-              Guardar cambios
-            </button>
-          </>
-        )}
-      </div>
+    <div className="space-y-5">
+      <p className="text-sm text-slate-400">
+        Editá el stock como si fuera un álbum Panini. Tocá cada casilla o usá el botón + para sumar repetidas.
+      </p>
+
+      {countries.length > 0 && (
+        <CountryPicker
+          countries={pickerCountries}
+          selectedId={selected}
+          onSelect={onSelectCountry}
+        />
+      )}
+
       {selected && (
-        <div className="flex flex-wrap gap-2 items-end p-3 rounded-lg bg-slate-800/60 border border-slate-700">
+        <div className="flex flex-wrap gap-3 items-end p-4 rounded-xl bg-slate-800/40 border border-slate-700">
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Carga rápida — Nº figurita</label>
-            <input
-              type="number" min={1} value={quickNumber}
-              onChange={(e) => setQuickNumber(e.target.value)}
-              className="w-24 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm"
-              placeholder="#"
-            />
+            <label className="block text-xs text-slate-400 mb-1">Generar casillas 1 a N</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={1}
+                value={maxN}
+                onChange={(e) => setMaxN(e.target.value)}
+                className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
+              />
+              <button
+                type="button"
+                onClick={ensureStickers}
+                disabled={busy}
+                className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm disabled:opacity-50"
+              >
+                Generar álbum
+              </button>
+            </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Cantidad</label>
-            <input
-              type="number" min={1} value={quickQty}
-              onChange={(e) => setQuickQty(e.target.value)}
-              className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm"
-            />
+            <label className="block text-xs text-slate-400 mb-1">Carga rápida</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={1}
+                value={quickNumber}
+                onChange={(e) => setQuickNumber(e.target.value)}
+                className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                placeholder="#"
+              />
+              <input
+                type="number"
+                min={1}
+                value={quickQty}
+                onChange={(e) => setQuickQty(e.target.value)}
+                className="w-16 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => quickAdd()}
+                disabled={busy || !quickNumber}
+                className="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm disabled:opacity-50"
+              >
+                Sumar
+              </button>
+            </div>
           </div>
           <button
             type="button"
-            onClick={quickAdd}
-            disabled={busy || !quickNumber}
-            className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm disabled:opacity-50"
+            onClick={saveStocks}
+            disabled={busy || !stickers.length || dirtyCount === 0}
+            className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50 ml-auto"
           >
-            Sumar repetidas
+            {dirtyCount > 0 ? `Guardar (${dirtyCount})` : 'Guardar cambios'}
           </button>
         </div>
       )}
-      {msg && <div className="rounded-lg bg-blue-900/40 border border-blue-700 text-blue-300 text-sm px-4 py-2">{msg}</div>}
-      {stickers.length > 0 && (
-        <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-          {stickers.map((s) => (
-            <div key={s.id} className="bg-slate-800 rounded-lg p-2 text-center">
-              <div className="text-xs text-slate-400 font-mono mb-1">#{s.number}</div>
-              <input
-                type="number" min={0}
-                value={stocks[s.id] ?? '0'}
-                onChange={(e) => setStocks((p) => ({ ...p, [s.id]: e.target.value }))}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-xs text-center text-slate-200"
-              />
-            </div>
-          ))}
+
+      {msg && (
+        <div className="rounded-lg bg-blue-900/40 border border-blue-700 text-blue-300 text-sm px-4 py-2">
+          {msg}
         </div>
       )}
+
+      {albumCountry && albumCountry.stickers.length > 0 && (
+        <AlbumSpread
+          mode="admin"
+          country={albumCountry}
+          stocks={stocks}
+          onStockChange={onStockChange}
+          onQuickAdd={(_stickerId, number) => quickAdd(number, 1)}
+        />
+      )}
+
       {selected && stickers.length === 0 && (
-        <p className="text-slate-400 text-sm">Sin figuritas. Generá con el botón de arriba.</p>
+        <div className="text-center py-12 rounded-2xl border border-dashed border-slate-700">
+          <span className="text-4xl">📔</span>
+          <p className="text-slate-400 text-sm mt-3">Este país no tiene casillas aún. Generá el álbum con el botón de arriba.</p>
+        </div>
       )}
     </div>
   );
@@ -646,9 +710,15 @@ export default function FigurityasPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-100">Figuritas Mundial</h1>
-        <p className="text-sm text-slate-400 mt-1">Gestioná países, inventario, catálogo y pedidos.</p>
+      <div className="rounded-2xl border border-amber-900/30 bg-gradient-to-r from-[#0B3D2E]/40 to-slate-900/40 px-5 py-4">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xl">🏆</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500/80">Mundial 2026</span>
+        </div>
+        <h1 className="text-2xl font-black text-slate-100">Álbum de Figuritas</h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Cargá stock, compartí el link público y gestioná pedidos de clientes.
+        </p>
       </div>
 
       {/* Tab bar */}
