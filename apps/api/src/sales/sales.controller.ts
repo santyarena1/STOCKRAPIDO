@@ -80,6 +80,11 @@ export class SalesController {
     return this.sales.updateSale(user.businessId, id, body);
   }
 
+  @Delete('duplicates/cleanup')
+  cleanupDuplicates(@CurrentUser() user: User) {
+    return this.sales.cleanupDuplicates(user.businessId);
+  }
+
   @Delete(':id')
   deleteSale(@CurrentUser() user: User, @Param('id') id: string) {
     return this.sales.deleteSale(user.businessId, id);

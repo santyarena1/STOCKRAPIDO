@@ -327,4 +327,37 @@ export class SalesService {
 
     return { removed: true as const, saleDeleted: false, sale: await this.getOne(saleId, businessId) };
   }
+
+  async cleanupDuplicates(businessId: string, windowSeconds = 30): Promise<{ deleted: number; ids: string[] }> {
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, userId: true, totalFinal: true, paymentMethod: true, createdAt: true },
+    });
+
+    const toDelete = new Set<string>();
+    for (let i = 0; i < sales.length; i++) {
+      if (toDelete.has(sales[i].id)) continue;
+      for (let j = i + 1; j < sales.length; j++) {
+        const diffSeconds = (sales[j].createdAt.getTime() - sales[i].createdAt.getTime()) / 1000;
+        if (diffSeconds > windowSeconds) break;
+        if (
+          sales[j].userId === sales[i].userId &&
+          String(sales[j].totalFinal) === String(sales[i].totalFinal) &&
+          sales[j].paymentMethod === sales[i].paymentMethod
+        ) {
+          toDelete.add(sales[j].id);
+        }
+      }
+    }
+
+    const deleted: string[] = [];
+    for (const id of toDelete) {
+      try {
+        await this.deleteSale(businessId, id);
+        deleted.push(id);
+      } catch { /* skip si ya fue borrada o hubo error */ }
+    }
+    return { deleted: deleted.length, ids: deleted };
+  }
 }

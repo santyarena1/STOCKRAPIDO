@@ -172,6 +172,8 @@ export default function POSPage() {
   const pendingQtyRef = useRef<{ productId: string; delta: number } | null>(null);
   const lastQtyResultRef = useRef<CartItem[] | null>(null);
   const isUpdateQtyRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+  const [cobrandoBusy, setCobrandoBusy] = useState(false);
 
   /** Caja abierta: las ventas se vinculan para el arqueo (cierre de caja). Fiado no suma efectivo. */
   const [openCashRegisterId, setOpenCashRegisterId] = useState<string | null>(null);
@@ -411,8 +413,11 @@ export default function POSPage() {
 
   const handleCobrar = useCallback(async (paymentMethod: string) => {
     if (cart.length === 0) return;
+    if (isSubmittingRef.current) return;
     const token = getToken();
     if (!token) return;
+    isSubmittingRef.current = true;
+    setCobrandoBusy(true);
     try {
       const crId = await refreshOpenCashRegister();
       if (!crId) {
@@ -455,6 +460,9 @@ export default function POSPage() {
       searchRef.current?.focus();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error');
+    } finally {
+      isSubmittingRef.current = false;
+      setCobrandoBusy(false);
     }
   }, [cart, discountTotal, selectedCustomer?.id, refreshOpenCashRegister]);
 
@@ -1047,7 +1055,7 @@ export default function POSPage() {
                 <button
                   key={pm.id}
                   type="button"
-                  disabled={!openCashRegisterId}
+                  disabled={!openCashRegisterId || cobrandoBusy}
                   onClick={() => pickPaymentMethod(pm.id)}
                   className={`px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover-brand-primary font-medium text-left flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${
                     paymentMethodPending === pm.id ? 'ring-2 ring-brand ring-offset-2 ring-offset-slate-900' : ''
@@ -1067,9 +1075,10 @@ export default function POSPage() {
                   <button
                     type="button"
                     onClick={() => confirmPendingPayment()}
-                    className="flex-1 py-3 rounded-lg btn-brand font-semibold"
+                    disabled={cobrandoBusy}
+                    className="flex-1 py-3 rounded-lg btn-brand font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Confirmar cobro
+                    {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro'}
                   </button>
                   <button
                     type="button"
