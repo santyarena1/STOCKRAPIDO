@@ -1,9 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { useState, useEffect, useCallback } from 'react';
+import { api, getApiBaseUrl, getToken } from '@/lib/api';
 
 type Customer = { id: string; name: string; phone?: string; balance: string | number };
+type SaleItem = { id: string; productName?: string | null; product?: { name: string } | null; qty: number; unitPrice: string | number; subtotal: string | number };
+type Sale = { id: string; createdAt: string; totalFinal: string | number; discount: string | number; paymentMethod?: string | null; items: SaleItem[] };
+type Payment = { id: string; createdAt: string; amount: string | number; note?: string | null };
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function formatMoney(v: string | number) {
+  return `$${Number(v).toFixed(0)}`;
+}
 
 export default function ClientesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -16,17 +27,52 @@ export default function ClientesPage() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
 
-  useEffect(() => {
-    Promise.all([
+  // Detalle cliente
+  const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
+  const [detailSales, setDetailSales] = useState<Sale[]>([]);
+  const [detailPayments, setDetailPayments] = useState<Payment[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<'ventas' | 'pagos'>('ventas');
+
+  const loadCustomers = useCallback(async () => {
+    const [c, m, t] = await Promise.all([
       api<Customer[]>('/customers'),
       api<Customer[]>('/customers/morosos'),
       api<number>('/customers/total-fiado'),
-    ]).then(([c, m, t]) => {
-      setCustomers(c);
-      setMorosos(m);
-      setTotalFiado(Number(t));
-    }).catch(() => []).finally(() => setLoading(false));
+    ]);
+    setCustomers(c);
+    setMorosos(m);
+    setTotalFiado(Number(t));
   }, []);
+
+  useEffect(() => {
+    loadCustomers().catch(() => []).finally(() => setLoading(false));
+  }, [loadCustomers]);
+
+  const openDetail = async (customer: Customer) => {
+    setDetailCustomer(customer);
+    setDetailTab('ventas');
+    setExpandedSaleId(null);
+    setDetailSales([]);
+    setDetailPayments([]);
+    setDetailLoading(true);
+    const token = getToken();
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const [sales, payments] = await Promise.all([
+        fetch(`${getApiBaseUrl()}/sales?customerId=${customer.id}&limit=100`, { headers }).then((r) => r.ok ? r.json() : []),
+        fetch(`${getApiBaseUrl()}/customers/${customer.id}/payments?limit=100`, { headers }).then((r) => r.ok ? r.json() : []),
+      ]);
+      setDetailSales(Array.isArray(sales) ? sales : []);
+      setDetailPayments(Array.isArray(payments) ? payments : []);
+    } catch {
+      setDetailSales([]);
+      setDetailPayments([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,8 +83,7 @@ export default function ClientesPage() {
       });
       setForm({ name: '', phone: '', notes: '' });
       setShowForm(false);
-      const list = await api<Customer[]>('/customers');
-      setCustomers(list);
+      await loadCustomers();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
     }
@@ -57,18 +102,19 @@ export default function ClientesPage() {
       setPaymentFor(null);
       setPaymentAmount('');
       setPaymentNote('');
-      const [c, m, t] = await Promise.all([
-        api<Customer[]>('/customers'),
-        api<Customer[]>('/customers/morosos'),
-        api<number>('/customers/total-fiado'),
-      ]);
-      setCustomers(c);
-      setMorosos(m);
-      setTotalFiado(Number(t));
+      await loadCustomers();
+      // Si el modal de detalle está abierto, refrescar
+      if (detailCustomer?.id === paymentFor) {
+        const updated = customers.find((c) => c.id === paymentFor);
+        if (updated) await openDetail(updated);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
     }
   };
+
+  const itemName = (item: SaleItem) =>
+    item.product?.name ?? item.productName ?? 'Producto manual';
 
   return (
     <div className="p-6">
@@ -118,9 +164,10 @@ export default function ClientesPage() {
         </form>
       )}
 
+      {/* Modal registrar pago */}
       {paymentFor && (
         <form onSubmit={handlePayment} className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-white mb-4">Registrar pago</h3>
             <input
               type="number"
@@ -129,6 +176,7 @@ export default function ClientesPage() {
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 mb-2"
+              autoFocus
             />
             <input
               type="text"
@@ -143,6 +191,122 @@ export default function ClientesPage() {
             </div>
           </div>
         </form>
+      )}
+
+      {/* Modal detalle cliente */}
+      {detailCustomer && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setDetailCustomer(null)}>
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90dvh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-700">
+              <div>
+                <h2 className="text-xl font-bold text-white">{detailCustomer.name}</h2>
+                {detailCustomer.phone && <p className="text-slate-400 text-sm">{detailCustomer.phone}</p>}
+                <p className={`text-sm font-medium mt-1 ${Number(detailCustomer.balance) > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                  Saldo: {formatMoney(detailCustomer.balance)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {Number(detailCustomer.balance) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentFor(detailCustomer.id); setDetailCustomer(null); }}
+                    className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-500"
+                  >
+                    Registrar pago
+                  </button>
+                )}
+                <button type="button" onClick={() => setDetailCustomer(null)} className="text-slate-400 hover:text-white text-xl px-1">×</button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-700 px-5">
+              <button
+                type="button"
+                onClick={() => setDetailTab('ventas')}
+                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'ventas' ? 'border-brand text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                Ventas al fiado {detailSales.length > 0 && `(${detailSales.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetailTab('pagos')}
+                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'pagos' ? 'border-brand text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                Pagos {detailPayments.length > 0 && `(${detailPayments.length})`}
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {detailLoading ? (
+                <p className="text-slate-500 text-sm p-4">Cargando...</p>
+              ) : detailTab === 'ventas' ? (
+                detailSales.length === 0 ? (
+                  <p className="text-slate-500 text-sm p-4">Sin ventas registradas.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {detailSales.map((sale) => {
+                      const isOpen = expandedSaleId === sale.id;
+                      return (
+                        <li key={sale.id} className="rounded-lg border border-slate-700 bg-slate-800/40 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-700/30"
+                          >
+                            <span className="flex flex-col gap-0.5">
+                              <span className="text-slate-200 text-sm font-medium">{formatDate(sale.createdAt)}</span>
+                              <span className="text-slate-500 text-xs">
+                                {sale.items.length} {sale.items.length === 1 ? 'ítem' : 'ítems'}
+                                {Number(sale.discount) > 0 && ` · Desc. ${formatMoney(sale.discount)}`}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <span className="text-amber-400 font-semibold">{formatMoney(sale.totalFinal)}</span>
+                              <span className="text-slate-500 text-xs">{isOpen ? '▲' : '▼'}</span>
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <ul className="border-t border-slate-700 divide-y divide-slate-700/50">
+                              {sale.items.map((item) => (
+                                <li key={item.id} className="flex justify-between items-center px-4 py-2 text-sm">
+                                  <span className="text-slate-300 flex-1 min-w-0 truncate">{itemName(item)}</span>
+                                  <span className="text-slate-500 mx-3 shrink-0">×{item.qty}</span>
+                                  <span className="text-slate-400 shrink-0">{formatMoney(item.subtotal)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )
+              ) : (
+                detailPayments.length === 0 ? (
+                  <p className="text-slate-500 text-sm p-4">Sin pagos registrados.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {detailPayments.map((p) => (
+                      <li key={p.id} className="flex justify-between items-center rounded-lg border border-slate-700 bg-slate-800/40 px-4 py-3">
+                        <span className="flex flex-col gap-0.5">
+                          <span className="text-slate-200 text-sm">{formatDate(p.createdAt)}</span>
+                          {p.note && <span className="text-slate-500 text-xs">{p.note}</span>}
+                        </span>
+                        <span className="text-green-400 font-semibold">{formatMoney(p.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {loading ? (
@@ -161,12 +325,27 @@ export default function ClientesPage() {
             <tbody className="divide-y divide-slate-700">
               {customers.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-800/50">
-                  <td className="p-3 text-slate-200">{c.name}</td>
+                  <td className="p-3">
+                    <button
+                      type="button"
+                      onClick={() => openDetail(c)}
+                      className="text-slate-200 hover:text-white hover:underline text-left"
+                    >
+                      {c.name}
+                    </button>
+                  </td>
                   <td className="p-3 text-slate-400">{c.phone || '-'}</td>
                   <td className={`p-3 text-right ${Number(c.balance) > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
                     ${Number(c.balance).toFixed(0)}
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 flex gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => openDetail(c)}
+                      className="text-slate-400 hover:text-white text-xs"
+                    >
+                      Ver detalle
+                    </button>
                     {Number(c.balance) > 0 && (
                       <button
                         type="button"
