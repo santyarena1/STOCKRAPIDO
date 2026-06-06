@@ -7,7 +7,7 @@ Dos proyectos en Vercel desde el mismo repo de GitHub:
 | Proyecto Vercel | Root Directory | URL típica |
 |-----------------|----------------|------------|
 | API | `apps/api` | `https://stockrapido-api.vercel.app` |
-| Web | `apps/web` | `https://stockrapido.vercel.app` |
+| Web | `apps/web` (desde raíz del repo en CLI) | `https://web-six-jet-75.vercel.app` |
 
 ---
 
@@ -38,7 +38,7 @@ Dos proyectos en Vercel desde el mismo repo de GitHub:
    | `DATABASE_URL` | connection string de Neon |
    | `JWT_SECRET` | cadena aleatoria ≥32 chars |
    | `JWT_REFRESH_SECRET` | otra cadena distinta |
-   | `WEB_URL` | URL del frontend, ej. `https://stockrapido.vercel.app` |
+   | `WEB_URL` | URL del frontend, ej. `https://web-six-jet-75.vercel.app` |
    | `NODE_ENV` | `production` |
    | `CRON_SECRET` | secreto para el cron de sync Mondelez |
    | `PUBLIC_API_URL` | URL de este proyecto API (ej. `https://stockrapido-api.vercel.app`) |
@@ -55,19 +55,29 @@ El build ejecuta `prisma migrate deploy`, compila NestJS y expone la API como fu
 
 ---
 
-## 3. Proyecto Web en Vercel (`apps/web`)
+## 3. Proyecto Web en Vercel
 
 1. **Add New Project** (segundo proyecto, mismo repo).
-2. **Root Directory**: `apps/web`
+2. **Root Directory**: raíz del repo (vacío / `.`) — el código Next está en `apps/web` pero el proyecto `web` ya apunta ahí vía configuración Vercel.
 3. Framework: Next.js (auto).
 4. **Environment Variables**:
 
    | Key | Value |
    |-----|-------|
    | `NEXT_PUBLIC_API_URL` | URL del proyecto API, ej. `https://stockrapido-api.vercel.app` |
-   | `NEXT_PUBLIC_APP_URL` | URL de este frontend, ej. `https://stockrapido.vercel.app` |
+   | `NEXT_PUBLIC_APP_URL` | URL de este frontend, ej. `https://web-six-jet-75.vercel.app` |
 
-5. Deploy.
+5. Deploy desde la raíz del monorepo:
+   ```bash
+   cd STOCKRAPIDO
+   npx vercel deploy --prod --yes --project web
+   ```
+
+Para la **API**, deploy desde `apps/api`:
+```bash
+cd apps/api
+npx vercel deploy --prod --yes
+```
 
 ---
 
@@ -99,7 +109,7 @@ Ver [sync-runner/README.md](sync-runner/README.md).
 curl https://stockrapido-api.vercel.app/health
 ```
 
-Abrí `https://stockrapido.vercel.app/login` — no debe haber errores CORS en la consola.
+Abrí `https://web-six-jet-75.vercel.app/login` — no debe haber errores CORS en la consola.
 
 ---
 
