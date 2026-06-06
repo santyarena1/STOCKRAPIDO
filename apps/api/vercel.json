@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "prisma migrate deploy && prisma generate && nest build && mkdir -p public && echo \"StockRapido API\" > public/index.html",
+  "buildCommand": "npx prisma migrate deploy && npx prisma generate && npx nest build && mkdir -p public && echo \"StockRapido API\" > public/index.html",
   "outputDirectory": "public",
   "functions": {
     "api/index.js": {
