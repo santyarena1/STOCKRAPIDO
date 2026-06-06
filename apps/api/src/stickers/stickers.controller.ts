@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -28,8 +29,36 @@ export class StickersController {
   }
 
   @Get('countries')
-  listCountries(@CurrentUser() u: AuthUser) {
-    return this.stickers.listCountries(u.businessId);
+  listCountries(
+    @CurrentUser() u: AuthUser,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.stickers.listCountries(u.businessId, includeInactive === 'true');
+  }
+
+  @Post('countries')
+  createCountry(
+    @CurrentUser() u: AuthUser,
+    @Body() body: { name: string; code?: string; flag?: string; flagUrl?: string; price?: number },
+  ) {
+    return this.stickers.createCountry(u.businessId, body);
+  }
+
+  @Patch('countries/:countryId')
+  updateCountry(
+    @CurrentUser() u: AuthUser,
+    @Param('countryId') countryId: string,
+    @Body()
+    body: {
+      name?: string;
+      code?: string;
+      flag?: string;
+      flagUrl?: string;
+      price?: number;
+      isActive?: boolean;
+    },
+  ) {
+    return this.stickers.updateCountry(u.businessId, countryId, body);
   }
 
   @Patch('countries/:countryId/price')
@@ -58,6 +87,15 @@ export class StickersController {
     return this.stickers.ensureStickersForCountry(u.businessId, countryId, body.maxNumber);
   }
 
+  @Post('countries/:countryId/stickers/bulk')
+  bulkUpdateStickers(
+    @CurrentUser() u: AuthUser,
+    @Param('countryId') countryId: string,
+    @Body() body: { entries: { number: number; stock?: number; delta?: number }[] },
+  ) {
+    return this.stickers.bulkUpdateStickers(u.businessId, countryId, body.entries ?? []);
+  }
+
   @Patch('countries/:countryId/stickers/:number')
   upsertSticker(
     @CurrentUser() u: AuthUser,
@@ -81,9 +119,14 @@ export class StickersController {
     return this.stickers.getOrCreateShare(u.businessId);
   }
 
+  @Patch('share')
+  updateShare(@CurrentUser() u: AuthUser, @Body() body: { isActive: boolean }) {
+    return this.stickers.updateShare(u.businessId, body.isActive);
+  }
+
   @Get('orders')
-  listOrders(@CurrentUser() u: AuthUser) {
-    return this.stickers.listOrders(u.businessId);
+  listOrders(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
+    return this.stickers.listOrders(u.businessId, status);
   }
 
   @Patch('orders/:orderId/status')

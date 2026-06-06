@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { MondelezProvider, NormalizedItem } from './mondelez.provider';
-import { parseUnitsPerBox } from '../common/units';
+import { bulkCostToUnit, decorateSyncedProductUnits } from '../common/units';
 
 type ConnInput = {
   provider?: string;
@@ -188,8 +188,8 @@ export class SyncService {
     businessId: string,
     opts: { q?: string; onlyAvailable?: boolean; onlyWithCost?: boolean; limit?: number } = {},
   ) {
-    await this.getConnection(id, businessId);
-    return this.prisma.syncedProduct.findMany({
+    const conn = await this.getConnection(id, businessId);
+    const rows = await this.prisma.syncedProduct.findMany({
       where: {
         connectionId: id,
         available: opts.onlyAvailable ? true : undefined,
@@ -205,6 +205,8 @@ export class SyncService {
       orderBy: { name: 'asc' },
       take: opts.limit ?? 1000,
     });
+    const markup = Number(conn.priceMarkup ?? 0);
+    return rows.map((r) => decorateSyncedProductUnits(r, markup));
   }
 
   async listRuns(id: string, businessId: string) {
@@ -316,8 +318,7 @@ export class SyncService {
       // El costo del proveedor puede ser por bulto; lo convertimos a unitario antes de guardar.
       const rawCost = src(s, 'cost');
       const bulkCost = rawCost != null && Number(rawCost) > 0 && Number(rawCost) < 1000000 ? Number(rawCost) : null;
-      const unitsNum = parseUnitsPerBox(data.unitsPerBox ?? s.unitsPerBox);
-      const cost = bulkCost != null && unitsNum != null ? Math.round((bulkCost / unitsNum) * 100) / 100 : bulkCost;
+      const cost = bulkCostToUnit(bulkCost, data.unitsPerBox ?? s.unitsPerBox);
       const price = cost != null ? Math.round(cost * (1 + markup / 100) * 100) / 100 : null;
       // categoría
       const categoryId = await ensureCategory(src(s, 'category'));

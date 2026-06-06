@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { api, getToken } from '@/lib/api';
+import { api, getApiBaseUrl, getToken } from '@/lib/api';
+import { formatMoneyArs } from '@/lib/units';
 import {
   broadcastCustomerDisplay,
   openCustomerDisplayWindow,
   paymentNeedsCustomerConfirmStep,
 } from '@/lib/customer-display-sync';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
 
 type CartItem = {
   productId: string;
@@ -122,8 +121,9 @@ function CartItemRow({
             if (Number.isNaN(n) || n < 0) onPriceChange(0);
           }}
           className="w-16 text-right rounded bg-slate-700 border border-slate-600 text-slate-200 py-1 text-sm"
-          aria-label="Precio"
+          aria-label="Precio unitario"
         />
+        <span className="text-slate-600 text-[10px] shrink-0">c/u</span>
       </div>
       <span className="text-brand font-medium w-16 text-right shrink-0">${(item.subtotal - (item.discount || 0)).toFixed(0)}</span>
       <button type="button" onClick={onRemove} className="text-slate-500 hover:text-red-400 shrink-0" title="Quitar">×</button>
@@ -144,6 +144,7 @@ export default function POSPage() {
       imageUrl?: string | null;
       unitsPerBox?: string | null;
       unitsPerBoxNum?: number | null;
+      cost?: unknown;
     }[]
   >([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -281,7 +282,7 @@ export default function POSPage() {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await fetch(`${API}/paused-sales`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${getApiBaseUrl()}/paused-sales`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         setPausedList(data);
@@ -339,7 +340,7 @@ export default function POSPage() {
 
   useEffect(() => {
     if (showCustomer) {
-      fetch(`${API}/customers`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      fetch(`${getApiBaseUrl()}/customers`, { headers: { Authorization: `Bearer ${getToken()}` } })
         .then((r) => r.ok ? r.json() : [])
         .then(setCustomers)
         .catch(() => setCustomers([]));
@@ -368,6 +369,7 @@ export default function POSPage() {
             imageUrl?: string | null;
             unitsPerBox?: string | null;
             unitsPerBoxNum?: number | null;
+            cost?: unknown;
           }>
         >('/products/search', {
           params: { q: term, limit: '15' },
@@ -384,6 +386,7 @@ export default function POSPage() {
           imageUrl: p.imageUrl ?? null,
           unitsPerBox: p.unitsPerBox ?? null,
           unitsPerBoxNum: p.unitsPerBoxNum ?? null,
+          cost: p.cost ?? null,
         }));
         if (mapped.length === 1 && mapped[0].barcode && mapped[0].barcode === term) {
           addToCart(mapped[0], 1);
@@ -416,7 +419,7 @@ export default function POSPage() {
         alert('Tenés que abrir la caja (menú Caja) antes de registrar ventas.');
         return;
       }
-      const res = await fetch(`${API}/sales`, {
+      const res = await fetch(`${getApiBaseUrl()}/sales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -669,7 +672,7 @@ export default function POSPage() {
     const token = getToken();
     if (!token) return;
     try {
-      await fetch(`${API}/paused-sales`, {
+      await fetch(`${getApiBaseUrl()}/paused-sales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ items: cart, discount: discountTotal }),
@@ -818,13 +821,17 @@ export default function POSPage() {
                         <span className="flex flex-col min-w-0">
                           <span className="text-slate-200 truncate">{p.name}</span>
                           {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && (
-                            <span className="text-xs text-violet-400/80">× {p.unitsPerBoxNum} un. (bulto)</span>
+                            <span className="text-xs text-violet-400/70">Bulto × {p.unitsPerBoxNum} u. · vendés por unidad</span>
                           )}
                         </span>
                       </span>
-                      <span className="flex flex-col items-end shrink-0">
-                        <span className="text-brand font-medium">${parseFloat(p.price).toFixed(0)}</span>
-                        <span className="text-slate-500 text-xs">c/u</span>
+                      <span className="flex flex-col items-end shrink-0 gap-0.5">
+                        {p.cost != null && Number(p.cost) > 0 && (
+                          <span className="text-slate-500 text-xs">
+                            Costo {formatMoneyArs(Number(p.cost))} c/u
+                          </span>
+                        )}
+                        <span className="text-brand font-medium">{formatMoneyArs(parseFloat(p.price))} c/u</span>
                       </span>
                     </button>
                   </li>

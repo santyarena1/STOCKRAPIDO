@@ -1,4 +1,6 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
+import { getApiBaseUrl } from './env-urls';
+
+export { getApiBaseUrl };
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -10,7 +12,7 @@ export async function api<T>(
   options?: RequestInit & { params?: Record<string, string | undefined> },
 ): Promise<T> {
   const token = getToken();
-  const url = new URL(path, API);
+  const url = new URL(path, getApiBaseUrl());
   if (options?.params) {
     Object.entries(options.params).forEach(([k, v]) => {
       if (v != null && v !== '') url.searchParams.set(k, String(v));
@@ -38,6 +40,24 @@ export async function api<T>(
   return res.json() as Promise<T>;
 }
 
+/** API sin autenticación (catálogo público de figuritas). */
+export async function publicApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const base = getApiBaseUrl();
+  const url = new URL(path, base);
+  const res = await fetch(url.toString(), {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** POST multipart (no fuerza Content-Type: application/json). */
 export async function apiUpload<T>(
   path: string,
@@ -45,7 +65,7 @@ export async function apiUpload<T>(
   options?: { params?: Record<string, string | undefined> },
 ): Promise<T> {
   const token = getToken();
-  const url = new URL(path, API);
+  const url = new URL(path, getApiBaseUrl());
   if (options?.params) {
     Object.entries(options.params).forEach(([k, v]) => {
       if (v != null && v !== '') url.searchParams.set(k, String(v));

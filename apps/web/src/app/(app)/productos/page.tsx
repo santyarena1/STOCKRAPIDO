@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getApiBaseUrl } from '@/lib/api';
+import { UnitPriceDisplay } from '@/components/UnitPriceDisplay';
 
 type Product = {
   id: string;
@@ -60,8 +61,6 @@ function formatMoneyArs(n: number) {
   }).format(n);
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
-
 export default function ProductosPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
@@ -77,6 +76,7 @@ export default function ProductosPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: number; errors: Array<{ row: number; message: string }> } | null>(null);
   const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
+  const [showBulkInternal, setShowBulkInternal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(() => {
@@ -142,7 +142,7 @@ export default function ProductosPage() {
     setExporting(true);
     setImportResult(null);
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    const url = `${API}/products/export-stock`;
+    const url = `${getApiBaseUrl()}/products/export-stock`;
     fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       .then((res) => res.text().then((raw) => ({ ok: res.ok, raw })))
       .then(({ ok, raw }) => {
@@ -264,7 +264,7 @@ export default function ProductosPage() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch(`${API}/products/import-stock`, {
+      const res = await fetch(`${getApiBaseUrl()}/products/import-stock`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
@@ -507,7 +507,16 @@ export default function ProductosPage() {
           <input type="checkbox" checked={expiringSoon} onChange={(e) => { setExpiringSoon(e.target.checked); setHighlightedIndex(0); }} />
           Por vencer (30 días)
         </label>
+        <label className="flex items-center gap-2 text-slate-500 cursor-pointer" title="Costo y venta por bulto — solo referencia interna">
+          <input type="checkbox" checked={showBulkInternal} onChange={(e) => setShowBulkInternal(e.target.checked)} />
+          Ver bulto (interno)
+        </label>
       </div>
+
+      <p className="text-slate-500 text-xs mb-3">
+        Costo y precio de venta se muestran <strong className="text-slate-400">por unidad (c/u)</strong> — así los usa el POS.
+        Los productos importados por bulto se convierten automáticamente al importar desde Sincronizaciones.
+      </p>
 
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
@@ -520,8 +529,8 @@ export default function ProductosPage() {
                 <th className="text-left p-3">Producto</th>
                 <th className="text-left p-3">Categoría</th>
                 <th className="text-left p-3">Marca</th>
-                <th className="text-right p-3">Costo</th>
-                <th className="text-right p-3">Precio</th>
+                <th className="text-right p-3">Costo c/u</th>
+                <th className="text-right p-3">Precio c/u</th>
                 <th className="text-right p-3">Stock</th>
                 <th className="text-right p-3">Mín.</th>
                 <th className="text-left p-3">Vencimiento</th>
@@ -554,17 +563,30 @@ export default function ProductosPage() {
                   </td>
                   <td className="p-3 text-slate-400">{p?.category?.name || '-'}</td>
                   <td className="p-3 text-slate-400">{p?.brand || '-'}</td>
-                  <td className="p-3 text-right text-slate-500">
+                  <td className="p-3 text-right">
                     {p?.cost != null ? (
-                      <span className="flex flex-col items-end gap-0.5">
-                        <span>${Number(p.cost).toFixed(0)}</span>
-                        {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && p.costBox != null && (
-                          <span className="text-xs text-slate-600">bulto: ${Number(p.costBox).toFixed(0)}</span>
-                        )}
-                      </span>
-                    ) : '-'}
+                      <UnitPriceDisplay
+                        cost={p.cost}
+                        unitsPerBox={p.unitsPerBox}
+                        unitsPerBoxNum={p.unitsPerBoxNum}
+                        costBox={p.costBox}
+                        showCost
+                        showPrice={false}
+                        showBulkInternal={showBulkInternal}
+                      />
+                    ) : (
+                      <span className="text-slate-600">—</span>
+                    )}
                   </td>
-                  <td className="p-3 text-right text-slate-200">${Number(p?.price ?? 0).toFixed(0)}</td>
+                  <td className="p-3 text-right">
+                    <UnitPriceDisplay
+                      price={p?.price}
+                      unitsPerBox={p?.unitsPerBox}
+                      unitsPerBoxNum={p?.unitsPerBoxNum}
+                      priceBox={p?.priceBox}
+                      showBulkInternal={showBulkInternal}
+                    />
+                  </td>
                   <td className={`p-3 text-right ${(p?.stock ?? 0) <= (p?.minStock ?? 0) ? 'text-amber-400' : ''}`}>{p?.stock ?? 0}</td>
                   <td className="p-3 text-right text-slate-500">{p?.minStock ?? 0}</td>
                   <td className="p-3">

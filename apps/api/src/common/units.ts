@@ -30,3 +30,39 @@ export function decorateProductUnits<T extends { cost?: unknown; price?: unknown
   const priceBox = unitsPerBoxNum != null && priceNum != null && Number.isFinite(priceNum) ? Math.round(priceNum * unitsPerBoxNum * 100) / 100 : null;
   return { ...p, unitsPerBoxNum, costBox, priceBox };
 }
+
+/** Convierte costo por bulto (proveedor) a costo unitario. Si no hay bulto, devuelve el mismo valor. */
+export function bulkCostToUnit(
+  bulkCost: number | null | undefined,
+  unitsPerBox: string | number | null | undefined,
+): number | null {
+  if (bulkCost == null || !Number.isFinite(Number(bulkCost)) || Number(bulkCost) <= 0 || Number(bulkCost) >= 1_000_000) {
+    return null;
+  }
+  const units = parseUnitsPerBox(unitsPerBox);
+  if (units == null) return Math.round(Number(bulkCost) * 100) / 100;
+  return Math.round((Number(bulkCost) / units) * 100) / 100;
+}
+
+/**
+ * Decora un SyncedProduct: cost en DB es por bulto del proveedor.
+ * Expone costUnit (para import/POS) y costBulk (referencia interna).
+ */
+export function decorateSyncedProductUnits<T extends { cost?: unknown; unitsPerBox?: string | null }>(
+  p: T,
+  markupPct = 0,
+): T & {
+  unitsPerBoxNum: number | null;
+  costBulk: number | null;
+  costUnit: number | null;
+  saleUnit: number | null;
+} {
+  const unitsPerBoxNum = parseUnitsPerBox(p.unitsPerBox);
+  const raw = p.cost != null ? Number(p.cost) : null;
+  const costBulk =
+    raw != null && Number.isFinite(raw) && raw > 0 && raw < 1_000_000 ? Math.round(raw * 100) / 100 : null;
+  const costUnit = bulkCostToUnit(costBulk, p.unitsPerBox);
+  const saleUnit =
+    costUnit != null ? Math.round(costUnit * (1 + markupPct / 100) * 100) / 100 : null;
+  return { ...p, unitsPerBoxNum, costBulk, costUnit, saleUnit };
+}

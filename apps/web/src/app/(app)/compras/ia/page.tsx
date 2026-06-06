@@ -343,8 +343,7 @@ export default function ComprasIaPage() {
         <span className="text-sm text-slate-300">
           <strong className="text-violet-300">Solo enviar a N8N (probar conexión)</strong> — envía la misma
           información (incluido <code className="text-slate-400">fileBase64</code>) al webhook. No pide el
-          secreto del callback ni espera respuesta: sirve para comprobar que N8N recibe la factura mientras la API
-          sigue en localhost.
+          secreto del callback ni espera respuesta: sirve para comprobar que N8N recibe la factura contra tu API en producción.
         </span>
       </label>
 

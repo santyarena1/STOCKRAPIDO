@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { api } from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 
 type Branding = {
@@ -38,7 +39,7 @@ const nav = [
   { href: '/compras', label: 'Compras' },
   { href: '/proveedores', label: 'Proveedores' },
   { href: '/sincronizaciones', label: 'Sincronizaciones' },
-  { href: '/figuritas', label: 'Figuritas 2026' },
+  { href: '/figuritas', label: 'Figuritas Mundial' },
   { href: '/clientes', label: 'Clientes / Fiados' },
   { href: '/reportes', label: 'Reportes' },
   { href: '/promociones', label: 'Promociones' },
@@ -116,9 +117,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleLogoutAll = async () => {
     const token = localStorage.getItem('accessToken');
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
     if (token) {
-      await fetch(`${apiUrl}/auth/logout-all`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      await fetch(`${getApiBaseUrl()}/auth/logout-all`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
@@ -151,7 +151,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               key={href}
               href={href}
               className={`block px-4 py-2.5 text-sm border-r-2 border-transparent ${
-                pathname === href || (href === '/compras' && pathname.startsWith('/compras'))
+                pathname === href ||
+                (href === '/compras' && pathname.startsWith('/compras')) ||
+                (href === '/figuritas' && pathname.startsWith('/figuritas'))
                   ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] text-[color:var(--brand-nav-active,var(--brand-accent))]'
                   : 'hover:bg-slate-800'
               }`}

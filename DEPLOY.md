@@ -167,6 +167,7 @@ curl https://stockrapido-api.onrender.com/health
 | Variable | Requerida | Descripción |
 |----------|-----------|-------------|
 | `NEXT_PUBLIC_API_URL` | ✅ | URL pública de la API en Render |
+| `NEXT_PUBLIC_APP_URL` | ✅ | URL del frontend en Vercel (links públicos de figuritas, etc.) |
 
 ---
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { api, getApiBaseUrl } from '@/lib/api';
+import { formatMoneyArs } from '@/lib/units';
 
 type Connection = {
   id: string;
@@ -9,11 +10,38 @@ type Connection = {
   name: string;
   priceMarkup: string | number;
   autoSync: boolean;
+  enabled?: boolean;
   lastSyncAt?: string | null;
+  lastStatus?: string | null;
   _count?: { items: number };
 };
 
-type Synced = Record<string, unknown> & { id: string };
+type Synced = {
+  id: string;
+  name?: string;
+  ean?: string;
+  brand?: string;
+  category?: string;
+  subcategory?: string;
+  cost?: unknown;
+  listPrice?: unknown;
+  available?: boolean;
+  stock?: unknown;
+  unitsPerBox?: string | null;
+  unitsPerBoxNum?: number | null;
+  costBulk?: number | null;
+  costUnit?: number | null;
+  saleUnit?: number | null;
+  weight?: string;
+  format?: string;
+  flavor?: string;
+  presentation?: string;
+  sku?: string;
+  externalId?: string;
+  imageUrl?: string;
+  link?: string;
+  linkedProductId?: string | null;
+};
 
 type MappingInfo = {
   mapping: Record<string, string>;
@@ -21,77 +49,101 @@ type MappingInfo = {
   syncedFields: string[];
 };
 
-// columnas del catálogo sincronizado (todas) con etiqueta
-const SYNCED_COLS: { key: string; label: string }[] = [
-  { key: 'imageUrl', label: 'Img' },
-  { key: 'name', label: 'Nombre' },
-  { key: 'ean', label: 'EAN' },
-  { key: 'brand', label: 'Marca' },
-  { key: 'category', label: 'Categoría' },
-  { key: 'subcategory', label: 'Subcategoría' },
-  { key: 'cost', label: 'Costo real' },
-  { key: 'listPrice', label: 'P. lista' },
-  { key: 'available', label: 'Disp.' },
-  { key: 'stock', label: 'Stock' },
-  { key: 'unitsPerBox', label: 'U/Bulto' },
-  { key: 'weight', label: 'Peso' },
-  { key: 'format', label: 'Formato' },
-  { key: 'flavor', label: 'Sabor' },
-  { key: 'presentation', label: 'Present.' },
-  { key: 'sku', label: 'SKU' },
-  { key: 'externalId', label: 'ID ext.' },
-  { key: 'link', label: 'Link' },
-];
-
-const FIELD_LABELS: Record<string, string> = {
-  name: 'Nombre', barcode: 'Código de barras', brand: 'Marca', imageUrl: 'Imagen',
-  unitsPerBox: 'Unidades por bulto', weight: 'Peso', format: 'Formato', flavor: 'Sabor',
-  presentation: 'Presentación', subcategory: 'Subcategoría', supplierSku: 'SKU proveedor',
-  externalId: 'ID externo', category: 'Categoría', cost: 'Costo',
-  ean: 'EAN', listPrice: 'Precio lista', available: 'Disponible', stock: 'Stock',
-  sku: 'SKU', link: 'Link',
+const PROVIDERS: Record<
+  string,
+  { label: string; description: string; accent: string; runnerNote: string }
+> = {
+  mondelez: {
+    label: 'Mondelez',
+    description: 'Catálogo VTEX + precio B2B real vía runner local',
+    accent: 'border-amber-500/40 bg-amber-900/10',
+    runnerNote:
+      'El precio real lo trae el runner Python con tu login de Mi Tienda Mondelez. El catálogo público (botón de arriba) no incluye costos.',
+  },
 };
 
-function money(n?: unknown) {
-  if (n == null) return '—';
-  const v = Number(n);
-  if (!isFinite(v) || v >= 1000000) return '—';
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v);
-}
+const FIELD_LABELS: Record<string, string> = {
+  name: 'Nombre',
+  barcode: 'Código de barras',
+  brand: 'Marca',
+  imageUrl: 'Imagen',
+  unitsPerBox: 'Unidades por bulto',
+  weight: 'Peso',
+  format: 'Formato',
+  flavor: 'Sabor',
+  presentation: 'Presentación',
+  subcategory: 'Subcategoría',
+  supplierSku: 'SKU proveedor',
+  externalId: 'ID externo',
+  category: 'Categoría',
+  cost: 'Costo',
+  ean: 'EAN',
+  listPrice: 'Precio lista',
+  available: 'Disponible',
+  stock: 'Stock',
+  sku: 'SKU',
+  link: 'Link',
+};
 
 export default function SincronizacionesPage() {
-  const [conn, setConn] = useState<Connection | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [items, setItems] = useState<Synced[]>([]);
   const [q, setQ] = useState('');
   const [onlyWithCost, setOnlyWithCost] = useState(false);
   const [markup, setMarkup] = useState('40');
   const [mapInfo, setMapInfo] = useState<MappingInfo | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [showInternal, setShowInternal] = useState(false);
 
-  const loadConn = useCallback(async () => {
+  const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
+  const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
+    label: conn?.name ?? 'Proveedor',
+    description: 'Sincronización de catálogo',
+    accent: 'border-slate-600 bg-slate-800/40',
+    runnerNote: '',
+  };
+  const apiBase = useMemo(() => {
+    try {
+      return getApiBaseUrl();
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const loadConnections = useCallback(async () => {
     setLoading(true);
     try {
-      const conns = await api<Connection[]>('/sync/connections');
-      let c = conns.find((x) => x.provider === 'mondelez') || conns[0] || null;
-      if (!c) {
-        c = await api<Connection>('/sync/connections', {
+      let conns = await api<Connection[]>('/sync/connections');
+      if (!conns.some((x) => x.provider === 'mondelez')) {
+        const created = await api<Connection>('/sync/connections', {
           method: 'POST',
           body: JSON.stringify({ provider: 'mondelez', name: 'Mondelez', priceMarkup: 40 }),
         });
+        conns = [created, ...conns];
       }
-      setConn(c);
-      setMarkup(String(c.priceMarkup ?? 40));
-      const mi = await api<MappingInfo>(`/sync/connections/${c.id}/mapping`);
-      setMapInfo(mi);
+      setConnections(conns);
+      setActiveId((prev) => prev && conns.some((c) => c.id === prev) ? prev : conns[0]?.id ?? null);
     } catch (e) {
-      setMsg((e as Error).message);
+      setMsg({ type: 'err', text: (e as Error).message });
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadConnDetails = useCallback(async () => {
+    if (!conn) return;
+    setMarkup(String(conn.priceMarkup ?? 40));
+    try {
+      const mi = await api<MappingInfo>(`/sync/connections/${conn.id}/mapping`);
+      setMapInfo(mi);
+    } catch (e) {
+      setMsg({ type: 'err', text: (e as Error).message });
+    }
+  }, [conn]);
 
   const loadItems = useCallback(async () => {
     if (!conn) return;
@@ -101,172 +153,390 @@ export default function SincronizacionesPage() {
       });
       setItems(data);
     } catch (e) {
-      setMsg((e as Error).message);
+      setMsg({ type: 'err', text: (e as Error).message });
     }
   }, [conn, q, onlyWithCost]);
 
-  useEffect(() => { loadConn(); }, [loadConn]);
-  useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => {
+    loadConnections();
+  }, [loadConnections]);
+
+  useEffect(() => {
+    loadConnDetails();
+  }, [loadConnDetails]);
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
+
+  const withCost = items.filter((i) => i.costUnit != null).length;
+  const linked = items.filter((i) => i.linkedProductId).length;
+  const mk = Number(markup) || 0;
 
   const run = async (kind: 'run' | 'import') => {
     if (!conn) return;
-    setBusy(kind); setMsg(null);
+    setBusy(kind);
+    setMsg(null);
     try {
       if (kind === 'run') {
         const r = await api<{ itemsUpserted: number }>(`/sync/connections/${conn.id}/run`, { method: 'POST' });
-        setMsg(`Catálogo sincronizado: ${r.itemsUpserted} productos.`);
+        setMsg({ type: 'ok', text: `Catálogo sincronizado: ${r.itemsUpserted} productos (sin precio B2B).` });
       } else {
         const r = await api<{ created: number; updated: number; skipped: number }>(
           `/sync/connections/${conn.id}/import`,
           { method: 'POST', body: JSON.stringify({ onlyWithCost: true }) },
         );
-        setMsg(`Importados: ${r.created} nuevos, ${r.updated} actualizados, ${r.skipped} omitidos.`);
+        setMsg({
+          type: 'ok',
+          text: `Importados: ${r.created} nuevos, ${r.updated} actualizados, ${r.skipped} omitidos (precios unitarios).`,
+        });
       }
-      await loadConn(); await loadItems();
-    } catch (e) { setMsg((e as Error).message); } finally { setBusy(null); }
+      await loadConnections();
+      await loadItems();
+    } catch (e) {
+      setMsg({ type: 'err', text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
   };
 
   const saveMarkup = async () => {
     if (!conn) return;
     setBusy('markup');
     try {
-      await api(`/sync/connections/${conn.id}`, { method: 'PATCH', body: JSON.stringify({ priceMarkup: Number(markup) }) });
-      setMsg(`Markup guardado: ${markup}%`); await loadConn();
-    } catch (e) { setMsg((e as Error).message); } finally { setBusy(null); }
+      await api(`/sync/connections/${conn.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ priceMarkup: Number(markup) }),
+      });
+      setMsg({ type: 'ok', text: `Markup guardado: ${markup}%` });
+      await loadConnections();
+      await loadItems();
+    } catch (e) {
+      setMsg({ type: 'err', text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleAutoSync = async () => {
+    if (!conn) return;
+    setBusy('autosync');
+    try {
+      await api(`/sync/connections/${conn.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ autoSync: !conn.autoSync }),
+      });
+      await loadConnections();
+      setMsg({ type: 'ok', text: conn.autoSync ? 'Auto-sync desactivado' : 'Auto-sync activado (catálogo diario en servidor)' });
+    } catch (e) {
+      setMsg({ type: 'err', text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
   };
 
   const saveMapping = async () => {
     if (!conn || !mapInfo) return;
     setBusy('mapping');
     try {
-      await api(`/sync/connections/${conn.id}/mapping`, { method: 'PATCH', body: JSON.stringify({ mapping: mapInfo.mapping }) });
-      setMsg('Mapeo guardado. La próxima importación usará estas columnas.');
-    } catch (e) { setMsg((e as Error).message); } finally { setBusy(null); }
+      await api(`/sync/connections/${conn.id}/mapping`, {
+        method: 'PATCH',
+        body: JSON.stringify({ mapping: mapInfo.mapping }),
+      });
+      setMsg({ type: 'ok', text: 'Mapeo guardado. La próxima importación usará estas columnas.' });
+    } catch (e) {
+      setMsg({ type: 'err', text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const mk = Number(markup) || 0;
-  const withCost = items.filter((i) => i.cost != null && Number(i.cost) < 1000000).length;
-
-  if (loading) return <div className="p-6">Cargando…</div>;
+  if (loading) {
+    return (
+      <div className="p-6 text-slate-400">Cargando sincronizaciones…</div>
+    );
+  }
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Sincronizaciones</h1>
-          <p className="text-sm text-gray-500">
-            {conn?.name} · {conn?._count?.items ?? items.length} productos ·{' '}
-            {conn?.lastSyncAt ? `última: ${new Date(conn.lastSyncAt).toLocaleString('es-AR')}` : 'sin sincronizar'}
+          <h1 className="text-2xl font-bold text-white">Sincronizaciones</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Catálogo de proveedores → productos con precios <strong className="text-slate-400">unitarios</strong> en POS y listado.
+            Los valores por bulto quedan solo como referencia interna.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowMap((v) => !v)} className="px-4 py-2 rounded-lg border text-sm font-medium">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMap((v) => !v)}
+            className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm font-medium hover:bg-slate-800"
+          >
             {showMap ? 'Ocultar mapeo' : 'Mapear columnas'}
           </button>
-          <button onClick={() => run('run')} disabled={!!busy} className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-medium disabled:opacity-50">
-            {busy === 'run' ? 'Sincronizando…' : 'Sincronizar catálogo'}
+          <button
+            type="button"
+            onClick={() => run('run')}
+            disabled={!!busy || !conn}
+            className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-medium hover:bg-slate-600 disabled:opacity-50"
+          >
+            {busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
           </button>
-          <button onClick={() => run('import')} disabled={!!busy} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-50">
-            {busy === 'import' ? 'Importando…' : 'Importar a mis productos'}
+          <button
+            type="button"
+            onClick={() => run('import')}
+            disabled={!!busy || !conn}
+            className="px-4 py-2 rounded-lg btn-brand text-sm font-medium disabled:opacity-50"
+          >
+            {busy === 'import' ? 'Importando…' : 'Importar a productos'}
           </button>
         </div>
       </div>
 
-      {msg && <div className="rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm px-4 py-2">{msg}</div>}
-
-      <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3">
-        💡 El <b>precio real</b> (tu precio B2B) lo trae el <b>runner</b> con tu login de Mondelez. El mapeo de abajo decide
-        qué columna del catálogo va a cada campo de tus productos al importar.
-      </div>
-
-      {/* Editor de mapeo */}
-      {showMap && mapInfo && (
-        <div className="rounded-lg border p-4 space-y-3 bg-gray-50">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Mapeo de columnas (Mondelez → tu producto)</h2>
-            <button onClick={saveMapping} disabled={!!busy} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm">
-              Guardar mapeo
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {mapInfo.productFields.map((pf) => (
-              <div key={pf} className="flex items-center gap-2">
-                <span className="text-sm font-medium w-40 shrink-0">{FIELD_LABELS[pf] || pf}</span>
-                <span className="text-gray-400">←</span>
-                <select
-                  value={mapInfo.mapping[pf] || ''}
-                  onChange={(e) => setMapInfo({ ...mapInfo, mapping: { ...mapInfo.mapping, [pf]: e.target.value } })}
-                  className="flex-1 border rounded-lg px-2 py-1.5 text-sm bg-white"
-                >
-                  <option value="">— (no completar)</option>
-                  {mapInfo.syncedFields.map((sf) => (
-                    <option key={sf} value={sf}>{FIELD_LABELS[sf] || sf}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
+      {msg && (
+        <div
+          className={`rounded-lg border text-sm px-4 py-3 ${
+            msg.type === 'ok'
+              ? 'bg-emerald-900/20 border-emerald-700/50 text-emerald-300'
+              : 'bg-red-900/20 border-red-700/50 text-red-300'
+          }`}
+        >
+          {msg.text}
         </div>
       )}
 
-      <div className="flex items-end gap-4 flex-wrap">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Markup de venta (%)</label>
-          <div className="flex gap-2">
-            <input value={markup} onChange={(e) => setMarkup(e.target.value)} className="w-24 border rounded-lg px-3 py-2 text-sm" type="number" />
-            <button onClick={saveMarkup} disabled={!!busy} className="px-3 py-2 rounded-lg border text-sm">Guardar</button>
-          </div>
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs text-gray-500 mb-1">Buscar</label>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, EAN o marca…" className="w-full border rounded-lg px-3 py-2 text-sm" />
-        </div>
-        <label className="flex items-center gap-2 text-sm pb-2">
-          <input type="checkbox" checked={onlyWithCost} onChange={(e) => setOnlyWithCost(e.target.checked)} />
-          Solo con precio real ({withCost})
-        </label>
+      {/* Selector de proveedor (extensible) */}
+      <div className="flex flex-wrap gap-2">
+        {connections.map((c) => {
+          const meta = PROVIDERS[c.provider] ?? { label: c.name, accent: 'border-slate-600' };
+          const active = c.id === conn?.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setActiveId(c.id)}
+              className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                active
+                  ? `${meta.accent ?? 'border-brand/50 bg-brand/10'} text-white border-brand/40`
+                  : 'border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+              }`}
+            >
+              {meta.label ?? c.name}
+              <span className="ml-2 text-xs opacity-70">{c._count?.items ?? 0} ítems</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Tabla con TODAS las columnas */}
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="text-xs whitespace-nowrap">
-          <thead className="bg-gray-50 text-left text-gray-500">
-            <tr>
-              {SYNCED_COLS.map((c) => <th key={c.key} className="p-2">{c.label}</th>)}
-              <th className="p-2 text-right">Venta (+{mk}%)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((p) => {
-              const cost = p.cost != null && Number(p.cost) < 1000000 ? Number(p.cost) : null;
-              const sale = cost != null ? cost * (1 + mk / 100) : null;
-              return (
-                <tr key={p.id} className="border-t hover:bg-gray-50">
-                  {SYNCED_COLS.map((c) => {
-                    const v = p[c.key];
-                    if (c.key === 'imageUrl')
-                      return <td key={c.key} className="p-1">{v ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={String(v)} alt="" className="w-8 h-8 object-contain rounded" />
-                      ) : <div className="w-8 h-8 bg-gray-100 rounded" />}</td>;
-                    if (c.key === 'cost' || c.key === 'listPrice')
-                      return <td key={c.key} className="p-2 text-right">{money(v)}</td>;
-                    if (c.key === 'available')
-                      return <td key={c.key} className="p-2">{v ? '✓' : '—'}</td>;
-                    if (c.key === 'link')
-                      return <td key={c.key} className="p-2">{v ? <a href={String(v)} target="_blank" rel="noreferrer" className="text-blue-600 underline">ver</a> : '—'}</td>;
-                    return <td key={c.key} className={`p-2 ${c.key === 'name' ? 'font-medium' : 'text-gray-600'}`}>{v != null && v !== '' ? String(v) : '—'}</td>;
-                  })}
-                  <td className="p-2 text-right font-medium">{sale != null ? money(sale) : '—'}</td>
-                </tr>
-              );
-            })}
-            {items.length === 0 && (
-              <tr><td colSpan={SYNCED_COLS.length + 1} className="p-6 text-center text-gray-400">Sin productos. Tocá “Sincronizar catálogo”.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {conn && (
+        <>
+          <div className={`rounded-xl border p-4 md:p-5 ${providerMeta.accent}`}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">{providerMeta.label}</h2>
+                <p className="text-sm text-slate-400">{providerMeta.description}</p>
+                {conn.lastSyncAt && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Última sync: {new Date(conn.lastSyncAt).toLocaleString('es-AR')}
+                    {conn.lastStatus ? ` · ${conn.lastStatus}` : ''}
+                  </p>
+                )}
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={conn.autoSync}
+                  onChange={toggleAutoSync}
+                  disabled={busy === 'autosync'}
+                  className="rounded border-slate-600"
+                />
+                Auto-sync catálogo diario (servidor)
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <p className="text-slate-500 text-xs">En catálogo</p>
+              <p className="text-2xl font-bold text-white">{conn._count?.items ?? items.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <p className="text-slate-500 text-xs">Con precio B2B</p>
+              <p className="text-2xl font-bold text-emerald-400">{withCost}</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <p className="text-slate-500 text-xs">Vinculados a productos</p>
+              <p className="text-2xl font-bold text-brand">{linked}</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <p className="text-slate-500 text-xs">Markup venta</p>
+              <p className="text-2xl font-bold text-white">{mk}%</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-violet-800/40 bg-violet-950/20 p-4 text-sm text-violet-200/90 space-y-2">
+            <p className="font-medium text-violet-300">Precio real B2B (runner local)</p>
+            <p>{providerMeta.runnerNote}</p>
+            <p className="text-slate-400 text-xs">
+              En <code className="text-slate-300">sync-runner/.env</code> configurá{' '}
+              <code className="text-slate-300">SR_API={apiBase || 'https://tu-api.onrender.com'}</code> (URL pública de la API en producción, ver DEPLOY.md).
+              Ejecutá <code className="text-slate-300">python mondelez_sync_runner.py</code> en tu PC o agendalo con Task Scheduler.
+            </p>
+          </div>
+
+          {showMap && mapInfo && (
+            <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h2 className="font-semibold text-white">Mapeo de columnas → producto</h2>
+                <button
+                  type="button"
+                  onClick={saveMapping}
+                  disabled={!!busy}
+                  className="px-3 py-1.5 rounded-lg btn-brand text-sm"
+                >
+                  Guardar mapeo
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {mapInfo.productFields.map((pf) => (
+                  <div key={pf} className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-300 w-36 shrink-0 truncate" title={FIELD_LABELS[pf] || pf}>
+                      {FIELD_LABELS[pf] || pf}
+                    </span>
+                    <span className="text-slate-600">←</span>
+                    <select
+                      value={mapInfo.mapping[pf] || ''}
+                      onChange={(e) =>
+                        setMapInfo({ ...mapInfo, mapping: { ...mapInfo.mapping, [pf]: e.target.value } })
+                      }
+                      className="flex-1 border border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-slate-900 text-slate-200"
+                    >
+                      <option value="">— (no completar)</option>
+                      {mapInfo.syncedFields.map((sf) => (
+                        <option key={sf} value={sf}>
+                          {FIELD_LABELS[sf] || sf}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Markup de venta (%)</label>
+              <div className="flex gap-2">
+                <input
+                  value={markup}
+                  onChange={(e) => setMarkup(e.target.value)}
+                  className="w-24 border border-slate-600 rounded-lg px-3 py-2 text-sm bg-slate-900 text-slate-100"
+                  type="number"
+                />
+                <button
+                  type="button"
+                  onClick={saveMarkup}
+                  disabled={!!busy}
+                  className="px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200 hover:bg-slate-800"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs text-slate-500 mb-1">Buscar</label>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Nombre, EAN o marca…"
+                className="w-full border border-slate-600 rounded-lg px-3 py-2 text-sm bg-slate-900 text-slate-100 placeholder-slate-500"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-400 pb-2 cursor-pointer">
+              <input type="checkbox" checked={onlyWithCost} onChange={(e) => setOnlyWithCost(e.target.checked)} />
+              Solo con precio B2B ({withCost})
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-500 pb-2 cursor-pointer">
+              <input type="checkbox" checked={showInternal} onChange={(e) => setShowInternal(e.target.checked)} />
+              Ver costos por bulto (interno)
+            </label>
+          </div>
+
+          <div className="rounded-xl border border-slate-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-800/90 text-slate-400 text-left">
+                  <tr>
+                    <th className="p-3 w-12" />
+                    <th className="p-3">Producto</th>
+                    <th className="p-3">Marca</th>
+                    <th className="p-3">Categoría</th>
+                    <th className="p-3 text-right">Costo c/u</th>
+                    <th className="p-3 text-right">Venta c/u (+{mk}%)</th>
+                    {showInternal && <th className="p-3 text-right text-slate-600">Costo bulto</th>}
+                    <th className="p-3 text-center">U/bulto</th>
+                    <th className="p-3">EAN</th>
+                    <th className="p-3 w-8" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700/80">
+                  {items.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-800/40">
+                      <td className="p-2">
+                        {p.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5" />
+                        ) : (
+                          <div className="w-9 h-9 rounded bg-slate-800" />
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <span className="text-slate-200 font-medium">{p.name ?? '—'}</span>
+                        {p.linkedProductId && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-500/90">importado</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-slate-400">{p.brand ?? '—'}</td>
+                      <td className="p-3 text-slate-500 text-xs">{p.category ?? '—'}</td>
+                      <td className="p-3 text-right text-slate-300">
+                        {p.costUnit != null ? formatMoneyArs(p.costUnit) : '—'}
+                      </td>
+                      <td className="p-3 text-right font-medium text-brand">
+                        {p.saleUnit != null ? formatMoneyArs(p.saleUnit) : '—'}
+                      </td>
+                      {showInternal && (
+                        <td className="p-3 text-right text-slate-600 text-xs">
+                          {p.costBulk != null ? formatMoneyArs(p.costBulk) : '—'}
+                        </td>
+                      )}
+                      <td className="p-3 text-center text-violet-400/80 text-xs">
+                        {p.unitsPerBoxNum ?? p.unitsPerBox ?? '—'}
+                      </td>
+                      <td className="p-3 text-slate-500 text-xs font-mono">{p.ean ?? '—'}</td>
+                      <td className="p-3">
+                        {p.link ? (
+                          <a href={p.link} target="_blank" rel="noreferrer" className="text-brand text-xs hover:underline">
+                            ↗
+                          </a>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                  {items.length === 0 && (
+                    <tr>
+                      <td colSpan={showInternal ? 10 : 9} className="p-8 text-center text-slate-500">
+                        Sin productos. Sincronizá el catálogo o ejecutá el runner con precios B2B.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

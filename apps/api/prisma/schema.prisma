@@ -457,7 +457,9 @@ model StickerCountry {
   id          String   @id @default(cuid())
   businessId  String
   name        String
-  flag        String?  // emoji flag
+  code        String?  // ARG, BRA, FRA...
+  flag        String?  // emoji
+  flagUrl     String?  // URL alternativa a emoji
   priceUnit   Decimal  @default(0)  // precio venta unitario
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())

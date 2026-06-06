@@ -9,6 +9,9 @@ import { WORLDCUP_2026_COUNTRIES } from './worldcup-countries.seed';
 
 type PriceEntry = { countryId: string; price: number };
 type OrderItem = { stickerId: string; qty: number };
+type StockEntry = { number: number; stock?: number; delta?: number };
+
+const RETURNABLE_STATUSES = ['pending', 'confirmed'];
 
 @Injectable()
 export class StickersService {
@@ -28,7 +31,7 @@ export class StickersService {
       if (existing) {
         await this.prisma.stickerCountry.update({
           where: { id: existing.id },
-          data: { flag: country.flag, isActive: true },
+          data: { flag: country.flag, code: country.code, isActive: true },
         });
         updated++;
       } else {
@@ -36,6 +39,7 @@ export class StickersService {
           data: {
             businessId,
             name: country.name,
+            code: country.code,
             flag: country.flag,
             priceUnit: new Decimal(0),
           },
@@ -47,15 +51,45 @@ export class StickersService {
     return { created, updated, total: WORLDCUP_2026_COUNTRIES.length };
   }
 
-  listCountries(businessId: string) {
+  listCountries(businessId: string, includeInactive = false) {
     return this.prisma.stickerCountry.findMany({
-      where: { businessId, isActive: true },
+      where: includeInactive ? { businessId } : { businessId, isActive: true },
       orderBy: { name: 'asc' },
       include: { _count: { select: { stickers: true } } },
     });
   }
 
-  async updateCountryPrice(businessId: string, countryId: string, price: number) {
+  async createCountry(
+    businessId: string,
+    data: { name: string; code?: string; flag?: string; flagUrl?: string; price?: number },
+  ) {
+    const name = data.name?.trim();
+    if (!name) throw new BadRequestException('El nombre del país es obligatorio');
+
+    return this.prisma.stickerCountry.create({
+      data: {
+        businessId,
+        name,
+        code: data.code?.trim() || null,
+        flag: data.flag?.trim() || null,
+        flagUrl: data.flagUrl?.trim() || null,
+        priceUnit: new Decimal(data.price ?? 0),
+      },
+    });
+  }
+
+  async updateCountry(
+    businessId: string,
+    countryId: string,
+    data: {
+      name?: string;
+      code?: string;
+      flag?: string;
+      flagUrl?: string;
+      price?: number;
+      isActive?: boolean;
+    },
+  ) {
     const country = await this.prisma.stickerCountry.findFirst({
       where: { id: countryId, businessId },
     });
@@ -63,8 +97,19 @@ export class StickersService {
 
     return this.prisma.stickerCountry.update({
       where: { id: countryId },
-      data: { priceUnit: new Decimal(price) },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.code !== undefined ? { code: data.code.trim() || null } : {}),
+        ...(data.flag !== undefined ? { flag: data.flag.trim() || null } : {}),
+        ...(data.flagUrl !== undefined ? { flagUrl: data.flagUrl.trim() || null } : {}),
+        ...(data.price !== undefined ? { priceUnit: new Decimal(data.price) } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      },
     });
+  }
+
+  async updateCountryPrice(businessId: string, countryId: string, price: number) {
+    return this.updateCountry(businessId, countryId, { price });
   }
 
   async bulkUpdatePrices(businessId: string, prices: PriceEntry[]) {
@@ -93,6 +138,9 @@ export class StickersService {
       where: { id: countryId, businessId },
     });
     if (!country) throw new NotFoundException('País no encontrado');
+    if (maxNumber < 1 || maxNumber > 999) {
+      throw new BadRequestException('maxNumber debe estar entre 1 y 999');
+    }
 
     const existing = await this.prisma.sticker.findMany({
       where: { businessId, countryId },
@@ -119,12 +167,47 @@ export class StickersService {
       where: { id: countryId, businessId },
     });
     if (!country) throw new NotFoundException('País no encontrado');
+    if (stock < 0) throw new BadRequestException('El stock no puede ser negativo');
 
     return this.prisma.sticker.upsert({
       where: { businessId_countryId_number: { businessId, countryId, number } },
       create: { businessId, countryId, number, stock },
       update: { stock },
     });
+  }
+
+  async bulkUpdateStickers(
+    businessId: string,
+    countryId: string,
+    entries: StockEntry[],
+  ) {
+    const country = await this.prisma.stickerCountry.findFirst({
+      where: { id: countryId, businessId },
+    });
+    if (!country) throw new NotFoundException('País no encontrado');
+
+    let updated = 0;
+    for (const entry of entries) {
+      if (entry.number < 1) continue;
+
+      if (entry.delta !== undefined && entry.delta !== 0) {
+        const existing = await this.prisma.sticker.findUnique({
+          where: { businessId_countryId_number: { businessId, countryId, number: entry.number } },
+        });
+        const next = Math.max(0, (existing?.stock ?? 0) + entry.delta);
+        await this.prisma.sticker.upsert({
+          where: { businessId_countryId_number: { businessId, countryId, number: entry.number } },
+          create: { businessId, countryId, number: entry.number, stock: next },
+          update: { stock: next },
+        });
+        updated++;
+      } else if (entry.stock !== undefined) {
+        await this.upsertSticker(businessId, countryId, entry.number, Math.max(0, entry.stock));
+        updated++;
+      }
+    }
+
+    return { updated };
   }
 
   listStickersForCountry(businessId: string, countryId: string) {
@@ -147,6 +230,14 @@ export class StickersService {
     });
   }
 
+  async updateShare(businessId: string, isActive: boolean) {
+    const share = await this.getOrCreateShare(businessId);
+    return this.prisma.stickerCatalogShare.update({
+      where: { id: share.id },
+      data: { isActive },
+    });
+  }
+
   async getCatalogByToken(token: string) {
     const share = await this.prisma.stickerCatalogShare.findUnique({
       where: { token },
@@ -159,6 +250,7 @@ export class StickersService {
       orderBy: { name: 'asc' },
       include: {
         stickers: {
+          where: { stock: { gt: 0 } },
           orderBy: { number: 'asc' },
           select: { id: true, number: true, stock: true },
         },
@@ -167,63 +259,69 @@ export class StickersService {
 
     return {
       business: { name: share.business.name },
-      countries: countries.map((c) => ({
-        id: c.id,
-        name: c.name,
-        flag: c.flag,
-        priceUnit: c.priceUnit,
-        stickers: c.stickers,
-      })),
+      countries: countries
+        .filter((c) => c.stickers.length > 0)
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          flag: c.flag,
+          flagUrl: c.flagUrl,
+          priceUnit: c.priceUnit,
+          stickers: c.stickers,
+        })),
     };
   }
 
   // ---------- Orders ----------
 
   async createOrder(
-    shareId: string,
+    token: string,
     buyerName: string | undefined,
     buyerPhone: string | undefined,
     notes: string | undefined,
     items: OrderItem[],
   ) {
     const share = await this.prisma.stickerCatalogShare.findUnique({
-      where: { token: shareId },
+      where: { token },
     });
     if (!share || !share.isActive) throw new NotFoundException('Catálogo no encontrado o inactivo');
+    if (!items.length) throw new BadRequestException('El pedido debe tener al menos un ítem');
 
     const businessId = share.businessId;
 
-    // Validate stock and calculate total
     let total = new Decimal(0);
     const resolvedItems: {
-      sticker: { id: string; stock: number; country: { priceUnit: Decimal } };
+      sticker: { id: string; stock: number; number: number; country: { name: string; flag: string | null; priceUnit: Decimal } };
       qty: number;
     }[] = [];
 
     for (const item of items) {
+      if (item.qty < 1) continue;
       const sticker = await this.prisma.sticker.findFirst({
         where: { id: item.stickerId, businessId },
-        include: { country: { select: { priceUnit: true } } },
+        include: { country: { select: { name: true, flag: true, priceUnit: true } } },
       });
-      if (!sticker) throw new NotFoundException(`Figurita ${item.stickerId} no encontrada`);
+      if (!sticker) throw new NotFoundException(`Figurita no encontrada`);
       if (sticker.stock < item.qty) {
         throw new BadRequestException(
-          `Stock insuficiente para figurita ${item.stickerId}. Disponible: ${sticker.stock}`,
+          `Stock insuficiente para ${sticker.country.flag ?? ''} #${sticker.number}. Disponible: ${sticker.stock}`,
         );
       }
       resolvedItems.push({ sticker, qty: item.qty });
       total = total.add(sticker.country.priceUnit.mul(item.qty));
     }
 
-    // Create order and deduct stock in a transaction
+    if (!resolvedItems.length) throw new BadRequestException('Pedido vacío');
+
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.stickerOrder.create({
         data: {
           businessId,
-          shareId,
-          buyerName,
-          buyerPhone,
-          notes,
+          shareId: share.id,
+          buyerName: buyerName?.trim() || null,
+          buyerPhone: buyerPhone?.trim() || null,
+          notes: notes?.trim() || null,
           total,
           items: {
             create: resolvedItems.map(({ sticker, qty }) => ({
@@ -233,7 +331,13 @@ export class StickersService {
             })),
           },
         },
-        include: { items: true },
+        include: {
+          items: {
+            include: {
+              sticker: { include: { country: { select: { name: true, flag: true } } } },
+            },
+          },
+        },
       });
 
       for (const { sticker, qty } of resolvedItems) {
@@ -247,15 +351,18 @@ export class StickersService {
     });
   }
 
-  listOrders(businessId: string) {
+  listOrders(businessId: string, status?: string) {
     return this.prisma.stickerOrder.findMany({
-      where: { businessId },
+      where: {
+        businessId,
+        ...(status && status !== 'all' ? { status } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         items: {
           include: {
             sticker: {
-              include: { country: { select: { name: true, flag: true } } },
+              include: { country: { select: { name: true, flag: true, code: true } } },
             },
           },
         },
@@ -264,13 +371,15 @@ export class StickersService {
   }
 
   async updateOrderStatus(businessId: string, orderId: string, status: string) {
+    const valid = ['pending', 'confirmed', 'delivered', 'cancelled'];
+    if (!valid.includes(status)) throw new BadRequestException('Estado inválido');
+
     const order = await this.prisma.stickerOrder.findFirst({
       where: { id: orderId, businessId },
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Pedido no encontrado');
 
-    const RETURNABLE_STATUSES = ['pending', 'confirmed'];
     const shouldReturnStock =
       status === 'cancelled' && RETURNABLE_STATUSES.includes(order.status);
 
@@ -287,7 +396,13 @@ export class StickersService {
       return tx.stickerOrder.update({
         where: { id: orderId },
         data: { status },
-        include: { items: true },
+        include: {
+          items: {
+            include: {
+              sticker: { include: { country: { select: { name: true, flag: true } } } },
+            },
+          },
+        },
       });
     });
   }
@@ -299,7 +414,6 @@ export class StickersService {
     });
     if (!order) throw new NotFoundException('Pedido no encontrado');
 
-    const RETURNABLE_STATUSES = ['pending', 'confirmed'];
     const shouldReturnStock = RETURNABLE_STATUSES.includes(order.status);
 
     return this.prisma.$transaction(async (tx) => {
