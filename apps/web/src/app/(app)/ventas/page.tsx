@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
@@ -180,6 +180,55 @@ export default function VentasPage() {
   const [itemEditQty, setItemEditQty] = useState('');
   const [itemEditPrice, setItemEditPrice] = useState('');
   const [itemSaving, setItemSaving] = useState(false);
+
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
+
+  /** IDs de ventas que parecen duplicadas: mismo totalFinal + paymentMethod dentro de 30 s */
+  const duplicateIds = useMemo<Set<string>>(() => {
+    if (sales.length < 2) return new Set();
+    const sorted = [...sales].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    const found = new Set<string>();
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const diffS =
+          (new Date(sorted[j].createdAt).getTime() - new Date(sorted[i].createdAt).getTime()) / 1000;
+        if (diffS > 30) break;
+        const sameTotal = String(sorted[i].totalFinal) === String(sorted[j].totalFinal);
+        const sameMethod = sorted[i].paymentMethod === sorted[j].paymentMethod;
+        const sameItems =
+          sorted[i].items.length === sorted[j].items.length &&
+          sorted[i].items.every((a) =>
+            sorted[j].items.some(
+              (b) =>
+                (a.product?.id ?? a.productId) === (b.product?.id ?? b.productId) &&
+                a.qty === b.qty &&
+                String(a.unitPrice) === String(b.unitPrice),
+            ),
+          );
+        if (sameTotal && sameMethod && sameItems) {
+          found.add(sorted[i].id);
+          found.add(sorted[j].id);
+        }
+      }
+    }
+    return found;
+  }, [sales]);
+
+  const handleCleanDuplicates = async () => {
+    if (!confirm(`Se eliminarán ${duplicateIds.size - Math.floor(duplicateIds.size / 2)} venta(s) duplicada(s), revirtiendo stock y fiado. ¿Continuar?`)) return;
+    setCleaningDuplicates(true);
+    try {
+      const result = await api<{ deleted: number; ids: string[] }>('/sales/duplicates/cleanup', { method: 'DELETE' });
+      alert(`Se eliminaron ${result.deleted} venta(s) duplicada(s).`);
+      fetchSales();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al limpiar duplicados');
+    } finally {
+      setCleaningDuplicates(false);
+    }
+  };
 
   const fetchSales = useCallback(async () => {
     setLoading(true);
@@ -441,6 +490,27 @@ export default function VentasPage() {
         </div>
       )}
 
+      {!loading && duplicateIds.size > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-600/40 bg-amber-950/25 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-amber-200 font-medium text-sm">
+              ⚠ {duplicateIds.size} ventas parecen duplicadas
+            </p>
+            <p className="text-amber-200/60 text-xs mt-0.5">
+              Mismo monto, método de pago e ítems dentro de 30 segundos — aparecen resaltadas en la tabla.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={cleaningDuplicates}
+            onClick={() => void handleCleanDuplicates()}
+            className="px-4 py-2 rounded-lg bg-amber-600 text-white font-medium text-sm hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {cleaningDuplicates ? 'Limpiando…' : 'Eliminar duplicados'}
+          </button>
+        </div>
+      )}
+
       <div className="rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden mb-4">
         <div data-tour="ventas-filters" className="px-4 py-3 border-b border-slate-700 space-y-3">
           <h2 className="text-lg font-medium text-slate-200">Filtros</h2>
@@ -604,12 +674,16 @@ export default function VentasPage() {
                 sales.map((s) => {
                   const itemCount = s.items?.reduce((sum, i) => sum + (i.qty ?? 0), 0) ?? 0;
                   const subtotalNum = Number(s.total ?? 0);
+                  const isDuplicate = duplicateIds.has(s.id);
                   return (
-                    <tr key={s.id} className="hover:bg-slate-800/50">
+                    <tr key={s.id} className={isDuplicate ? 'bg-amber-950/20 border-l-2 border-amber-500/60 hover:bg-amber-950/30' : 'hover:bg-slate-800/50'}>
                       <td className="p-3 text-slate-400 whitespace-nowrap">
                         {new Date(s.createdAt).toLocaleString('es-AR')}
                       </td>
-                      <td className="p-3 text-slate-500 font-mono text-xs">{s.id.slice(-8)}</td>
+                      <td className="p-3 font-mono text-xs">
+                        <span className={isDuplicate ? 'text-amber-400' : 'text-slate-500'}>{s.id.slice(-8)}</span>
+                        {isDuplicate && <span className="ml-1.5 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded px-1 py-0.5">dup</span>}
+                      </td>
                       <td className="p-3 text-slate-200">
                         {s.customer?.name ?? '—'}
                       </td>

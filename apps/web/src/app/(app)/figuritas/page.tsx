@@ -905,9 +905,9 @@ export default function FigurityasPage() {
   const [tab, setTab] = useState<TabKey>('paises');
 
   return (
-    <div className="relative -m-4 md:-m-6 min-h-[calc(100vh-4rem)]">
+    <div className="relative min-h-screen">
       <div className={fig.pageGlow} />
-      <div className="relative p-4 md:p-6 space-y-4 sm:space-y-5 max-w-6xl">
+      <div className="relative p-4 md:p-6 space-y-4 sm:space-y-5 max-w-6xl mx-auto">
         <AdminHero />
         <FigTabs tabs={[...TABS]} active={tab} onChange={setTab} />
         <div className="pt-1">
