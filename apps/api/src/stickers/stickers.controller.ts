@@ -70,6 +70,19 @@ export class StickersController {
     return this.stickers.updateCountryPrice(u.businessId, countryId, body.price);
   }
 
+  @Post('prices/global')
+  setGlobalPrice(@CurrentUser() u: AuthUser, @Body() body: { price: number }) {
+    return this.stickers.setGlobalPrice(u.businessId, body.price);
+  }
+
+  @Post('stickers/bulk-prices')
+  bulkUpdateStickerPrices(
+    @CurrentUser() u: AuthUser,
+    @Body() body: { prices: { stickerId: string; price: number | null }[] },
+  ) {
+    return this.stickers.bulkUpdateStickerPrices(u.businessId, body.prices ?? []);
+  }
+
   @Post('countries/bulk-prices')
   bulkUpdatePrices(
     @CurrentUser() u: AuthUser,

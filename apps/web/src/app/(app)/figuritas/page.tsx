@@ -1,16 +1,29 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import {
   buildFiguritasOrderWhatsApp,
+  figuritasContactWhatsAppUrl,
   formatFiguritasMoney,
   getPublicFiguritasCatalogUrl,
   whatsappUrl,
 } from '@/lib/figuritas';
 import { getPublicAppUrl } from '@/lib/env-urls';
 import { AlbumSpread } from '@/components/figuritas/AlbumSpread';
+import { AdminHero } from '@/components/figuritas/AdminHero';
+import { CountryFlag } from '@/components/figuritas/CountryFlag';
+import {
+  FigBtnPrimary,
+  FigBtnSecondary,
+  FigCard,
+  FigEmpty,
+  FigLoading,
+  FigMessage,
+  FigTabs,
+} from '@/components/figuritas/FiguritasUI';
 import { CountryPicker } from '@/components/figuritas/PublicHero';
+import { fig } from '@/components/figuritas/theme';
 import type { CountryRow } from '@/components/figuritas/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +43,7 @@ type Sticker = {
   id: string;
   number: number;
   stock: number;
+  priceUnit?: number | string | null;
 };
 
 type ShareInfo = {
@@ -65,15 +79,15 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-500/20 text-yellow-300',
-  confirmed: 'bg-blue-500/20 text-blue-300',
-  delivered: 'bg-green-500/20 text-green-300',
-  cancelled: 'bg-slate-500/20 text-slate-400',
+  pending: 'bg-yellow-500/20 text-yellow-200 border border-yellow-500/30',
+  confirmed: 'bg-red-500/20 text-red-200 border border-red-500/30',
+  delivered: 'bg-red-400/20 text-red-100 border border-red-400/30',
+  cancelled: 'bg-red-950/40 text-red-200/40 border border-red-900/30',
 };
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[status] ?? 'bg-slate-700 text-slate-300'}`}>
+    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[status] ?? 'bg-red-950/40 text-red-200/60'}`}>
       {STATUS_LABELS[status] ?? status}
     </span>
   );
@@ -87,8 +101,11 @@ function TabPaisesPrecios() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [globalPrice, setGlobalPrice] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [stickers, setStickers] = useState<Record<string, Sticker[]>>({});
+  const [stickerPrices, setStickerPrices] = useState<Record<string, string>>({});
+  const [stickerPricesOrig, setStickerPricesOrig] = useState<Record<string, string | null>>({});
 
   const loadCountries = useCallback(async () => {
     setLoading(true);
@@ -116,16 +133,83 @@ function TabPaisesPrecios() {
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
 
+  const applyGlobalPrice = async () => {
+    const price = Number(globalPrice);
+    if (!isFinite(price) || price < 0) {
+      setMsg('Ingresá un precio global válido.');
+      return;
+    }
+    setBusy(true); setMsg(null);
+    try {
+      await api('/stickers/prices/global', { method: 'POST', body: JSON.stringify({ price }) });
+      setMsg(`Precio $${price} aplicado a todos los países. Overrides individuales limpiados.`);
+      setGlobalPrice('');
+      await loadCountries();
+      if (expanded) await loadStickersForCountry(expanded);
+    } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
+  };
+
+  const loadStickersForCountry = async (countryId: string) => {
+    const data = await api<Sticker[]>(`/stickers/countries/${countryId}/stickers`);
+    setStickers((prev) => ({ ...prev, [countryId]: data }));
+    const sp: Record<string, string> = {};
+    const orig: Record<string, string | null> = {};
+    data.forEach((s) => {
+      const override = s.priceUnit != null && s.priceUnit !== '' ? String(s.priceUnit) : '';
+      sp[s.id] = override;
+      orig[s.id] = override || null;
+    });
+    setStickerPrices((prev) => ({ ...prev, ...sp }));
+    setStickerPricesOrig((prev) => ({ ...prev, ...orig }));
+  };
+
   const savePrices = async () => {
     setBusy(true); setMsg(null);
     try {
-      const changed = countries
+      const countryChanges = countries
         .filter((c) => String(c.priceUnit) !== prices[c.id])
         .map((c) => ({ countryId: c.id, price: Number(prices[c.id]) }));
-      if (!changed.length) { setMsg('Sin cambios de precio.'); setBusy(false); return; }
-      await api('/stickers/countries/bulk-prices', { method: 'POST', body: JSON.stringify({ prices: changed }) });
-      setMsg(`Precios actualizados (${changed.length} países).`);
+
+      const stickerChanges: { stickerId: string; price: number | null }[] = [];
+      for (const [stickerId, val] of Object.entries(stickerPrices)) {
+        const orig = stickerPricesOrig[stickerId] ?? null;
+        const trimmed = val.trim();
+        const countryId = expanded;
+        const countryDefault = countryId ? prices[countryId] : '';
+        const nextNorm = trimmed === '' || trimmed === countryDefault ? null : trimmed;
+        const origNorm = orig === '' || orig === null ? null : orig;
+        if (String(nextNorm) !== String(origNorm)) {
+          stickerChanges.push({
+            stickerId,
+            price: nextNorm === null ? null : Number(nextNorm),
+          });
+        }
+      }
+
+      if (!countryChanges.length && !stickerChanges.length) {
+        setMsg('Sin cambios de precio.');
+        setBusy(false);
+        return;
+      }
+
+      if (countryChanges.length) {
+        await api('/stickers/countries/bulk-prices', {
+          method: 'POST',
+          body: JSON.stringify({ prices: countryChanges }),
+        });
+      }
+      if (stickerChanges.length) {
+        await api('/stickers/stickers/bulk-prices', {
+          method: 'POST',
+          body: JSON.stringify({ prices: stickerChanges }),
+        });
+      }
+
+      setMsg(
+        `Precios guardados: ${countryChanges.length} país(es), ${stickerChanges.length} figurita(s) individual(es).`,
+      );
       await loadCountries();
+      if (expanded) await loadStickersForCountry(expanded);
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
 
@@ -134,88 +218,150 @@ function TabPaisesPrecios() {
     setExpanded(countryId);
     if (!stickers[countryId]) {
       try {
-        const data = await api<Sticker[]>(`/stickers/countries/${countryId}/stickers`);
-        setStickers((prev) => ({ ...prev, [countryId]: data }));
+        await loadStickersForCountry(countryId);
       } catch (e) { setMsg((e as Error).message); }
     }
   };
 
-  if (loading) return <div className="p-6 text-slate-400">Cargando países…</div>;
+  const applyCountryPriceToStickers = (countryId: string) => {
+    const countryDefault = prices[countryId] ?? '';
+    const list = stickers[countryId] ?? [];
+    const next: Record<string, string> = {};
+    list.forEach((s) => { next[s.id] = ''; });
+    setStickerPrices((prev) => ({ ...prev, ...next }));
+    setMsg(`Precio del país ($${countryDefault}) listo para aplicar a ${list.length} figuritas. Guardá cambios.`);
+  };
+
+  if (loading) return <FigLoading label="Cargando países…" />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-3 flex-wrap items-center">
-        <button onClick={seedCountries} disabled={busy} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium disabled:opacity-50">
-          {busy ? 'Cargando…' : 'Cargar 48 países'}
-        </button>
-        <button onClick={savePrices} disabled={busy} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50">
+    <div className="space-y-4 sm:space-y-5">
+      <FigCard>
+        <p className="text-[10px] uppercase tracking-wider text-red-200/50 font-semibold mb-2">
+          Precio global — todas las figuritas
+        </p>
+        <p className="text-xs text-red-200/50 mb-3">
+          Aplica el mismo precio a todos los países y limpia precios individuales por figurita.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <input
+            type="number"
+            min={0}
+            step={0.5}
+            value={globalPrice}
+            onChange={(e) => setGlobalPrice(e.target.value)}
+            placeholder="Ej. 500"
+            className={`${fig.input} sm:max-w-[160px]`}
+          />
+          <FigBtnPrimary onClick={applyGlobalPrice} disabled={busy || !globalPrice.trim()} className="sm:!py-2.5">
+            Aplicar a todas
+          </FigBtnPrimary>
+        </div>
+      </FigCard>
+
+      <div className="flex flex-wrap gap-2 sm:gap-3">
+        <FigBtnSecondary onClick={seedCountries} disabled={busy}>
+          {busy ? 'Cargando…' : '🌍 Cargar 48 países'}
+        </FigBtnSecondary>
+        <FigBtnPrimary onClick={savePrices} disabled={busy}>
           Guardar precios
-        </button>
+        </FigBtnPrimary>
       </div>
-      {msg && <div className="rounded-lg bg-blue-900/40 border border-blue-700 text-blue-300 text-sm px-4 py-2">{msg}</div>}
-      {countries.length === 0 && <p className="text-slate-400 text-sm">Sin países. Presioná "Cargar 48 países".</p>}
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-800 text-slate-400 text-left">
-            <tr>
-              <th className="px-3 py-2">País</th>
-              <th className="px-3 py-2 w-36">Precio/figurita</th>
-              <th className="px-3 py-2 text-right">Figuritas</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {countries.map((c) => (
-              <Fragment key={c.id}>
-                <tr className="border-t border-slate-800 hover:bg-slate-800/50">
-                  <td className="px-3 py-2 font-medium">
-                    {c.flag ?? ''} {c.name}
-                    {c.code ? <span className="text-slate-500 text-xs ml-1">({c.code})</span> : null}
-                    {!c.isActive && <span className="ml-2 text-xs text-red-400">inactivo</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={prices[c.id] ?? ''}
-                      onChange={(e) => setPrices((p) => ({ ...p, [c.id]: e.target.value }))}
-                      className="w-28 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-slate-200"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-400">{c._count.stickers}</td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      onClick={() => toggleExpand(c.id)}
-                      className="text-xs px-3 py-1 rounded border border-slate-700 hover:bg-slate-700"
-                    >
-                      {expanded === c.id ? 'Ocultar' : 'Ver figuritas'}
-                    </button>
-                  </td>
-                </tr>
-                {expanded === c.id && (
-                  <tr key={`${c.id}-stickers`} className="border-t border-slate-800">
-                    <td colSpan={4} className="px-3 py-3 bg-slate-900">
-                      <div className="flex flex-wrap gap-2">
-                        {(stickers[c.id] ?? []).map((s) => (
-                          <span
+
+      {msg && <FigMessage>{msg}</FigMessage>}
+      {countries.length === 0 && (
+        <FigEmpty emoji="🌍" title="Sin países cargados" subtitle='Presioná "Cargar 48 países" para empezar.' />
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        {countries.map((c) => (
+          <FigCard key={c.id} className="!p-0 overflow-hidden">
+            <div className="p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <CountryFlag country={c} size="lg" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-red-50 leading-snug">{c.name}</p>
+                  <p className="text-xs text-red-200/50 mt-0.5">
+                    {c.code ? `${c.code} · ` : ''}{c._count.stickers} figuritas
+                    {!c.isActive && <span className="ml-1 text-red-400">· inactivo</span>}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-red-200/50 mb-1">
+                  Precio base del país
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={prices[c.id] ?? ''}
+                  onChange={(e) => setPrices((p) => ({ ...p, [c.id]: e.target.value }))}
+                  className={fig.inputSm + ' w-full'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleExpand(c.id)}
+                className={`w-full ${fig.btnGhost}`}
+              >
+                {expanded === c.id ? 'Ocultar precios individuales' : 'Precios por figurita'}
+              </button>
+            </div>
+            {expanded === c.id && (
+              <div className="border-t border-red-900/40 p-3 sm:p-4 bg-black/20 space-y-3">
+                {(stickers[c.id] ?? []).length === 0 ? (
+                  <p className="text-red-200/40 text-xs">Sin figuritas. Generá el álbum en Inventario.</p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2 items-center justify-between">
+                      <p className="text-[10px] uppercase tracking-wider text-red-200/50">
+                        Precio por figurita (vacío = precio del país)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => applyCountryPriceToStickers(c.id)}
+                        className="text-[10px] text-red-300 hover:text-red-100 underline"
+                      >
+                        Resetear todas al precio del país
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                      {(stickers[c.id] ?? []).map((s) => {
+                        const isCustom = Boolean(stickerPrices[s.id]?.trim());
+                        return (
+                          <div
                             key={s.id}
-                            className={`inline-flex items-center px-2 py-1 rounded text-xs font-mono ${s.stock > 0 ? 'bg-emerald-900/40 text-emerald-300' : 'bg-slate-800 text-slate-500'}`}
+                            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 border ${
+                              isCustom
+                                ? 'border-red-500/40 bg-red-600/10'
+                                : 'border-red-900/30 bg-red-950/20'
+                            }`}
                           >
-                            #{s.number} ×{s.stock}
-                          </span>
-                        ))}
-                        {(stickers[c.id] ?? []).length === 0 && (
-                          <span className="text-slate-500 text-xs">Sin figuritas generadas.</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                            <span className="text-xs font-mono font-bold text-red-100 w-8">#{s.number}</span>
+                            <span className="text-[10px] text-red-200/40 shrink-0">×{s.stock}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              placeholder={prices[c.id] ?? '0'}
+                              value={stickerPrices[s.id] ?? ''}
+                              onChange={(e) =>
+                                setStickerPrices((p) => ({ ...p, [s.id]: e.target.value }))
+                              }
+                              className={`${fig.inputSm} flex-1 min-w-0`}
+                              title={`Precio individual. Vacío usa $${prices[c.id] ?? 0} del país`}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+              </div>
+            )}
+          </FigCard>
+        ))}
       </div>
     </div>
   );
@@ -351,9 +497,9 @@ function TabInventario() {
   const dirtyCount = stickers.filter((s) => s.stock !== stocks[s.id]).length;
 
   return (
-    <div className="space-y-5">
-      <p className="text-sm text-slate-400">
-        Editá el stock como si fuera un álbum Panini. Tocá cada casilla o usá el botón + para sumar repetidas.
+    <div className="space-y-4 sm:space-y-5">
+      <p className="text-sm text-red-200/60">
+        Editá el stock como en un álbum Panini. Tocá cada casilla o usá + para sumar repetidas.
       </p>
 
       {countries.length > 0 && (
@@ -361,75 +507,67 @@ function TabInventario() {
           countries={pickerCountries}
           selectedId={selected}
           onSelect={onSelectCountry}
+          variant="admin"
         />
       )}
 
       {selected && (
-        <div className="flex flex-wrap gap-3 items-end p-4 rounded-xl bg-slate-800/40 border border-slate-700">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Generar casillas 1 a N</label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min={1}
-                value={maxN}
-                onChange={(e) => setMaxN(e.target.value)}
-                className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
-              />
-              <button
-                type="button"
-                onClick={ensureStickers}
-                disabled={busy}
-                className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm disabled:opacity-50"
-              >
-                Generar álbum
-              </button>
+        <FigCard className="!p-3 sm:!p-4">
+          <div className="flex flex-col lg:flex-row lg:flex-wrap gap-4 lg:items-end">
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-[10px] uppercase tracking-wider text-red-200/50 mb-1.5">
+                Generar casillas 1 a N
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  value={maxN}
+                  onChange={(e) => setMaxN(e.target.value)}
+                  className={`${fig.inputSm} w-20`}
+                />
+                <FigBtnSecondary onClick={ensureStickers} disabled={busy}>
+                  Generar álbum
+                </FigBtnSecondary>
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Carga rápida</label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min={1}
-                value={quickNumber}
-                onChange={(e) => setQuickNumber(e.target.value)}
-                className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm"
-                placeholder="#"
-              />
-              <input
-                type="number"
-                min={1}
-                value={quickQty}
-                onChange={(e) => setQuickQty(e.target.value)}
-                className="w-16 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => quickAdd()}
-                disabled={busy || !quickNumber}
-                className="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm disabled:opacity-50"
-              >
-                Sumar
-              </button>
+            <div className="flex-1 min-w-[180px]">
+              <label className="block text-[10px] uppercase tracking-wider text-red-200/50 mb-1.5">
+                Carga rápida
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  value={quickNumber}
+                  onChange={(e) => setQuickNumber(e.target.value)}
+                  className={`${fig.inputSm} w-20`}
+                  placeholder="#"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={quickQty}
+                  onChange={(e) => setQuickQty(e.target.value)}
+                  className={`${fig.inputSm} w-16`}
+                />
+                <FigBtnSecondary onClick={() => quickAdd()} disabled={busy || !quickNumber}>
+                  Sumar
+                </FigBtnSecondary>
+              </div>
             </div>
+            <FigBtnPrimary
+              onClick={saveStocks}
+              disabled={busy || !stickers.length || dirtyCount === 0}
+              className="w-full lg:w-auto lg:ml-auto"
+            >
+              {dirtyCount > 0 ? `Guardar (${dirtyCount})` : 'Guardar cambios'}
+            </FigBtnPrimary>
           </div>
-          <button
-            type="button"
-            onClick={saveStocks}
-            disabled={busy || !stickers.length || dirtyCount === 0}
-            className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50 ml-auto"
-          >
-            {dirtyCount > 0 ? `Guardar (${dirtyCount})` : 'Guardar cambios'}
-          </button>
-        </div>
+        </FigCard>
       )}
 
-      {msg && (
-        <div className="rounded-lg bg-blue-900/40 border border-blue-700 text-blue-300 text-sm px-4 py-2">
-          {msg}
-        </div>
-      )}
+      {msg && <FigMessage>{msg}</FigMessage>}
 
       {albumCountry && albumCountry.stickers.length > 0 && (
         <AlbumSpread
@@ -442,10 +580,11 @@ function TabInventario() {
       )}
 
       {selected && stickers.length === 0 && (
-        <div className="text-center py-12 rounded-2xl border border-dashed border-slate-700">
-          <span className="text-4xl">📔</span>
-          <p className="text-slate-400 text-sm mt-3">Este país no tiene casillas aún. Generá el álbum con el botón de arriba.</p>
-        </div>
+        <FigEmpty
+          emoji="📔"
+          title="Álbum vacío"
+          subtitle="Este país no tiene casillas aún. Generá el álbum con el botón de arriba."
+        />
       )}
     </div>
   );
@@ -488,65 +627,67 @@ function TabCatalogo() {
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
 
-  const waShare = encodeURIComponent(`Mirá el catálogo de figuritas acá: ${publicUrl}`);
-
-  if (loading) return <div className="p-4 text-slate-400">Cargando…</div>;
+  if (loading) return <FigLoading label="Cargando catálogo…" />;
 
   return (
-    <div className="space-y-4 max-w-xl">
-      <p className="text-slate-400 text-sm">
-        Compartí este link en Instagram o WhatsApp. Apunta a tu app en Vercel
-        {appUrl ? `: ${appUrl}` : ''}.
+    <div className="space-y-4 sm:space-y-5 max-w-2xl">
+      <p className="text-sm text-red-200/60">
+        Compartí este link en Instagram o WhatsApp para que tus clientes armen pedidos desde el álbum.
+        {appUrl ? ` Tu app: ${appUrl}` : ''}
       </p>
+
       {!process.env.NEXT_PUBLIC_APP_URL && (
-        <p className="text-amber-400/90 text-xs rounded-lg border border-amber-700/50 bg-amber-900/20 px-3 py-2">
-          Configurá <code className="font-mono">NEXT_PUBLIC_APP_URL</code> en Vercel (ej. https://tu-app.vercel.app) para que el link copiado sea siempre el de producción.
-        </p>
+        <FigMessage>
+          Configurá <code className="font-mono text-red-100">NEXT_PUBLIC_APP_URL</code> en Vercel para que el link copiado sea siempre el de producción.
+        </FigMessage>
       )}
-      {msg && <div className="rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm px-4 py-2">{msg}</div>}
+
+      {msg && <FigMessage variant="error">{msg}</FigMessage>}
+
       {share ? (
-        <div className="space-y-3">
-          <div className="bg-slate-800 rounded-lg p-4 space-y-3">
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Link público (deploy)</p>
-            <p className="font-mono text-sm text-slate-200 break-all">{publicUrl}</p>
-            <div className="flex gap-2 flex-wrap">
-              <button type="button" onClick={copyLink} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium">
-                {copied ? '✓ Copiado!' : 'Copiar link'}
-              </button>
-              <a
-                href={publicUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-sm font-medium"
-              >
-                Abrir preview
+        <div className="space-y-4">
+          <FigCard>
+            <p className="text-[10px] uppercase tracking-wider text-red-200/50 font-semibold mb-2">
+              Link público del álbum
+            </p>
+            <p className="font-mono text-xs sm:text-sm text-red-50 break-all bg-black/30 rounded-xl p-3 border border-red-900/40">
+              {publicUrl}
+            </p>
+            <div className="flex flex-wrap gap-2 mt-4">
+              <FigBtnSecondary onClick={copyLink}>
+                {copied ? '✓ Copiado!' : '📋 Copiar link'}
+              </FigBtnSecondary>
+              <a href={publicUrl} target="_blank" rel="noreferrer" className={fig.btnSecondary + ' inline-flex items-center'}>
+                👁 Preview
               </a>
               <a
-                href={`https://wa.me/5491136012858?text=${waShare}`}
+                href={figuritasContactWhatsAppUrl(`Mirá el catálogo de figuritas acá: ${publicUrl}`)}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-medium"
+                className={fig.btnPrimary + ' inline-flex items-center !py-2'}
               >
-                Compartir por WhatsApp
+                WhatsApp
               </a>
             </div>
-          </div>
+          </FigCard>
+
           <div className="flex items-center gap-3 flex-wrap">
-            <span className={`inline-flex px-3 py-1.5 rounded text-xs font-medium ${share.isActive ? 'bg-green-900/40 text-green-300' : 'bg-slate-700 text-slate-400'}`}>
-              {share.isActive ? 'Catálogo activo' : 'Catálogo inactivo'}
-            </span>
-            <button
-              type="button"
-              onClick={toggleActive}
-              disabled={busy}
-              className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 hover:bg-slate-700 disabled:opacity-50"
+            <span
+              className={`inline-flex px-3 py-1.5 rounded-full text-xs font-semibold ${
+                share.isActive
+                  ? 'bg-red-600/30 text-red-100 border border-red-500/40'
+                  : 'bg-red-950/50 text-red-200/40 border border-red-900/40'
+              }`}
             >
+              {share.isActive ? '● Catálogo activo' : '○ Catálogo inactivo'}
+            </span>
+            <FigBtnSecondary onClick={toggleActive} disabled={busy}>
               {share.isActive ? 'Desactivar' : 'Activar'}
-            </button>
+            </FigBtnSecondary>
           </div>
         </div>
       ) : (
-        <p className="text-slate-400 text-sm">No se encontró información del catálogo compartido.</p>
+        <FigEmpty emoji="🔗" title="Sin catálogo compartido" subtitle="No se encontró información del link público." />
       )}
     </div>
   );
@@ -596,26 +737,40 @@ function TabPedidos() {
     } catch (e) { setMsg((e as Error).message); } finally { setBusyId(null); }
   };
 
-  if (loading) return <div className="p-4 text-slate-400">Cargando pedidos…</div>;
+  if (loading) return <FigLoading label="Cargando pedidos…" />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-center">
-        <label className="text-sm text-slate-400">Filtrar:</label>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm"
-        >
-          <option value="all">Todos</option>
-          {Object.entries(STATUS_LABELS).map(([val, label]) => (
-            <option key={val} value={val}>{label}</option>
-          ))}
-        </select>
-      </div>
-      {msg && <div className="rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm px-4 py-2">{msg}</div>}
-      {orders.length === 0 && <p className="text-slate-400 text-sm">Sin pedidos aún.</p>}
-      <div className="space-y-3">
+    <div className="space-y-4 sm:space-y-5">
+      <FigCard className="!py-3 sm:!py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <label className="text-sm text-red-200/70 font-medium shrink-0">Filtrar por estado</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={`${fig.inputSm} sm:max-w-[200px]`}
+          >
+            <option value="all">Todos</option>
+            {Object.entries(STATUS_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+          <span className="text-xs text-red-200/40 sm:ml-auto">
+            {orders.length} pedido{orders.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </FigCard>
+
+      {msg && <FigMessage variant="error">{msg}</FigMessage>}
+
+      {orders.length === 0 && (
+        <FigEmpty
+          emoji="📦"
+          title="Sin pedidos aún"
+          subtitle="Cuando un cliente arme su pedido desde el link público, aparecerá acá."
+        />
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
         {orders.map((order) => {
           const waText = buildFiguritasOrderWhatsApp({
             buyerName: order.buyerName,
@@ -625,68 +780,109 @@ function TabPedidos() {
             total: order.total,
           });
           return (
-            <div key={order.id} className="bg-slate-800 rounded-lg p-4 space-y-3 border border-slate-700">
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <div>
-                  <p className="font-medium text-slate-200">{order.buyerName ?? 'Sin nombre'}</p>
-                  {order.buyerPhone && <p className="text-sm text-slate-400">{order.buyerPhone}</p>}
-                  <p className="text-xs text-slate-500 mt-0.5">{new Date(order.createdAt).toLocaleString('es-AR')}</p>
-                  <p className="text-sm text-emerald-400 mt-1">{formatFiguritasMoney(order.total)}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={order.status} />
-                  <span className="text-xs text-slate-400">{order.items.length} items</span>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {order.items.map((item) => (
-                  <span key={item.id} className="text-xs bg-slate-700 rounded px-2 py-1 text-slate-300">
-                    {item.sticker.country.flag} #{item.sticker.number} ×{item.qty}
-                  </span>
-                ))}
-              </div>
-              {order.notes && <p className="text-xs text-slate-400 italic">"{order.notes}"</p>}
-              <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-700">
-                <select
-                  value={statusEdits[order.id] ?? order.status}
-                  onChange={(e) => setStatusEdits((p) => ({ ...p, [order.id]: e.target.value }))}
-                  className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-slate-200"
-                >
-                  {Object.entries(STATUS_LABELS).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => updateStatus(order.id)}
-                  disabled={busyId === order.id}
-                  className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-sm disabled:opacity-50"
-                >
-                  {busyId === order.id ? '…' : 'Actualizar'}
-                </button>
-                <a
-                  href={whatsappUrl(waText)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-green-700 hover:bg-green-600 text-white text-xs"
-                >
-                  WhatsApp
-                </a>
-                {confirmDelete === order.id ? (
-                  <div className="flex gap-2 ml-auto">
-                    <button onClick={() => deleteOrder(order.id)} disabled={busyId === order.id} className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs disabled:opacity-50">
-                      Confirmar
-                    </button>
-                    <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 rounded-lg bg-slate-700 text-xs">
-                      Cancelar
-                    </button>
+            <FigCard key={order.id} className="!p-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-3 border-b border-red-900/30 bg-red-950/20">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-red-50 truncate">
+                      {order.buyerName ?? 'Sin nombre'}
+                    </p>
+                    {order.buyerPhone && (
+                      <a
+                        href={`tel:${order.buyerPhone.replace(/\s/g, '')}`}
+                        className="text-sm text-red-200/70 hover:text-red-100"
+                      >
+                        {order.buyerPhone}
+                      </a>
+                    )}
+                    <p className="text-[11px] text-red-200/40 mt-1">
+                      {new Date(order.createdAt).toLocaleString('es-AR')}
+                    </p>
                   </div>
-                ) : (
-                  <button onClick={() => setConfirmDelete(order.id)} className="ml-auto text-xs text-slate-500 hover:text-red-400">
-                    Eliminar
-                  </button>
-                )}
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <StatusBadge status={order.status} />
+                    <p className="text-lg font-black text-white">
+                      {formatFiguritasMoney(order.total)}
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+
+              <div className="p-4 sm:p-5 space-y-3">
+                <p className="text-[10px] uppercase tracking-wider text-red-200/50 font-semibold">
+                  Figuritas ({order.items.length})
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {order.items.map((item) => (
+                    <span
+                      key={item.id}
+                      className="text-xs bg-red-950/50 border border-red-900/40 rounded-lg px-2 py-1 text-red-100"
+                    >
+                      {item.sticker.country.flag} {item.sticker.country.name}{' '}
+                      <span className="font-mono text-red-300">#{item.sticker.number}</span>
+                      {' '}×{item.qty}
+                    </span>
+                  ))}
+                </div>
+                {order.notes && (
+                  <p className="text-xs text-red-200/50 italic border-l-2 border-red-800/50 pl-2">
+                    {order.notes}
+                  </p>
+                )}
+
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-2 border-t border-red-900/30">
+                  <select
+                    value={statusEdits[order.id] ?? order.status}
+                    onChange={(e) => setStatusEdits((p) => ({ ...p, [order.id]: e.target.value }))}
+                    className={fig.inputSm + ' flex-1 min-w-[140px]'}
+                  >
+                    {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                  <FigBtnSecondary
+                    onClick={() => updateStatus(order.id)}
+                    disabled={busyId === order.id}
+                    className="sm:flex-1"
+                  >
+                    {busyId === order.id ? '…' : 'Actualizar estado'}
+                  </FigBtnSecondary>
+                  <a
+                    href={whatsappUrl(waText)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm px-4 py-2 transition-colors sm:flex-1"
+                  >
+                    💬 WhatsApp
+                  </a>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  {confirmDelete === order.id ? (
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <FigBtnPrimary
+                        onClick={() => deleteOrder(order.id)}
+                        disabled={busyId === order.id}
+                        className="!py-2 flex-1 sm:flex-none !from-red-700 !to-red-800"
+                      >
+                        Confirmar eliminar
+                      </FigBtnPrimary>
+                      <FigBtnSecondary onClick={() => setConfirmDelete(null)} className="!py-2">
+                        Cancelar
+                      </FigBtnSecondary>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(order.id)}
+                      className="text-xs text-red-200/40 hover:text-red-300 underline underline-offset-2"
+                    >
+                      Eliminar pedido
+                    </button>
+                  )}
+                </div>
+              </div>
+            </FigCard>
           );
         })}
       </div>
@@ -697,10 +893,10 @@ function TabPedidos() {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'paises', label: 'Países y precios' },
-  { key: 'inventario', label: 'Inventario' },
-  { key: 'catalogo', label: 'Catálogo público' },
-  { key: 'pedidos', label: 'Pedidos' },
+  { key: 'paises', label: 'Países y precios', icon: '🌍' },
+  { key: 'inventario', label: 'Inventario', icon: '📔' },
+  { key: 'catalogo', label: 'Catálogo público', icon: '🔗' },
+  { key: 'pedidos', label: 'Pedidos', icon: '📦' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -709,41 +905,17 @@ export default function FigurityasPage() {
   const [tab, setTab] = useState<TabKey>('paises');
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
-      <div className="rounded-2xl border border-amber-900/30 bg-gradient-to-r from-[#0B3D2E]/40 to-slate-900/40 px-5 py-4">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xl">🏆</span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500/80">Mundial 2026</span>
+    <div className="relative -m-4 md:-m-6 min-h-[calc(100vh-4rem)]">
+      <div className={fig.pageGlow} />
+      <div className="relative p-4 md:p-6 space-y-4 sm:space-y-5 max-w-6xl">
+        <AdminHero />
+        <FigTabs tabs={[...TABS]} active={tab} onChange={setTab} />
+        <div className="pt-1">
+          {tab === 'paises' && <TabPaisesPrecios />}
+          {tab === 'inventario' && <TabInventario />}
+          {tab === 'catalogo' && <TabCatalogo />}
+          {tab === 'pedidos' && <TabPedidos />}
         </div>
-        <h1 className="text-2xl font-black text-slate-100">Álbum de Figuritas</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Cargá stock, compartí el link público y gestioná pedidos de clientes.
-        </p>
-      </div>
-
-      {/* Tab bar */}
-      <div className="flex gap-1 border-b border-slate-800 overflow-x-auto">
-        {TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              tab === key
-                ? 'border-sky-500 text-sky-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      <div>
-        {tab === 'paises' && <TabPaisesPrecios />}
-        {tab === 'inventario' && <TabInventario />}
-        {tab === 'catalogo' && <TabCatalogo />}
-        {tab === 'pedidos' && <TabPedidos />}
       </div>
     </div>
   );

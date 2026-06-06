@@ -7,7 +7,10 @@ import { AlbumSpread } from '@/components/figuritas/AlbumSpread';
 import { CountryPicker } from '@/components/figuritas/PublicHero';
 import { PublicHero } from '@/components/figuritas/PublicHero';
 import { PublicCart } from '@/components/figuritas/PublicCart';
+import { PublicContactActions } from '@/components/figuritas/PublicContactActions';
 import type { CartLine, CatalogResponse, CountryRow } from '@/components/figuritas/types';
+import { stickerEffectivePrice } from '@/components/figuritas/types';
+import { fig } from '@/components/figuritas/theme';
 import {
   buildFiguritasOrderWhatsApp,
   formatFiguritasMoney,
@@ -100,7 +103,7 @@ export default function PublicFiguritasPage() {
           flag: country.flag,
           flagUrl: country.flagUrl,
           number: sticker.number,
-          priceUnit: unitPrice(country),
+          priceUnit: stickerEffectivePrice(sticker, unitPrice(country)),
           qty: 1,
           maxStock: sticker.stock,
         },
@@ -173,21 +176,21 @@ export default function PublicFiguritasPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0f0d] text-slate-200 flex flex-col items-center justify-center p-6 gap-4">
-        <div className="w-12 h-12 rounded-full border-2 border-amber-400/30 border-t-amber-400 animate-spin" />
-        <p className="text-slate-400 text-sm">Abriendo el álbum de figuritas…</p>
+      <div className={`${fig.pageBg} flex flex-col items-center justify-center p-6 gap-4`}>
+        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-red-500/30 border-t-red-400 animate-spin" />
+        <p className="text-red-200/50 text-sm">Abriendo el álbum de figuritas…</p>
       </div>
     );
   }
 
   if (error && !catalog) {
     return (
-      <div className="min-h-screen bg-[#0a0f0d] text-slate-200 flex items-center justify-center p-6">
+      <div className={`${fig.pageBg} flex items-center justify-center p-4 sm:p-6`}>
         <div className="max-w-md text-center space-y-4">
           <span className="text-5xl">📭</span>
-          <h1 className="text-xl font-bold">Catálogo no disponible</h1>
-          <p className="text-slate-400 text-sm">{error}</p>
-          <p className="text-slate-500 text-xs">
+          <h1 className="text-xl font-bold text-white">Catálogo no disponible</h1>
+          <p className="text-red-200/60 text-sm">{error}</p>
+          <p className="text-red-200/40 text-xs">
             El link puede haber expirado o el local desactivó el catálogo. Pedile un link nuevo al kiosco.
           </p>
         </div>
@@ -211,29 +214,29 @@ export default function PublicFiguritasPage() {
     });
 
     return (
-      <div className="min-h-screen bg-[#0a0f0d] text-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-md w-full rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/50 to-slate-900 p-8 space-y-5 text-center shadow-2xl">
+      <div className={`${fig.pageBg} flex items-center justify-center p-4 sm:p-6`}>
+        <div className="max-w-md w-full rounded-3xl border border-red-500/30 bg-gradient-to-b from-red-950/60 to-[#0c0606] p-6 sm:p-8 space-y-5 text-center shadow-2xl">
           <div className="text-5xl">🎉</div>
-          <h1 className="text-2xl font-black text-white">¡Pedido enviado!</h1>
-          <p className="text-slate-300 text-sm leading-relaxed">
+          <h1 className="text-xl sm:text-2xl font-black text-white">¡Pedido enviado!</h1>
+          <p className="text-red-100/80 text-sm leading-relaxed">
             <strong className="text-white">{catalog.business.name}</strong> ya recibió tu pedido de figuritas.
-            Total: <strong className="text-amber-400">{formatFiguritasMoney(done.total)}</strong>
+            Total: <strong className="text-red-200">{formatFiguritasMoney(done.total)}</strong>
           </p>
-          <p className="text-slate-400 text-xs">
+          <p className="text-red-200/50 text-xs">
             Te van a contactar por WhatsApp para confirmar pago y retiro en el local.
           </p>
           <a
             href={whatsappUrl(waText)}
             target="_blank"
             rel="noreferrer"
-            className="block w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold shadow-lg"
+            className={`block w-full ${fig.btnPrimary}`}
           >
             Avisar por WhatsApp
           </a>
           <button
             type="button"
             onClick={() => { setDone(null); load(); }}
-            className="text-sm text-amber-400/90 hover:text-amber-300 underline underline-offset-2"
+            className="text-sm text-red-300/90 hover:text-red-200 underline underline-offset-2"
           >
             Seguir viendo el álbum
           </button>
@@ -245,29 +248,25 @@ export default function PublicFiguritasPage() {
   const stats = catalog?.stats ?? { countries: 0, availableUnits: 0, availableSlots: 0 };
 
   return (
-    <div className="min-h-screen bg-[#0a0f0d] text-slate-100 pb-36">
-      {/* Fondo sutil tipo álbum */}
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_20%_0%,rgba(251,191,36,0.06),transparent_50%),radial-gradient(ellipse_at_80%_100%,rgba(16,185,129,0.05),transparent_50%)]" />
+    <div className={`${fig.pageBg} pb-36 sm:pb-40`}>
+      <div className={fig.pageGlow} />
 
-      <div className="relative max-w-3xl mx-auto px-4 pt-6 space-y-6">
+      <div className="relative max-w-3xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
         {catalog && (
           <PublicHero
             businessName={catalog.business.name}
+            businessAddress={catalog.business.address}
             stats={stats}
             onStart={scrollToAlbum}
           />
         )}
 
-        {error && (
-          <div className="rounded-xl bg-red-950/50 border border-red-700/50 text-red-200 text-sm px-4 py-3">
-            {error}
-          </div>
-        )}
+        {error && <div className={fig.msgError}>{error}</div>}
 
         {!catalog?.countries.length ? (
           <div className="text-center py-16 space-y-2">
             <span className="text-4xl">📔</span>
-            <p className="text-slate-400">Todavía no hay figuritas cargadas en este catálogo.</p>
+            <p className="text-red-200/50">Todavía no hay figuritas cargadas en este catálogo.</p>
           </div>
         ) : (
           <div ref={albumRef} className="space-y-4 scroll-mt-4">
@@ -277,16 +276,16 @@ export default function PublicFiguritasPage() {
               onSelect={setSelectedCountryId}
             />
 
-            <div className="flex items-center justify-between px-1">
-              <p className="text-xs text-slate-500">
-                Leyenda: <span className="text-amber-400">dorado</span> = disponible · gris = agotada
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+              <p className="text-xs text-red-200/40">
+                Leyenda: <span className="text-red-400">rojo</span> = disponible · gris = agotada
               </p>
-              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+              <label className="flex items-center gap-2 text-xs text-red-200/50 cursor-pointer self-end sm:self-auto">
                 <input
                   type="checkbox"
                   checked={onlyAvailable}
                   onChange={(e) => setOnlyAvailable(e.target.checked)}
-                  className="rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500/50"
+                  className="rounded border-red-800 bg-red-950 text-red-500 focus:ring-red-500/50"
                 />
                 Solo disponibles
               </label>
@@ -305,8 +304,17 @@ export default function PublicFiguritasPage() {
           </div>
         )}
 
-        <footer className="text-center text-[10px] text-slate-600 pb-4">
-          Álbum de figuritas · Mundial 2026 · {catalog?.business.name}
+        <footer className="text-center space-y-4 pb-4">
+          {catalog && (
+            <PublicContactActions
+              businessName={catalog.business.name}
+              address={catalog.business.address}
+              compact
+            />
+          )}
+          <p className="text-[10px] text-red-200/30">
+            Álbum de figuritas · Mundial 2026 · {catalog?.business.name}
+          </p>
         </footer>
       </div>
 

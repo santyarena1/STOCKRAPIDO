@@ -477,6 +477,7 @@ model Sticker {
   countryId  String
   number     Int      // número dentro del país (1, 2, 3...)
   stock      Int      @default(0)
+  priceUnit  Decimal? // null = hereda precio del país
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { CountryFlag } from './CountryFlag';
+import { fig } from './theme';
 import type { CartLine } from './types';
 import { formatFiguritasMoney } from '@/lib/figuritas';
 
@@ -36,64 +37,74 @@ export function PublicCart({
   const count = lines.reduce((a, l) => a + l.qty, 0);
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-30">
-      <div className="mx-auto max-w-lg sm:max-w-2xl">
-        <div className="bg-slate-900/95 backdrop-blur-xl border border-amber-500/30 rounded-t-2xl shadow-[0_-8px_32px_rgba(0,0,0,0.5)] overflow-hidden">
+    <div className="fixed bottom-0 inset-x-0 z-30 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto max-w-lg sm:max-w-2xl lg:max-w-3xl px-2 sm:px-4">
+        <div className="bg-[#1a0a0a]/95 backdrop-blur-xl border border-red-500/30 rounded-t-2xl shadow-[0_-8px_32px_rgba(127,29,29,0.5)] overflow-hidden">
           <button
             type="button"
             onClick={onToggle}
-            className="w-full px-5 py-4 flex items-center justify-between"
+            className="w-full px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between gap-3"
           >
-            <div className="flex items-center gap-3">
-              <span className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black flex items-center justify-center text-lg">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <span className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-red-600 text-white font-black flex items-center justify-center text-base sm:text-lg">
                 {count}
               </span>
-              <div className="text-left">
-                <p className="font-bold text-white text-sm">Tu pedido de figuritas</p>
-                <p className="text-xs text-slate-400">
-                  {count === 0 ? 'Tocá figuritas doradas para agregar' : `${count} en el carrito`}
+              <div className="text-left min-w-0">
+                <p className="font-bold text-white text-sm truncate">Tu pedido de figuritas</p>
+                <p className="text-xs text-red-200/50 truncate">
+                  {count === 0 ? 'Tocá figuritas rojas para agregar' : `${count} en el carrito`}
                 </p>
               </div>
             </div>
-            <p className="text-xl font-black text-amber-400">{formatFiguritasMoney(total)}</p>
+            <p className="text-lg sm:text-xl font-black text-red-300 shrink-0">{formatFiguritasMoney(total)}</p>
           </button>
 
           {expanded && (
-            <div className="border-t border-slate-700 max-h-[55vh] overflow-y-auto px-5 py-4 space-y-4">
+            <div className="border-t border-red-900/50 max-h-[min(55vh,420px)] overflow-y-auto px-4 sm:px-5 py-4 space-y-4">
               {lines.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4">
-                  Todavía no elegiste ninguna figurita. Las disponibles brillan en dorado en el álbum.
+                <p className="text-sm text-red-200/50 text-center py-4">
+                  Todavía no elegiste ninguna figurita. Las disponibles brillan en rojo en el álbum.
                 </p>
               ) : (
                 <>
                   <ul className="space-y-2">
                     {lines.map((l) => (
-                      <li key={l.stickerId} className="flex items-center gap-2 text-sm bg-slate-800/60 rounded-lg px-3 py-2">
+                      <li
+                        key={l.stickerId}
+                        className="flex items-center gap-2 text-sm bg-red-950/40 border border-red-900/30 rounded-xl px-3 py-2"
+                      >
                         <CountryFlag country={{ name: l.countryName, flag: l.flag, flagUrl: l.flagUrl }} size="sm" />
-                        <span className="flex-1 truncate font-medium text-slate-200">
-                          {l.countryName} <span className="text-amber-400 font-mono">#{l.number}</span>
+                        <span className="flex-1 truncate font-medium text-red-50 text-xs sm:text-sm">
+                          {l.countryName}{' '}
+                          <span className="text-red-300 font-mono">#{l.number}</span>
                         </span>
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => onSetQty(l.stickerId, l.qty - 1)} className="w-7 h-7 rounded-lg bg-slate-700 text-white font-bold">−</button>
-                          <span className="w-6 text-center font-bold">{l.qty}</span>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => onSetQty(l.stickerId, l.qty - 1)}
+                            className="w-7 h-7 rounded-lg bg-red-900/60 text-white font-bold touch-manipulation"
+                          >
+                            −
+                          </button>
+                          <span className="w-5 text-center font-bold text-sm">{l.qty}</span>
                           <button
                             type="button"
                             disabled={l.qty >= l.maxStock}
                             onClick={() => onSetQty(l.stickerId, l.qty + 1)}
-                            className="w-7 h-7 rounded-lg bg-slate-700 text-white font-bold disabled:opacity-40"
+                            className="w-7 h-7 rounded-lg bg-red-900/60 text-white font-bold disabled:opacity-40 touch-manipulation"
                           >
                             +
                           </button>
                         </div>
-                        <span className="w-16 text-right text-amber-300/90 text-xs font-semibold">
+                        <span className="w-14 sm:w-16 text-right text-red-200 text-[10px] sm:text-xs font-semibold shrink-0">
                           {formatFiguritasMoney(l.priceUnit * l.qty)}
                         </span>
                       </li>
                     ))}
                   </ul>
 
-                  <div className="space-y-2 pt-2">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs font-semibold text-red-200/60 uppercase tracking-wide">
                       Datos para el retiro
                     </p>
                     <input
@@ -101,21 +112,21 @@ export function PublicCart({
                       placeholder="Tu nombre *"
                       value={buyerName}
                       onChange={(e) => onName(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-500"
+                      className={fig.input}
                     />
                     <input
                       type="tel"
                       placeholder="WhatsApp / teléfono *"
                       value={buyerPhone}
                       onChange={(e) => onPhone(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-500"
+                      className={fig.input}
                     />
                     <input
                       type="text"
                       placeholder="Notas (ej. retiro sábado tarde)"
                       value={notes}
                       onChange={(e) => onNotes(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-500"
+                      className={fig.input}
                     />
                   </div>
 
@@ -123,11 +134,11 @@ export function PublicCart({
                     type="button"
                     onClick={onSubmit}
                     disabled={submitting || !lines.length || !buyerName.trim() || !buyerPhone.trim()}
-                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+                    className={`w-full ${fig.btnPrimary}`}
                   >
                     {submitting ? 'Enviando pedido…' : 'Confirmar pedido de figuritas'}
                   </button>
-                  <p className="text-[10px] text-center text-slate-500">
+                  <p className="text-[10px] text-center text-red-200/40">
                     Al confirmar, el local recibe tu pedido y te contacta para coordinar el pago y retiro.
                   </p>
                 </>

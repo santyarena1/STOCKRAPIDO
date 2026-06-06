@@ -8,10 +8,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WORLDCUP_2026_COUNTRIES } from './worldcup-countries.seed';
 
 type PriceEntry = { countryId: string; price: number };
+type StickerPriceEntry = { stickerId: string; price: number | null };
 type OrderItem = { stickerId: string; qty: number };
 type StockEntry = { number: number; stock?: number; delta?: number };
 
 const RETURNABLE_STATUSES = ['pending', 'confirmed'];
+
+function effectiveStickerPrice(
+  sticker: { priceUnit: Decimal | null },
+  country: { priceUnit: Decimal },
+): Decimal {
+  return sticker.priceUnit ?? country.priceUnit;
+}
 
 @Injectable()
 export class StickersService {
@@ -131,6 +139,44 @@ export class StickersService {
     return { updated };
   }
 
+  async setGlobalPrice(businessId: string, price: number) {
+    if (price < 0) throw new BadRequestException('El precio no puede ser negativo');
+
+    const [countries, stickers] = await this.prisma.$transaction([
+      this.prisma.stickerCountry.updateMany({
+        where: { businessId },
+        data: { priceUnit: new Decimal(price) },
+      }),
+      this.prisma.sticker.updateMany({
+        where: { businessId },
+        data: { priceUnit: null },
+      }),
+    ]);
+
+    return { countriesUpdated: countries.count, stickerOverridesCleared: stickers.count, price };
+  }
+
+  async bulkUpdateStickerPrices(businessId: string, prices: StickerPriceEntry[]) {
+    let updated = 0;
+
+    for (const entry of prices) {
+      const sticker = await this.prisma.sticker.findFirst({
+        where: { id: entry.stickerId, businessId },
+      });
+      if (!sticker) continue;
+
+      await this.prisma.sticker.update({
+        where: { id: entry.stickerId },
+        data: {
+          priceUnit: entry.price === null ? null : new Decimal(entry.price),
+        },
+      });
+      updated++;
+    }
+
+    return { updated };
+  }
+
   // ---------- Stickers ----------
 
   async ensureStickersForCountry(businessId: string, countryId: string, maxNumber: number) {
@@ -241,7 +287,7 @@ export class StickersService {
   async getCatalogByToken(token: string) {
     const share = await this.prisma.stickerCatalogShare.findUnique({
       where: { token },
-      include: { business: { select: { name: true } } },
+      include: { business: { select: { name: true, address: true } } },
     });
     if (!share || !share.isActive) throw new NotFoundException('Catálogo no encontrado o inactivo');
 
@@ -251,7 +297,7 @@ export class StickersService {
       include: {
         stickers: {
           orderBy: { number: 'asc' },
-          select: { id: true, number: true, stock: true },
+          select: { id: true, number: true, stock: true, priceUnit: true },
         },
       },
     });
@@ -272,7 +318,13 @@ export class StickersService {
           maxNumber,
           availableCount,
           totalUnits,
-          stickers: c.stickers,
+          stickers: c.stickers.map((s) => ({
+            id: s.id,
+            number: s.number,
+            stock: s.stock,
+            priceUnit: s.priceUnit,
+            effectivePrice: effectiveStickerPrice(s, c),
+          })),
         };
       });
 
@@ -281,7 +333,7 @@ export class StickersService {
     const availableUnits = mapped.reduce((acc, c) => acc + c.totalUnits, 0);
 
     return {
-      business: { name: share.business.name },
+      business: { name: share.business.name, address: share.business.address },
       meta: {
         title: 'Álbum de Figuritas — Mundial 2026',
         description:
@@ -318,6 +370,7 @@ export class StickersService {
     const resolvedItems: {
       sticker: { id: string; stock: number; number: number; country: { name: string; flag: string | null; priceUnit: Decimal } };
       qty: number;
+      unitPrice: Decimal;
     }[] = [];
 
     for (const item of items) {
@@ -332,8 +385,9 @@ export class StickersService {
           `Stock insuficiente para ${sticker.country.flag ?? ''} #${sticker.number}. Disponible: ${sticker.stock}`,
         );
       }
-      resolvedItems.push({ sticker, qty: item.qty });
-      total = total.add(sticker.country.priceUnit.mul(item.qty));
+      const unitPrice = effectiveStickerPrice(sticker, sticker.country);
+      resolvedItems.push({ sticker, qty: item.qty, unitPrice });
+      total = total.add(unitPrice.mul(item.qty));
     }
 
     if (!resolvedItems.length) throw new BadRequestException('Pedido vacío');
@@ -348,10 +402,10 @@ export class StickersService {
           notes: notes?.trim() || null,
           total,
           items: {
-            create: resolvedItems.map(({ sticker, qty }) => ({
+            create: resolvedItems.map(({ sticker, qty, unitPrice }) => ({
               stickerId: sticker.id,
               qty,
-              unitPrice: sticker.country.priceUnit,
+              unitPrice,
             })),
           },
         },

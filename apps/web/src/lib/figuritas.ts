@@ -1,7 +1,26 @@
-/** WhatsApp del kiosco para pedidos de figuritas */
-export const FIGURITAS_WHATSAPP = '5491136012858';
+/** WhatsApp del kiosco para pedidos de figuritas (11 2779 1954) */
+export const FIGURITAS_WHATSAPP = '5491127791954';
+export const FIGURITAS_WHATSAPP_DISPLAY = '11 2779 1954';
 
 export { getPublicFiguritasCatalogUrl } from './env-urls';
+
+export function googleMapsSearchUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
+}
+
+/** Link a Maps: env fijo > búsqueda por dirección del negocio */
+export function getFiguritasMapsUrl(address?: string | null): string | null {
+  const fromEnv = process.env.NEXT_PUBLIC_FIGURITAS_MAPS_URL?.trim();
+  if (fromEnv) return fromEnv;
+  if (address?.trim()) return googleMapsSearchUrl(address);
+  return null;
+}
+
+export function figuritasContactWhatsAppUrl(
+  message = 'Hola! Quiero consultar por figuritas del álbum Mundial.',
+) {
+  return `https://wa.me/${FIGURITAS_WHATSAPP}?text=${encodeURIComponent(message)}`;
+}
 
 export function formatFiguritasMoney(value: number | string) {
   const n = Number(value);

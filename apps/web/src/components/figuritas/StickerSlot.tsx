@@ -1,5 +1,6 @@
 'use client';
 
+import { fig } from './theme';
 import { formatFiguritasMoney } from '@/lib/figuritas';
 
 type PublicProps = {
@@ -27,25 +28,24 @@ export function StickerSlot(props: PublicProps | AdminProps) {
   if (props.mode === 'admin') {
     return (
       <div
-        className={`group relative aspect-[3/4] rounded-lg border-2 p-1 flex flex-col items-center justify-between transition-all ${
-          available
-            ? 'border-emerald-500/60 bg-gradient-to-b from-emerald-950/80 to-slate-900 shadow-[0_2px_8px_rgba(16,185,129,0.15)]'
-            : 'border-slate-700/80 bg-slate-900/80 opacity-70'
+        className={`group relative aspect-[3/4] rounded-lg border-2 p-0.5 sm:p-1 flex flex-col items-center justify-between transition-all touch-manipulation ${
+          available ? fig.slotAdminAvail : 'border-red-950/80 bg-red-950/20 opacity-60'
         }`}
       >
-        <span className="text-[10px] font-bold text-amber-400/90 tracking-wider">FIG.</span>
-        <span className="text-lg font-black text-white tabular-nums">{number}</span>
+        <span className="text-[8px] sm:text-[10px] font-bold text-red-300/80 tracking-wider">FIG.</span>
+        <span className="text-base sm:text-lg font-black text-white tabular-nums">{number}</span>
         <input
           type="number"
           min={0}
+          inputMode="numeric"
           value={stock}
           onChange={(e) => props.onChange(Math.max(0, Number(e.target.value) || 0))}
-          className="w-full text-center bg-slate-800 border border-slate-600 rounded text-xs py-0.5 text-emerald-300 font-bold"
+          className="w-full text-center bg-red-950/80 border border-red-800/50 rounded text-[10px] sm:text-xs py-0.5 text-red-200 font-bold"
         />
         <button
           type="button"
           onClick={props.onQuickAdd}
-          className="opacity-0 group-hover:opacity-100 absolute -top-2 -right-2 w-6 h-6 rounded-full bg-sky-500 text-white text-sm font-bold shadow-lg transition-opacity"
+          className="sm:opacity-0 sm:group-hover:opacity-100 absolute -top-1.5 -right-1.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-500 text-white text-xs font-bold shadow-lg transition-opacity"
           title="+1 repetida"
         >
           +
@@ -57,35 +57,33 @@ export function StickerSlot(props: PublicProps | AdminProps) {
   const { inCart, price, onAdd, onRemove } = props;
   const canAdd = available && inCart < stock;
   const soldOut = !available;
-  const maxed = available && inCart >= stock;
 
   return (
     <button
       type="button"
       disabled={soldOut}
       onClick={() => (canAdd ? onAdd() : inCart > 0 && onRemove ? onRemove() : undefined)}
-      className={`relative aspect-[3/4] rounded-xl border-2 p-1.5 flex flex-col items-center justify-between transition-all duration-200 ${
+      className={`relative aspect-[3/4] rounded-lg sm:rounded-xl border-2 p-1 sm:p-1.5 flex flex-col items-center justify-between transition-all duration-200 touch-manipulation ${
         soldOut
-          ? 'border-slate-700/50 bg-slate-900/60 cursor-not-allowed grayscale'
+          ? 'border-red-950/40 bg-red-950/20 cursor-not-allowed grayscale opacity-50'
           : inCart > 0
-            ? 'border-amber-400 bg-gradient-to-b from-amber-950/90 via-slate-900 to-slate-950 shadow-[0_0_20px_rgba(251,191,36,0.25)] scale-[1.02]'
+            ? fig.slotInCart
             : canAdd
-              ? 'border-amber-500/70 bg-gradient-to-b from-amber-900/40 via-slate-900 to-slate-950 shadow-md hover:shadow-[0_0_16px_rgba(251,191,36,0.2)] hover:scale-[1.04] active:scale-95 cursor-pointer'
-              : 'border-slate-600 bg-slate-900/80 opacity-60 cursor-not-allowed'
+              ? fig.slotAvailable
+              : 'border-red-900/50 bg-red-950/30 opacity-60 cursor-not-allowed'
       }`}
     >
-      {/* Brillo tipo foil */}
       {!soldOut && (
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-tr from-white/10 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 rounded-lg sm:rounded-xl bg-gradient-to-tr from-white/10 via-transparent to-transparent pointer-events-none" />
       )}
 
-      <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-amber-500/80 z-10">
+      <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.12em] text-red-300/70 z-10">
         {soldOut ? '—' : 'fig.'}
       </span>
 
       <span
-        className={`text-xl sm:text-2xl font-black tabular-nums z-10 ${
-          soldOut ? 'text-slate-600' : 'text-white drop-shadow'
+        className={`text-lg sm:text-xl md:text-2xl font-black tabular-nums z-10 ${
+          soldOut ? 'text-red-900/40' : 'text-white drop-shadow'
         }`}
       >
         {number}
@@ -93,21 +91,23 @@ export function StickerSlot(props: PublicProps | AdminProps) {
 
       <div className="z-10 w-full text-center">
         {soldOut ? (
-          <span className="text-[9px] font-medium text-slate-500 uppercase">Agotada</span>
+          <span className="text-[8px] sm:text-[9px] font-medium text-red-900/50 uppercase">Agotada</span>
         ) : (
           <>
-            <span className="block text-[10px] font-semibold text-emerald-400">
+            <span className="block text-[9px] sm:text-[10px] font-semibold text-red-300">
               {stock - inCart} disp.
             </span>
             {price != null && price > 0 && (
-              <span className="block text-[9px] text-slate-400">{formatFiguritasMoney(price)}</span>
+              <span className="block text-[8px] sm:text-[9px] text-red-200/50 sm:block">
+                {formatFiguritasMoney(price)}
+              </span>
             )}
           </>
         )}
       </div>
 
       {inCart > 0 && (
-        <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 rounded-full bg-amber-400 text-slate-950 text-xs font-black flex items-center justify-center shadow-lg z-20">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] sm:min-w-[22px] sm:h-[22px] px-1 rounded-full bg-white text-red-700 text-[10px] sm:text-xs font-black flex items-center justify-center shadow-lg z-20">
           {inCart}
         </span>
       )}
