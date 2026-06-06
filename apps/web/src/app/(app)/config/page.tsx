@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
+import { ImageUploader, MultiImageUploader } from '@/components/ImageUploader';
 
 type Business = {
   id: string;
@@ -286,73 +287,6 @@ export default function ConfigPage() {
     }
   };
 
-  const handleIconFile = (fileList: FileList | null) => {
-    const file = fileList?.[0];
-    if (!file || !file.type.startsWith('image/')) return;
-    if (file.size > 240 * 1024) {
-      alert('Elegí una imagen más chica (máx. ~240 KB).');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = typeof reader.result === 'string' ? reader.result : '';
-      setBrandForm((f) => ({ ...f, logoUrl: data }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleCdQrFile = (fileList: FileList | null) => {
-    const file = fileList?.[0];
-    if (!file || !file.type.startsWith('image/')) return;
-    if (file.size > 240 * 1024) {
-      alert('El QR debe ser más chico (máx. ~240 KB).');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = typeof reader.result === 'string' ? reader.result : '';
-      setCdForm((f) => ({ ...f, mercadopagoQrUrl: data }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleCdPromoFiles = (fileList: FileList | null) => {
-    const files = fileList ? Array.from(fileList) : [];
-    if (files.length === 0) return;
-    const remaining = 12 - cdForm.promoImageUrls.length;
-    if (remaining <= 0) {
-      alert('Máximo 12 imágenes de promoción.');
-      return;
-    }
-    const toRead = files.slice(0, remaining);
-    let idx = 0;
-    const next: string[] = [...cdForm.promoImageUrls];
-    const readOne = () => {
-      if (idx >= toRead.length) {
-        setCdForm((f) => ({ ...f, promoImageUrls: next }));
-        return;
-      }
-      const file = toRead[idx];
-      idx += 1;
-      if (!file.type.startsWith('image/')) {
-        readOne();
-        return;
-      }
-      if (file.size > 240 * 1024) {
-        alert(`"${file.name}" es demasiado grande (máx. ~240 KB).`);
-        readOne();
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const data = typeof reader.result === 'string' ? reader.result : '';
-        if (data) next.push(data);
-        readOne();
-      };
-      reader.readAsDataURL(file);
-    };
-    readOne();
-  };
 
   const handleSaveCustomerDisplay = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -522,41 +456,15 @@ export default function ConfigPage() {
         </div>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Icono (sidebar y pestaña del navegador)</label>
-          <div className="flex flex-wrap items-center gap-3 mt-1">
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-              onChange={(e) => handleIconFile(e.target.files)}
-              className="text-sm text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-slate-200"
-            />
-            {brandForm.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={brandForm.logoUrl} alt="" className="h-10 w-10 rounded-lg object-cover border border-slate-600" />
-            ) : (
-              <span className="text-slate-500 text-sm">Sin icono personalizado</span>
-            )}
-            <button
-              type="button"
-              disabled={!brandForm.logoUrl || savingBrand}
-              onClick={() => setBrandForm((f) => ({ ...f, logoUrl: '' }))}
-              className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-            >
-              Quitar icono
-            </button>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">
-            PNG/JPEG/WebP recomendado; máx. ~240 KB. También podés pegar una URL público https abajo.
-          </p>
-          <input
-            type="url"
-            placeholder="https://…/logo.png (opcional)"
-            value={brandForm.logoUrl.startsWith('http') ? brandForm.logoUrl : ''}
-            onChange={(e) => {
-              const v = e.target.value.trim();
-              setBrandForm((f) => ({ ...f, logoUrl: v }));
-            }}
-            className="mt-2 w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 placeholder:text-slate-600 text-sm"
+          <ImageUploader
+            value={brandForm.logoUrl}
+            onChange={(url) => setBrandForm((f) => ({ ...f, logoUrl: url }))}
+            maxPx={512}
+            quality={0.9}
+            previewClass="h-10 w-10 object-cover"
+            label="Subir icono"
           />
+          <p className="text-xs text-slate-500 mt-2">PNG/JPEG/WebP. Cualquier tamaño — se optimiza automáticamente.</p>
         </div>
         <button type="submit" disabled={savingBrand} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
           {savingBrand ? 'Guardando...' : 'Guardar apariencia'}
@@ -584,61 +492,25 @@ export default function ConfigPage() {
         </div>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Imagen del QR Mercado Pago</label>
-          <div className="flex flex-wrap items-center gap-3 mt-1">
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => handleCdQrFile(e.target.files)}
-              className="text-sm text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-slate-200"
-            />
-            {cdForm.mercadopagoQrUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={cdForm.mercadopagoQrUrl} alt="" className="h-24 w-24 rounded-lg object-contain bg-white p-1 border border-slate-600" />
-            ) : (
-              <span className="text-slate-500 text-sm">Sin QR cargado</span>
-            )}
-            <button
-              type="button"
-              disabled={!cdForm.mercadopagoQrUrl || savingCd}
-              onClick={() => setCdForm((f) => ({ ...f, mercadopagoQrUrl: '' }))}
-              className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-            >
-              Quitar QR
-            </button>
-          </div>
+          <ImageUploader
+            value={cdForm.mercadopagoQrUrl}
+            onChange={(url) => setCdForm((f) => ({ ...f, mercadopagoQrUrl: url }))}
+            maxPx={800}
+            quality={0.92}
+            previewClass="h-24 w-24 object-contain bg-white p-1"
+            label="Subir QR"
+          />
+          <p className="text-xs text-slate-500 mt-2">PNG recomendado. Cualquier tamaño — se optimiza automáticamente.</p>
         </div>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Imágenes promocionales (sin venta activa)</label>
-          <p className="text-xs text-slate-500 mb-2">Hasta 12 imágenes; rotan cada unos segundos. PNG/JPEG ~240 KB c/u.</p>
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            multiple
-            onChange={(e) => handleCdPromoFiles(e.target.files)}
-            className="text-sm text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-slate-200"
+          <p className="text-xs text-slate-500 mb-2">Hasta 12 imágenes; rotan cada unos segundos. Cualquier tamaño — se optimizan automáticamente.</p>
+          <MultiImageUploader
+            values={cdForm.promoImageUrls}
+            onChange={(urls) => setCdForm((f) => ({ ...f, promoImageUrls: urls }))}
+            maxCount={12}
+            maxPx={1400}
           />
-          {cdForm.promoImageUrls.length > 0 && (
-            <ul className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {cdForm.promoImageUrls.map((url, i) => (
-                <li key={i} className="relative group rounded-lg overflow-hidden border border-slate-600 aspect-video bg-slate-800">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCdForm((f) => ({
-                        ...f,
-                        promoImageUrls: f.promoImageUrls.filter((_, j) => j !== i),
-                      }))
-                    }
-                    className="absolute top-1 right-1 w-7 h-7 rounded bg-black/70 text-white text-sm opacity-0 group-hover:opacity-100"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
         <button type="submit" disabled={savingCd} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
           {savingCd ? 'Guardando…' : 'Guardar pantalla cliente'}

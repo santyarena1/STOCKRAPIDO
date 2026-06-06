@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
+import { ImageUploader } from '@/components/ImageUploader';
 
 type ProductBatch = {
   id: string;
@@ -267,22 +268,15 @@ export default function EditarProductoPage() {
           <div className="border-t border-slate-700 pt-3">
             <p className="text-sm font-medium text-slate-300 mb-1">Datos internos / catálogo</p>
             <p className="text-xs text-slate-500 mb-3">Campos del proveedor. Unidades por bulto define si el producto se vende por bulto (referencia interna).</p>
-            <div className="flex items-start gap-3 mb-3">
-              {form.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={form.imageUrl} alt="" className="w-16 h-16 object-contain rounded bg-white/5 shrink-0" />
-              ) : (
-                <div className="w-16 h-16 rounded bg-slate-800 shrink-0" />
-              )}
-              <div className="flex-1">
-                <label className="block text-sm text-slate-400 mb-1">URL de imagen</label>
-                <input
-                  value={form.imageUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
-                  placeholder="https://…"
-                />
-              </div>
+            <div className="mb-3">
+              <label className="block text-sm text-slate-400 mb-2">Imagen del producto</label>
+              <ImageUploader
+                value={form.imageUrl}
+                onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+                maxPx={1200}
+                previewClass="w-16 h-16 object-contain"
+                label="Subir imagen"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               {([
