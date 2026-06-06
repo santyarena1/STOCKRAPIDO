@@ -142,6 +142,8 @@ export default function POSPage() {
       stockControl: boolean;
       barcode?: string | null;
       imageUrl?: string | null;
+      unitsPerBox?: string | null;
+      unitsPerBoxNum?: number | null;
     }[]
   >([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -364,6 +366,8 @@ export default function POSPage() {
             stockControl?: boolean;
             barcode?: string | null;
             imageUrl?: string | null;
+            unitsPerBox?: string | null;
+            unitsPerBoxNum?: number | null;
           }>
         >('/products/search', {
           params: { q: term, limit: '15' },
@@ -378,6 +382,8 @@ export default function POSPage() {
           stockControl: p.stockControl !== false,
           barcode: p.barcode ?? null,
           imageUrl: p.imageUrl ?? null,
+          unitsPerBox: p.unitsPerBox ?? null,
+          unitsPerBoxNum: p.unitsPerBoxNum ?? null,
         }));
         if (mapped.length === 1 && mapped[0].barcode && mapped[0].barcode === term) {
           addToCart(mapped[0], 1);
@@ -809,9 +815,17 @@ export default function POSPage() {
                         ) : (
                           <span className="w-9 h-9 rounded bg-slate-700 shrink-0" />
                         )}
-                        <span className="text-slate-200 truncate">{p.name}</span>
+                        <span className="flex flex-col min-w-0">
+                          <span className="text-slate-200 truncate">{p.name}</span>
+                          {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && (
+                            <span className="text-xs text-violet-400/80">× {p.unitsPerBoxNum} un. (bulto)</span>
+                          )}
+                        </span>
                       </span>
-                      <span className="text-brand font-medium shrink-0">${parseFloat(p.price).toFixed(0)}</span>
+                      <span className="flex flex-col items-end shrink-0">
+                        <span className="text-brand font-medium">${parseFloat(p.price).toFixed(0)}</span>
+                        <span className="text-slate-500 text-xs">c/u</span>
+                      </span>
                     </button>
                   </li>
                 ))}

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
+import { decorateProductUnits } from '../common/units';
 
 @Injectable()
 export class ProductsService {
@@ -56,8 +57,8 @@ export class ProductsService {
       take: 1,
       include: { category: true },
     });
-    if (byBarcode.length) return byBarcode;
-    return this.prisma.product.findMany({
+    if (byBarcode.length) return byBarcode.map(decorateProductUnits);
+    const results = await this.prisma.product.findMany({
       where: {
         businessId,
         isActive: true,
@@ -71,6 +72,7 @@ export class ProductsService {
       include: { category: true },
       orderBy: { name: 'asc' },
     });
+    return results.map(decorateProductUnits);
   }
 
   async list(businessId: string, categoryId?: string, lowStock?: boolean) {
@@ -83,7 +85,7 @@ export class ProductsService {
     });
     if (lowStock)
       list = list.filter((p: { stockControl: boolean; stock: number; minStock: number }) => p.stockControl && p.stock <= p.minStock);
-    return list;
+    return list.map(decorateProductUnits);
   }
 
   async create(businessId: string, data: {
@@ -220,7 +222,7 @@ export class ProductsService {
       },
     });
     if (!p) return null;
-    return p;
+    return decorateProductUnits(p);
   }
 
   /**

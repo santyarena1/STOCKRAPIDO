@@ -41,6 +41,10 @@ model Business {
   pausedSales PausedSale[]
   promos    Promo[]
   syncConnections SyncConnection[]
+  stickerCountries    StickerCountry[]
+  stickers            Sticker[]
+  stickerCatalogShare StickerCatalogShare?
+  stickerOrders       StickerOrder[]
 }
 
 model Promo {
@@ -445,4 +449,75 @@ model SyncRun {
   finishedAt    DateTime?
 
   connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+// ===== Módulo Figuritas Mundial 2026 =====
+
+model StickerCountry {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  flag        String?  // emoji flag
+  priceUnit   Decimal  @default(0)  // precio venta unitario
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  stickers Sticker[]
+
+  @@unique([businessId, name])
+}
+
+model Sticker {
+  id         String   @id @default(cuid())
+  businessId String
+  countryId  String
+  number     Int      // número dentro del país (1, 2, 3...)
+  stock      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business     Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  country      StickerCountry     @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  orderItems   StickerOrderItem[]
+
+  @@unique([businessId, countryId, number])
+}
+
+model StickerCatalogShare {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  token      String   @unique @default(cuid())
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model StickerOrder {
+  id          String   @id @default(cuid())
+  businessId  String
+  shareId     String
+  buyerName   String?
+  buyerPhone  String?
+  notes       String?
+  status      String   @default("pending") // pending | confirmed | delivered | cancelled
+  total       Decimal  @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items    StickerOrderItem[]
+}
+
+model StickerOrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  stickerId String
+  qty       Int
+  unitPrice Decimal
+
+  order   StickerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sticker Sticker      @relation(fields: [stickerId], references: [id])
 }

@@ -29,6 +29,9 @@ type Product = {
   batches?: ProductBatch[];
   imageUrl?: string | null;
   unitsPerBox?: string | null;
+  unitsPerBoxNum?: number | null;
+  costBox?: number | null;
+  priceBox?: number | null;
   weight?: string | null;
   format?: string | null;
   flavor?: string | null;
@@ -200,7 +203,7 @@ export default function EditarProductoPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Costo (referencia)</label>
+              <label className="block text-sm text-slate-400 mb-1">Costo unitario</label>
               <input
                 type="number"
                 step="0.01"
@@ -208,10 +211,10 @@ export default function EditarProductoPage() {
                 onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
               />
-              <p className="text-xs text-slate-500 mt-0.5">Se actualiza con la última compra</p>
+              <p className="text-xs text-slate-500 mt-0.5">Siempre por unidad · se actualiza con la última compra</p>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Precio venta * (referencia)</label>
+              <label className="block text-sm text-slate-400 mb-1">Precio venta unitario *</label>
               <input
                 type="number"
                 step="0.01"
@@ -220,9 +223,19 @@ export default function EditarProductoPage() {
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
                 required
               />
-              <p className="text-xs text-slate-500 mt-0.5">Se actualiza con la última compra</p>
+              <p className="text-xs text-slate-500 mt-0.5">Precio por unidad · se actualiza con la última compra</p>
             </div>
           </div>
+          {product?.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 && (
+            <div className="rounded-lg border border-violet-700/40 bg-violet-900/10 px-4 py-3 text-sm">
+              <p className="text-violet-300 font-medium mb-1">Producto por bulto · {product.unitsPerBoxNum} unidades</p>
+              <div className="flex gap-6 text-slate-300">
+                {product.costBox != null && <span>Costo bulto: <strong>${Number(product.costBox).toFixed(0)}</strong></span>}
+                {product.priceBox != null && <span>Precio bulto: <strong>${Number(product.priceBox).toFixed(0)}</strong></span>}
+              </div>
+              <p className="text-slate-500 text-xs mt-1">Referencia interna — los precios unitarios arriba son los que usa el sistema</p>
+            </div>
+          )}
           <div>
             <label className="block text-sm text-slate-400 mb-1">Stock mínimo</label>
             <input
@@ -252,7 +265,8 @@ export default function EditarProductoPage() {
           </div>
 
           <div className="border-t border-slate-700 pt-3">
-            <p className="text-sm font-medium text-slate-300 mb-2">Datos de catálogo</p>
+            <p className="text-sm font-medium text-slate-300 mb-1">Datos internos / catálogo</p>
+            <p className="text-xs text-slate-500 mb-3">Campos del proveedor. Unidades por bulto define si el producto se vende por bulto (referencia interna).</p>
             <div className="flex items-start gap-3 mb-3">
               {form.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element

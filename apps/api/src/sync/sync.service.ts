@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { MondelezProvider, NormalizedItem } from './mondelez.provider';
+import { parseUnitsPerBox } from '../common/units';
 
 type ConnInput = {
   provider?: string;
@@ -312,8 +313,11 @@ export class SyncService {
       const nameVal = src(s, 'name') ?? s.name;
       data.name = nameVal ? String(nameVal) : 'Sin nombre';
       // costo + precio de venta con markup
+      // El costo del proveedor puede ser por bulto; lo convertimos a unitario antes de guardar.
       const rawCost = src(s, 'cost');
-      const cost = rawCost != null && Number(rawCost) > 0 && Number(rawCost) < 1000000 ? Number(rawCost) : null;
+      const bulkCost = rawCost != null && Number(rawCost) > 0 && Number(rawCost) < 1000000 ? Number(rawCost) : null;
+      const unitsNum = parseUnitsPerBox(data.unitsPerBox ?? s.unitsPerBox);
+      const cost = bulkCost != null && unitsNum != null ? Math.round((bulkCost / unitsNum) * 100) / 100 : bulkCost;
       const price = cost != null ? Math.round(cost * (1 + markup / 100) * 100) / 100 : null;
       // categoría
       const categoryId = await ensureCategory(src(s, 'category'));

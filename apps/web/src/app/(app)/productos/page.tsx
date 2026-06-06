@@ -19,6 +19,9 @@ type Product = {
   expiresAt?: string | null;
   imageUrl?: string | null;
   unitsPerBox?: string | null;
+  unitsPerBoxNum?: number | null;
+  costBox?: number | null;
+  priceBox?: number | null;
   weight?: string | null;
   format?: string | null;
 };
@@ -551,7 +554,16 @@ export default function ProductosPage() {
                   </td>
                   <td className="p-3 text-slate-400">{p?.category?.name || '-'}</td>
                   <td className="p-3 text-slate-400">{p?.brand || '-'}</td>
-                  <td className="p-3 text-right text-slate-500">{p?.cost != null ? `$${Number(p.cost).toFixed(0)}` : '-'}</td>
+                  <td className="p-3 text-right text-slate-500">
+                    {p?.cost != null ? (
+                      <span className="flex flex-col items-end gap-0.5">
+                        <span>${Number(p.cost).toFixed(0)}</span>
+                        {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && p.costBox != null && (
+                          <span className="text-xs text-slate-600">bulto: ${Number(p.costBox).toFixed(0)}</span>
+                        )}
+                      </span>
+                    ) : '-'}
+                  </td>
                   <td className="p-3 text-right text-slate-200">${Number(p?.price ?? 0).toFixed(0)}</td>
                   <td className={`p-3 text-right ${(p?.stock ?? 0) <= (p?.minStock ?? 0) ? 'text-amber-400' : ''}`}>{p?.stock ?? 0}</td>
                   <td className="p-3 text-right text-slate-500">{p?.minStock ?? 0}</td>

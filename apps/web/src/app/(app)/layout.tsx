@@ -38,6 +38,7 @@ const nav = [
   { href: '/compras', label: 'Compras' },
   { href: '/proveedores', label: 'Proveedores' },
   { href: '/sincronizaciones', label: 'Sincronizaciones' },
+  { href: '/figuritas', label: 'Figuritas 2026' },
   { href: '/clientes', label: 'Clientes / Fiados' },
   { href: '/reportes', label: 'Reportes' },
   { href: '/promociones', label: 'Promociones' },
