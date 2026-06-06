@@ -44,7 +44,7 @@ def _load_dotenv():
 
 
 _load_dotenv()
-SR_API = os.environ.get("SR_API", "https://stockrapido-api.onrender.com")
+SR_API = os.environ.get("SR_API", "https://stockrapido-api.vercel.app")
 SR_EMAIL = os.environ.get("SR_EMAIL", "")
 SR_PASSWORD = os.environ.get("SR_PASSWORD", "")
 MDLZ_PHONE = os.environ.get("MDLZ_PHONE", "")

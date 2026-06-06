@@ -669,7 +669,7 @@ export default function ConfigPage() {
           <label className="block text-sm text-slate-400 mb-1">URL pública de esta API (callback para N8N)</label>
           <input
             type="url"
-            placeholder="https://stockrapido-api.onrender.com"
+            placeholder="https://stockrapido-api.vercel.app"
             value={aiForm.publicApiUrl}
             onChange={(e) => setAiForm((f) => ({ ...f, publicApiUrl: e.target.value }))}
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 placeholder:text-slate-600"

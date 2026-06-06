@@ -1,208 +1,135 @@
-# Deploy STOCKRAPIDO — Vercel + Render + Neon/Supabase
+# Deploy STOCKRAPIDO — Vercel + Neon
 
-Stack: Next.js (Vercel Hobby) · NestJS (Render free) · PostgreSQL (Neon o Supabase free)
+Stack: **Next.js** (Vercel) · **NestJS serverless** (Vercel) · **PostgreSQL** (Neon)
 
----
+Dos proyectos en Vercel desde el mismo repo de GitHub:
 
-## 0. Prerequisito: repo en GitHub
-
-El repo tiene que estar en GitHub/GitLab para conectarlo a Vercel y Render.
-
----
-
-## 1. Crear la base de datos PostgreSQL (Neon o Supabase)
-
-### Opción A — Neon (recomendado, free tier generoso)
-
-1. Registrarse en [neon.tech](https://neon.tech) → crear proyecto `stockrapido`.
-2. En el dashboard copiar la **Connection string** (formato pooler):
-   ```
-   postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
-   ```
-3. Guardar ese valor como `DATABASE_URL` (se usa en el paso 2).
-
-### Opción B — Supabase
-
-1. Registrarse en [supabase.com](https://supabase.com) → nuevo proyecto.
-2. **Project Settings → Database → Connection string → URI** (URI mode, no pooler).
-   ```
-   postgresql://postgres:TU_PASSWORD@db.xxxx.supabase.co:5432/postgres
-   ```
-3. Guardar como `DATABASE_URL`.
+| Proyecto Vercel | Root Directory | URL típica |
+|-----------------|----------------|------------|
+| API | `apps/api` | `https://stockrapido-api.vercel.app` |
+| Web | `apps/web` | `https://stockrapido.vercel.app` |
 
 ---
 
-## 2. Generar la migración inicial y aplicarla (una sola vez)
+## 1. Base de datos Neon
 
-Localmente, con la DB de Neon/Supabase como target:
-
-```bash
-# En la raíz del monorepo
-cd apps/api
-
-# Apuntar a la DB de producción
-DATABASE_URL="<tu-connection-string>" npx prisma migrate dev --name init
-
-# Verificar que las tablas se crearon
-DATABASE_URL="<tu-connection-string>" npx prisma studio
-```
-
-> Si ya había carpeta `migrations/` generada con SQLite, borrala antes:
-> `rm -rf prisma/migrations`
-
-Luego commitear la carpeta `prisma/migrations/` generada:
-
-```bash
-git add apps/api/prisma/migrations
-git commit -m "chore: add initial postgresql migration"
-git push
-```
+1. Crear proyecto en [neon.tech](https://neon.tech) → `stockrapido`.
+2. Copiar la **connection string** con pooler (recomendado para serverless):
+   ```
+   postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+   ```
+3. Aplicar migraciones (una vez, desde tu PC o CI):
+   ```bash
+   cd apps/api
+   DATABASE_URL="<neon-url>" npx prisma migrate deploy
+   ```
 
 ---
 
-## 3. Deploy de la API en Render
+## 2. Proyecto API en Vercel (`apps/api`)
 
-1. Ir a [render.com](https://render.com) → **New Web Service**.
-2. Conectar el repo de GitHub.
-3. Configurar:
-   - **Root directory**: dejar vacío (usa el `render.yaml` de la raíz).
-   - O si no usa el YAML automático:
-     - **Build Command**: `npm install -g pnpm@9 && pnpm install && pnpm --filter api build`
-     - **Start Command**: `cd apps/api && npx prisma migrate deploy && node dist/main`
-   - **Instance type**: Free.
-4. En la sección **Environment Variables** agregar:
+1. [vercel.com](https://vercel.com) → **Add New Project** → repo de GitHub.
+2. **Root Directory**: `apps/api`
+3. Framework: Other (usa `vercel.json` del directorio).
+4. **Environment Variables**:
 
    | Key | Value |
    |-----|-------|
-   | `DATABASE_URL` | `<tu-connection-string>` |
+   | `DATABASE_URL` | connection string de Neon |
    | `JWT_SECRET` | cadena aleatoria ≥32 chars |
-   | `JWT_REFRESH_SECRET` | cadena aleatoria ≥32 chars (distinta) |
-   | `WEB_URL` | `https://<tu-proyecto>.vercel.app` (se completa en paso 4) |
+   | `JWT_REFRESH_SECRET` | otra cadena distinta |
+   | `WEB_URL` | URL del frontend, ej. `https://stockrapido.vercel.app` |
    | `NODE_ENV` | `production` |
+   | `CRON_SECRET` | secreto para el cron de sync Mondelez |
+   | `PUBLIC_API_URL` | URL de este proyecto API (ej. `https://stockrapido-api.vercel.app`) |
 
-   Opcional:
-   | Key | Value |
-   |-----|-------|
-   | `WEB_URL` | `https://<tu-proyecto>.vercel.app` |
-   | `PORT` | `4000` (Render lo inyecta solo, pero por si acaso) |
+   Opcionales: `N8N_INVOICE_WEBHOOK_URL`, `AI_INVOICE_WEBHOOK_SECRET`
 
-5. **Create Web Service** → esperar que el build termine.
-6. Copiar la URL pública del servicio (ej. `https://stockrapido-api.onrender.com`).
-7. Probar health check:
-   ```
-   curl https://stockrapido-api.onrender.com/health
+5. Deploy → probar:
+   ```bash
+   curl https://stockrapido-api.vercel.app/health
    # → {"status":"ok"}
    ```
 
-> **Tip Render free tier**: el servicio se duerme después de 15 min de inactividad. El primer request tarda ~30s en despertar.
+El build ejecuta `prisma migrate deploy`, compila NestJS y expone la API como función serverless. El cron diario de catálogo Mondelez está en `vercel.json` (`GET /sync/cron` a las 06:00 UTC).
 
 ---
 
-## 4. Deploy del frontend en Vercel
+## 3. Proyecto Web en Vercel (`apps/web`)
 
-1. Ir a [vercel.com](https://vercel.com) → **Add New Project** → importar el repo.
-2. Configurar:
-   - **Framework Preset**: Next.js (auto-detectado).
-   - **Root Directory**: `apps/web`.
-   - **Build Command**: `pnpm build` (o dejarlo en auto).
-   - **Install Command**: dejar en auto (Vercel detecta pnpm).
-3. En **Environment Variables**:
+1. **Add New Project** (segundo proyecto, mismo repo).
+2. **Root Directory**: `apps/web`
+3. Framework: Next.js (auto).
+4. **Environment Variables**:
 
    | Key | Value |
    |-----|-------|
-   | `NEXT_PUBLIC_API_URL` | `https://stockrapido-api.onrender.com` |
+   | `NEXT_PUBLIC_API_URL` | URL del proyecto API, ej. `https://stockrapido-api.vercel.app` |
+   | `NEXT_PUBLIC_APP_URL` | URL de este frontend, ej. `https://stockrapido.vercel.app` |
 
-4. **Deploy** → esperar build.
-5. Copiar la URL pública (ej. `https://stockrapido.vercel.app`).
-
----
-
-## 5. Conectar API ↔ Frontend (CORS)
-
-Volver a Render → **Environment** del servicio → actualizar (o agregar si no estaba):
-
-```
-WEB_URL = https://stockrapido.vercel.app
-```
-
-Hacer **Manual Deploy** (o push un commit) para que tome el nuevo valor.
+5. Deploy.
 
 ---
 
-## 6. Verificar que todo funciona
+## 4. Conectar API ↔ Web (CORS)
+
+En el proyecto **API** de Vercel, `WEB_URL` debe ser exactamente la URL del frontend (sin barra final). Redeploy si cambiás el dominio.
+
+---
+
+## 5. Sync runner Mondelez (local)
+
+El precio B2B real lo trae el runner Python en tu PC (Playwright). En `sync-runner/.env`:
+
+```
+SR_API=https://stockrapido-api.vercel.app
+SR_EMAIL=...
+SR_PASSWORD=...
+MDLZ_PHONE=...
+MDLZ_PASSWORD=...
+```
+
+Ver [sync-runner/README.md](sync-runner/README.md).
+
+---
+
+## 6. Verificar
 
 ```bash
-# 1. Health de la API
-curl https://stockrapido-api.onrender.com/health
-
-# 2. Login desde la web
-# Abrir https://stockrapido.vercel.app/login
-# Ingresar con las credenciales del seed (si corriste db:seed) o registrar un negocio nuevo
-
-# 3. Verificar CORS (desde la consola del navegador en la URL de Vercel)
-# No debe aparecer error "blocked by CORS policy"
+curl https://stockrapido-api.vercel.app/health
 ```
 
----
-
-## Variables de entorno — resumen
-
-### `apps/api` (Render)
-
-| Variable | Requerida | Descripción |
-|----------|-----------|-------------|
-| `DATABASE_URL` | ✅ | Connection string de Neon/Supabase |
-| `JWT_SECRET` | ✅ | Secret para tokens de acceso |
-| `JWT_REFRESH_SECRET` | ✅ | Secret para refresh tokens |
-| `WEB_URL` | ✅ | URL del frontend en Vercel |
-| `NODE_ENV` | ✅ | `production` |
-| `PORT` | — | Render lo inyecta automáticamente |
-| `PUBLIC_API_URL` | opcional | URL pública de la API (para webhooks N8N) |
-| `N8N_INVOICE_WEBHOOK_URL` | opcional | Webhook de N8N para facturas con IA |
-| `AI_INVOICE_WEBHOOK_SECRET` | opcional | Secreto del callback de N8N |
-| `WEB_URL` (para reset-password email) | recomendada | Igual que arriba |
-
-### `apps/web` (Vercel)
-
-| Variable | Requerida | Descripción |
-|----------|-----------|-------------|
-| `NEXT_PUBLIC_API_URL` | ✅ | URL pública de la API en Render |
-| `NEXT_PUBLIC_APP_URL` | ✅ | URL del frontend en Vercel (links públicos de figuritas, etc.) |
+Abrí `https://stockrapido.vercel.app/login` — no debe haber errores CORS en la consola.
 
 ---
 
-## Alternativa: Fly.io para la API
+## Variables — resumen
 
-Si preferís Fly.io en lugar de Render (sin sleep en free tier con [fly.io/blog/free-postgres](https://fly.io/blog/free-postgres)):
+### API (`apps/api` en Vercel)
 
-```bash
-# Instalar CLI
-brew install flyctl
+| Variable | Requerida |
+|----------|-----------|
+| `DATABASE_URL` | ✅ Neon |
+| `JWT_SECRET` | ✅ |
+| `JWT_REFRESH_SECRET` | ✅ |
+| `WEB_URL` | ✅ URL del frontend |
+| `NODE_ENV` | ✅ `production` |
+| `CRON_SECRET` | ✅ si usás auto-sync |
+| `PUBLIC_API_URL` | recomendada (webhooks N8N) |
 
-# Login y crear app
-fly auth login
-cd apps/api
-fly launch --name stockrapido-api --no-deploy
+### Web (`apps/web` en Vercel)
 
-# Setear secrets
-fly secrets set DATABASE_URL="<connection-string>"
-fly secrets set JWT_SECRET="<secret>"
-fly secrets set JWT_REFRESH_SECRET="<secret>"
-fly secrets set WEB_URL="https://stockrapido.vercel.app"
-fly secrets set NODE_ENV="production"
-
-# Deploy (usa el Dockerfile en apps/api/)
-fly deploy
-```
-
-El `Dockerfile` en `apps/api/` ya está configurado para esto.
+| Variable | Requerida |
+|----------|-----------|
+| `NEXT_PUBLIC_API_URL` | ✅ URL del proyecto API |
+| `NEXT_PUBLIC_APP_URL` | ✅ URL del frontend |
 
 ---
 
-## Generar JWT secrets seguros
+## JWT secrets
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Ejecutar dos veces: una para `JWT_SECRET` y otra para `JWT_REFRESH_SECRET`.
+Ejecutar dos veces (una por secret).

@@ -380,7 +380,7 @@ export default function SincronizacionesPage() {
             <p>{providerMeta.runnerNote}</p>
             <p className="text-slate-400 text-xs">
               En <code className="text-slate-300">sync-runner/.env</code> configurá{' '}
-              <code className="text-slate-300">SR_API={apiBase || 'https://tu-api.onrender.com'}</code> (URL pública de la API en producción, ver DEPLOY.md).
+              <code className="text-slate-300">SR_API={apiBase || 'https://stockrapido-api.vercel.app'}</code> (proyecto API en Vercel — ver DEPLOY.md).
               Ejecutá <code className="text-slate-300">python mondelez_sync_runner.py</code> en tu PC o agendalo con Task Scheduler.
             </p>
           </div>
