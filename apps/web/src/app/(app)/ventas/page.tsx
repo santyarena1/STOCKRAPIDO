@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { printFiscalReceipt } from '@/components/FiscalCheckout';
 
 type SaleItem = {
   id: string;
@@ -422,6 +423,18 @@ export default function VentasPage() {
       setItemSaving(false);
     }
   };
+  const handleReprint = async (saleId: string, event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    const popup = window.open('', '_blank', 'width=420,height=720');
+    if (!popup) { alert('El navegador bloqueó la ventana de impresión.'); return; }
+    try {
+      const receipt = await api<any>(`/fiscal/sales/${saleId}/receipt`);
+      await printFiscalReceipt(receipt, popup);
+    } catch (error) {
+      popup.close();
+      alert(error instanceof Error ? error.message : 'No se pudo recuperar el comprobante');
+    }
+  };
 
   return (
     <div className="p-4 max-w-[1400px] mx-auto">
@@ -704,6 +717,14 @@ export default function VentasPage() {
                         {(s as Sale & { user?: { name: string } }).user?.name ?? '—'}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap space-x-2">
+                        <button
+                          type="button"
+                          onClick={(e) => void handleReprint(s.id, e)}
+                          className="text-cyan-400 hover:underline text-sm"
+                          title="No vuelve a facturar en ARCA"
+                        >
+                          Reimprimir
+                        </button>
                         <button
                           type="button"
                           onClick={() => setViewSale(s)}
