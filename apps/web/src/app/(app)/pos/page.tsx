@@ -8,7 +8,7 @@ import {
   openCustomerDisplayWindow,
   paymentNeedsCustomerConfirmStep,
 } from '@/lib/customer-display-sync';
-import { FiscalIssuanceModal, FiscalReceiptModal } from '@/components/FiscalCheckout';
+import { FiscalReceiptModal, printFiscalReceipt } from '@/components/FiscalCheckout';
 
 type CartItem = {
   productId: string;
@@ -19,6 +19,8 @@ type CartItem = {
   discount: number;
   imageUrl?: string | null;
 };
+
+type PausedSalePayload={items:CartItem[];discount?:number;selectedCustomer?:{id:string;name:string}|null;paymentMethod?:string|null;status?:'building'|'awaiting_payment'};type PausedSale={id:string;payload:PausedSalePayload;createdAt:string};
 
 /** Mismo umbral que reportes críticos: aviso solo al agregar ese producto al carrito */
 const LOW_STOCK_THRESHOLD = 3;
@@ -158,13 +160,14 @@ export default function POSPage() {
   const [showPayment, setShowPayment] = useState(false);
   /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
-  const [issuancePaymentMethod, setIssuancePaymentMethod] = useState<string | null>(null);
-  const [showIssuance, setShowIssuance] = useState(false);
+  const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'>('internal');
+  const [printEnabled,setPrintEnabled]=useState(true);
+  const [preferencesLoaded,setPreferencesLoaded]=useState(false);
   const [receipt, setReceipt] = useState<any | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; balance: string | number }[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
-  const [pausedList, setPausedList] = useState<{ id: string; payload: { items: CartItem[]; discount?: number }; createdAt: string }[]>([]);
+  const [pausedList,setPausedList]=useState<PausedSale[]>([]);
   const [discountInput, setDiscountInput] = useState('');
   const [manualName, setManualName] = useState('');
   const [manualPrice, setManualPrice] = useState('');
@@ -178,6 +181,8 @@ export default function POSPage() {
   const isUpdateQtyRef = useRef(false);
   const isSubmittingRef = useRef(false);
   const [cobrandoBusy, setCobrandoBusy] = useState(false);
+  useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('stockrapido:pos-preferences')||'{}');if(v.fiscalMode==='internal'||v.fiscalMode==='factura_c')setFiscalMode(v.fiscalMode);if(typeof v.printEnabled==='boolean')setPrintEnabled(v.printEnabled)}catch{}setPreferencesLoaded(true)},[]);
+  useEffect(()=>{if(preferencesLoaded)localStorage.setItem('stockrapido:pos-preferences',JSON.stringify({fiscalMode,printEnabled}))},[fiscalMode,printEnabled,preferencesLoaded]);
 
   /** Caja abierta: las ventas se vinculan para el arqueo (cierre de caja). Fiado no suma efectivo. */
   const [openCashRegisterId, setOpenCashRegisterId] = useState<string | null>(null);
@@ -298,9 +303,7 @@ export default function POSPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (showPaused) void fetchPaused();
-  }, [showPaused, fetchPaused]);
+  useEffect(()=>{void fetchPaused()},[fetchPaused]);
 
   const addToCart = useCallback(
     (
@@ -415,83 +418,9 @@ export default function POSPage() {
     };
   }, [search, addToCart]);
 
-  const handleCobrar = useCallback(async (paymentMethod: string, fiscalMode: 'internal' | 'factura_c') => {
-    if (cart.length === 0) return;
-    if (isSubmittingRef.current) return;
-    const token = getToken();
-    if (!token) return;
-    isSubmittingRef.current = true;
-    setCobrandoBusy(true);
-    try {
-      const crId = await refreshOpenCashRegister();
-      if (!crId) {
-        alert('Tenés que abrir la caja (menú Caja) antes de registrar ventas.');
-        return;
-      }
-      const res = await fetch(`${getApiBaseUrl()}/sales`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          items: cart.map((i) =>
-            i.productId.startsWith('manual-')
-              ? { name: i.name, qty: i.qty, unitPrice: i.unitPrice }
-              : { productId: i.productId, qty: i.qty, unitPrice: i.unitPrice }
-          ),
-          discount: discountTotal,
-          customerId: selectedCustomer?.id,
-          paymentMethod,
-          cashRegisterId: crId,
-          fiscalMode,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { message?: string }).message || 'Error al registrar venta');
-      }
-      const savedSale = await res.json();
-      setReceipt(await api<any>(`/fiscal/sales/${savedSale.id}/receipt`));
-      setShowIssuance(false);
-      setIssuancePaymentMethod(null);
-      const subtotalDone = cart.reduce((s, i) => s + i.subtotal, 0);
-      const totalFinal = Math.max(0, subtotalDone - discountTotal);
-      const paymentLabel = PAYMENT_METHODS.find((p) => p.id === paymentMethod)?.label ?? paymentMethod;
-      broadcastCustomerDisplay({
-        kind: 'success',
-        total: totalFinal,
-        paymentMethod,
-        paymentLabel,
-      });
-      setCart([]);
-      setDiscountTotal(0);
-      setSelectedCustomer(null);
-      setSearch('');
-      setShowPayment(false);
-      searchRef.current?.focus();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error');
-    } finally {
-      isSubmittingRef.current = false;
-      setCobrandoBusy(false);
-    }
-  }, [cart, discountTotal, selectedCustomer?.id, refreshOpenCashRegister]);
-
-  const openIssuanceStep = useCallback((methodId: string) => {
-    setIssuancePaymentMethod(methodId);
-    setPaymentMethodPending(null);
-    setShowPayment(false);
-    setShowIssuance(true);
-  }, []);
-
-  const pickPaymentMethod = useCallback((methodId: string) => {
-    if (!openCashRegisterId) return;
-    if (paymentNeedsCustomerConfirmStep(methodId)) setPaymentMethodPending(methodId);
-    else openIssuanceStep(methodId);
-  }, [openCashRegisterId, openIssuanceStep]);
-
-  const confirmPendingPayment = useCallback(() => {
-    if (!paymentMethodPending || !openCashRegisterId) return;
-    openIssuanceStep(paymentMethodPending);
-  }, [paymentMethodPending, openCashRegisterId, openIssuanceStep]);
+  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt');if(receipt?.fiscalDocument?.status==='ERROR'){popup?.close();setReceipt(receipt)}else if(printEnabled)await printFiscalReceipt(receipt,popup);else popup?.close();const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled]);
+  const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar]);
+  const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
@@ -501,7 +430,7 @@ export default function POSPage() {
       // No aplicar atajos si el foco está en el carrito (evitar acoplamiento con inputs de cantidad/precio)
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest?.('[data-pos-cart]')) return;
-      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showIssuance || showCustomer || showOpenCaja) {
+      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showCustomer || showOpenCaja) {
         if (e.key === 'Escape') {
           setShowShortcuts(false);
           setShowDiscount(false);
@@ -681,34 +610,8 @@ export default function POSPage() {
     setDiscountInput('');
   };
 
-  const savePaused = async () => {
-    if (cart.length === 0) {
-      setShowPaused(false);
-      return;
-    }
-    const token = getToken();
-    if (!token) return;
-    try {
-      await fetch(`${getApiBaseUrl()}/paused-sales`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ items: cart, discount: discountTotal }),
-      });
-      setCart([]);
-      setDiscountTotal(0);
-      setShowPaused(false);
-      fetchPaused();
-      searchRef.current?.focus();
-    } catch {
-      alert('Error al guardar venta en espera');
-    }
-  };
-
-  const restorePaused = (payload: { items: CartItem[]; discount?: number }) => {
-    setCart(payload.items || []);
-    setDiscountTotal(payload.discount || 0);
-    setShowPaused(false);
-  };
+  const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status})});if(!r.ok)throw Error();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
+  const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);setShowPayment(true)}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
 
   const addManualProduct = () => {
     const name = manualName.trim() || 'Producto manual';
@@ -722,6 +625,7 @@ export default function POSPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="shrink-0 px-4 py-2 border-b border-slate-800 bg-slate-950/40 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-slate-400 uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-slate-600 overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-amber-600 text-white':'bg-slate-800 text-slate-300')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-emerald-600 text-white':'bg-slate-800 text-slate-300')}>Factura C</button></div><div className="inline-flex rounded-lg border border-slate-600 overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-blue-600 text-white':'bg-slate-800 text-slate-300')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-slate-600 text-white':'bg-slate-800 text-slate-300')}>No imprimir</button></div><button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="ml-auto px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200">En espera ({pausedList.length})</button></div>
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl font-bold text-white">POS</h1>
@@ -1035,10 +939,6 @@ export default function POSPage() {
         </div>
       )}
 
-      {showIssuance && issuancePaymentMethod && (
-        <FiscalIssuanceModal paymentMethod={issuancePaymentMethod} busy={cobrandoBusy} onChoose={(mode) => void handleCobrar(issuancePaymentMethod, mode)} onBack={() => { setShowIssuance(false); setShowPayment(true); }} />
-      )}
-
       {receipt && (
         <FiscalReceiptModal receipt={receipt} onRefresh={setReceipt} onClose={() => { setReceipt(null); searchRef.current?.focus(); }} />
       )}
@@ -1105,6 +1005,7 @@ export default function POSPage() {
                     Cambiar método
                   </button>
                 </div>
+<button type="button" onClick={()=>void savePaused(paymentMethodPending,'awaiting_payment')} className="w-full py-3 rounded-lg border border-amber-600 text-amber-300 font-semibold">Dejar esperando y atender otro</button>
               </div>
             )}
             <button type="button" onClick={() => setShowPayment(false)} className="w-full py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800">
@@ -1148,7 +1049,7 @@ export default function POSPage() {
             {cart.length > 0 && (
               <button
                 type="button"
-                onClick={savePaused}
+                onClick={()=>void savePaused()}
                 className="w-full py-2 rounded-lg btn-brand mb-4"
               >
                 Guardar venta actual en espera
@@ -1165,7 +1066,7 @@ export default function POSPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => restorePaused(p.payload as { items: CartItem[]; discount?: number })}
+                      onClick={()=>void restorePaused(p)}
                       className="px-3 py-1 rounded btn-brand text-sm"
                     >
                       Retomar
