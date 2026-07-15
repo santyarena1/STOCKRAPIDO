@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 import { ImageUploader, MultiImageUploader } from '@/components/ImageUploader';
+import FiscalSettings from '@/components/FiscalSettings';
 
 type Business = {
   id: string;
@@ -359,6 +360,8 @@ export default function ConfigPage() {
   return (
     <div className="p-6 max-w-2xl">
       <h1 className="text-2xl font-bold text-white mb-6">Configuración</h1>
+
+      <FiscalSettings />
 
       <form data-tour="config-negocio" onSubmit={handleSave} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6">
         <h2 className="font-medium text-slate-200">Datos del negocio</h2>

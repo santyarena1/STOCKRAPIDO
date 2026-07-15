@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ProductsService } from '../products/products.service';
+import { FiscalService } from '../fiscal/fiscal.service';
 
 export type SaleItemInput =
   | { productId: string; qty: number; unitPrice: number }
@@ -12,13 +13,14 @@ export class SalesService {
   constructor(
     private prisma: PrismaService,
     private products: ProductsService,
+    private fiscal: FiscalService,
   ) {}
 
   async create(
     businessId: string,
     userId: string,
     items: SaleItemInput[],
-    options?: { customerId?: string; discount?: number; paymentMethod?: string; cashRegisterId?: string },
+    options?: { customerId?: string; discount?: number; paymentMethod?: string; cashRegisterId?: string; fiscalMode?: 'internal' | 'factura_c' },
   ) {
     if (!options?.cashRegisterId?.trim()) {
       throw new BadRequestException('Tenés que tener la caja abierta para registrar ventas.');
@@ -81,7 +83,11 @@ export class SalesService {
       });
     }
 
-    return sale;
+    const fiscalDocument = options?.fiscalMode === 'factura_c'
+      ? await this.fiscal.issueFacturaC(businessId, sale.id)
+      : await this.fiscal.createInternal(businessId, sale.id);
+
+    return { ...sale, fiscalDocument };
   }
 
   async list(businessId: string, from?: Date, to?: Date, customerId?: string, limit = 50, productId?: string) {

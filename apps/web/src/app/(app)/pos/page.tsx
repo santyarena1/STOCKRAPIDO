@@ -8,6 +8,7 @@ import {
   openCustomerDisplayWindow,
   paymentNeedsCustomerConfirmStep,
 } from '@/lib/customer-display-sync';
+import { FiscalIssuanceModal, FiscalReceiptModal } from '@/components/FiscalCheckout';
 
 type CartItem = {
   productId: string;
@@ -157,6 +158,9 @@ export default function POSPage() {
   const [showPayment, setShowPayment] = useState(false);
   /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
+  const [issuancePaymentMethod, setIssuancePaymentMethod] = useState<string | null>(null);
+  const [showIssuance, setShowIssuance] = useState(false);
+  const [receipt, setReceipt] = useState<any | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; balance: string | number }[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
@@ -411,7 +415,7 @@ export default function POSPage() {
     };
   }, [search, addToCart]);
 
-  const handleCobrar = useCallback(async (paymentMethod: string) => {
+  const handleCobrar = useCallback(async (paymentMethod: string, fiscalMode: 'internal' | 'factura_c') => {
     if (cart.length === 0) return;
     if (isSubmittingRef.current) return;
     const token = getToken();
@@ -437,12 +441,17 @@ export default function POSPage() {
           customerId: selectedCustomer?.id,
           paymentMethod,
           cashRegisterId: crId,
+          fiscalMode,
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message || 'Error al registrar venta');
       }
+      const savedSale = await res.json();
+      setReceipt(await api<any>(`/fiscal/sales/${savedSale.id}/receipt`));
+      setShowIssuance(false);
+      setIssuancePaymentMethod(null);
       const subtotalDone = cart.reduce((s, i) => s + i.subtotal, 0);
       const totalFinal = Math.max(0, subtotalDone - discountTotal);
       const paymentLabel = PAYMENT_METHODS.find((p) => p.id === paymentMethod)?.label ?? paymentMethod;
@@ -466,23 +475,23 @@ export default function POSPage() {
     }
   }, [cart, discountTotal, selectedCustomer?.id, refreshOpenCashRegister]);
 
-  const pickPaymentMethod = useCallback(
-    (methodId: string) => {
-      if (!openCashRegisterId) return;
-      if (paymentNeedsCustomerConfirmStep(methodId)) {
-        setPaymentMethodPending(methodId);
-      } else {
-        void handleCobrar(methodId);
-      }
-    },
-    [openCashRegisterId, handleCobrar],
-  );
+  const openIssuanceStep = useCallback((methodId: string) => {
+    setIssuancePaymentMethod(methodId);
+    setPaymentMethodPending(null);
+    setShowPayment(false);
+    setShowIssuance(true);
+  }, []);
+
+  const pickPaymentMethod = useCallback((methodId: string) => {
+    if (!openCashRegisterId) return;
+    if (paymentNeedsCustomerConfirmStep(methodId)) setPaymentMethodPending(methodId);
+    else openIssuanceStep(methodId);
+  }, [openCashRegisterId, openIssuanceStep]);
 
   const confirmPendingPayment = useCallback(() => {
     if (!paymentMethodPending || !openCashRegisterId) return;
-    void handleCobrar(paymentMethodPending);
-  }, [paymentMethodPending, openCashRegisterId, handleCobrar]);
-
+    openIssuanceStep(paymentMethodPending);
+  }, [paymentMethodPending, openCashRegisterId, openIssuanceStep]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
@@ -492,7 +501,7 @@ export default function POSPage() {
       // No aplicar atajos si el foco está en el carrito (evitar acoplamiento con inputs de cantidad/precio)
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest?.('[data-pos-cart]')) return;
-      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showCustomer || showOpenCaja) {
+      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showIssuance || showCustomer || showOpenCaja) {
         if (e.key === 'Escape') {
           setShowShortcuts(false);
           setShowDiscount(false);
@@ -1024,6 +1033,14 @@ export default function POSPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showIssuance && issuancePaymentMethod && (
+        <FiscalIssuanceModal paymentMethod={issuancePaymentMethod} busy={cobrandoBusy} onChoose={(mode) => void handleCobrar(issuancePaymentMethod, mode)} onBack={() => { setShowIssuance(false); setShowPayment(true); }} />
+      )}
+
+      {receipt && (
+        <FiscalReceiptModal receipt={receipt} onRefresh={setReceipt} onClose={() => { setReceipt(null); searchRef.current?.focus(); }} />
       )}
 
       {showPayment && (

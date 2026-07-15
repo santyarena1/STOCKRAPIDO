@@ -45,6 +45,8 @@ model Business {
   stickers            Sticker[]
   stickerCatalogShare StickerCatalogShare?
   stickerOrders       StickerOrder[]
+  fiscalConfig        FiscalConfig?
+  fiscalDocuments     FiscalDocument[]
 }
 
 model Promo {
@@ -156,6 +158,51 @@ model Sale {
   customer     Customer?     @relation(fields: [customerId], references: [id])
   cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
   items        SaleItem[]
+  fiscalDocument FiscalDocument?
+}
+
+model FiscalConfig {
+  id                    String   @id @default(cuid())
+  businessId            String   @unique
+  enabled               Boolean  @default(false)
+  environment           String   @default("homologation")
+  cuit                   String
+  pointOfSale            Int
+  legalName              String?
+  grossIncomeNumber      String?
+  activityStartDate      DateTime?
+  address                String?
+  certificateEncrypted   String?
+  privateKeyEncrypted    String?
+  certificateExpiresAt  DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model FiscalDocument {
+  id             String   @id @default(cuid())
+  businessId     String
+  saleId         String   @unique
+  kind           String
+  status         String
+  pointOfSale    Int?
+  receiptType    Int?
+  receiptNumber  Int?
+  cae             String?
+  caeExpiresAt   DateTime?
+  qrPayload      String?
+  errorMessage   String?
+  arcaResult     Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@unique([businessId, pointOfSale, receiptType, receiptNumber])
 }
 
 model SaleItem {
