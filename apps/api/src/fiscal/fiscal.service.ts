@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { decryptFiscalSecret, encryptFiscalSecret } from './fiscal-crypto';
 import { XMLParser } from 'fast-xml-parser';
 import * as forge from 'node-forge';
+import { request as httpsRequest } from 'node:https';
 
 const FACTURA_C = 11;
 const WSFE_SERVICE = 'wsfe';
@@ -80,6 +81,25 @@ export class FiscalService {
       wsfe: prod ? 'https://servicios1.afip.gov.ar/wsfev1/service.asmx' : 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx' };
   }
 
+  private postSoap(url: string, soapAction: string, body: string): Promise<{ status: number; text: string }> {
+    return new Promise((resolve, reject) => {
+      const target = new URL(url);
+      const request = httpsRequest({
+        protocol: target.protocol, hostname: target.hostname, port: target.port || 443,
+        path: `${target.pathname}${target.search}`, method: 'POST', family: 4,
+        headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: soapAction, 'Content-Length': Buffer.byteLength(body) },
+        timeout: 20000,
+      }, (response) => {
+        response.setEncoding('utf8');
+        let text = '';
+        response.on('data', (chunk) => { text += chunk; });
+        response.on('end', () => resolve({ status: response.statusCode || 0, text }));
+      });
+      request.on('timeout', () => request.destroy(new Error('Tiempo de espera agotado al conectar con ARCA.')));
+      request.on('error', (error: NodeJS.ErrnoException) => reject(new Error(`No se pudo conectar con ARCA${error.code ? ` (${error.code})` : ''}: ${error.message}`)));
+      request.end(body);
+    });
+  }
   private createCms(certPem: string, keyPem: string) {
     const now = Date.now();
     const tra = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${Math.floor(now / 1000)}</uniqueId><generationTime>${new Date(now - 600000).toISOString()}</generationTime><expirationTime>${new Date(now + 600000).toISOString()}</expirationTime></header><service>${WSFE_SERVICE}</service></loginTicketRequest>`;
@@ -89,7 +109,7 @@ export class FiscalService {
     p7.addCertificate(cert);
     p7.addSigner({ key: forge.pki.privateKeyFromPem(keyPem), certificate: cert, digestAlgorithm: forge.pki.oids.sha256,
       authenticatedAttributes: [{ type: forge.pki.oids.contentType, value: forge.pki.oids.data },
-        { type: forge.pki.oids.messageDigest }, { type: forge.pki.oids.signingTime, value: new Date().toISOString() }] });
+        { type: forge.pki.oids.messageDigest }, { type: forge.pki.oids.signingTime, value: new Date() as any }] });
     p7.sign();
     return forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
   }
@@ -98,10 +118,9 @@ export class FiscalService {
     const { config, cert, key } = await this.credentials(businessId);
     const cms = this.createCms(cert, key);
     const xml = `<?xml version="1.0"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://wsaa.view.sua.dvadac.desein.afip.gov"><soapenv:Body><ser:loginCms><ser:in0>${cms}</ser:in0></ser:loginCms></soapenv:Body></soapenv:Envelope>`;
-    const response = await fetch(this.endpoints(config.environment).wsaa, { method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: 'loginCms' }, body: xml, signal: AbortSignal.timeout(20000) });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`WSAA respondió HTTP ${response.status}.`);
-    const outer = this.parser.parse(text);
+    const response = await this.postSoap(this.endpoints(config.environment).wsaa, 'loginCms', xml);
+    const text = response.text;
+    if (response.status < 200 || response.status >= 300) throw new Error(`WSAA respondió HTTP ${response.status}.`);    const outer = this.parser.parse(text);
     const returned = outer?.Envelope?.Body?.loginCmsResponse?.loginCmsReturn;
     if (!returned) throw new Error(this.soapError(outer) || 'WSAA no devolvió credenciales.');
     const login = this.parser.parse(returned)?.loginTicketResponse;
@@ -112,10 +131,10 @@ export class FiscalService {
   private soapError(parsed: any) { return parsed?.Envelope?.Body?.Fault?.faultstring || parsed?.Envelope?.Body?.Fault?.Reason?.Text; }
   private async wsfe(environment: string, action: string, body: string) {
     const envelope = `<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ar="http://ar.gov.afip.dif.FEV1/"><soap:Body><ar:${action}>${body}</ar:${action}></soap:Body></soap:Envelope>`;
-    const response = await fetch(this.endpoints(environment).wsfe, { method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: `http://ar.gov.afip.dif.FEV1/${action}` }, body: envelope, signal: AbortSignal.timeout(20000) });
-    const text = await response.text();
+    const response = await this.postSoap(this.endpoints(environment).wsfe, `http://ar.gov.afip.dif.FEV1/${action}`, envelope);
+    const text = response.text;
     const parsed = this.parser.parse(text);
-    if (!response.ok || this.soapError(parsed)) throw new Error(this.soapError(parsed) || `WSFE respondió HTTP ${response.status}.`);
+    if (response.status < 200 || response.status >= 300 || this.soapError(parsed)) throw new Error(this.soapError(parsed) || `WSFE respondió HTTP ${response.status}.`);
     return parsed?.Envelope?.Body?.[`${action}Response`]?.[`${action}Result`];
   }
   private authXml(a: { token: string; sign: string }, cuit: string) { return `<ar:Auth><ar:Token>${a.token}</ar:Token><ar:Sign>${a.sign}</ar:Sign><ar:Cuit>${cuit}</ar:Cuit></ar:Auth>`; }
