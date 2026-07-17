@@ -86,6 +86,7 @@ export class FiscalService {
       const target = new URL(url);
       const request = httpsRequest({
         protocol: target.protocol, hostname: target.hostname, port: target.port || 443,
+        ciphers: 'DEFAULT@SECLEVEL=1',
         path: `${target.pathname}${target.search}`, method: 'POST', family: 4,
         headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: soapAction, 'Content-Length': Buffer.byteLength(body) },
         timeout: 20000,
