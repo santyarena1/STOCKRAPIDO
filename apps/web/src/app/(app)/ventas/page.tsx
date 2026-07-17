@@ -26,6 +26,12 @@ type Sale = {
   items: SaleItem[];
   user?: { name: string };
   customer?: { id: string; name: string; balance?: string | number } | null;
+  fiscalDocument?: {
+    kind: 'INTERNAL' | 'FACTURA_C';
+    status: 'INTERNAL' | 'PENDING' | 'AUTHORIZED' | 'ERROR';
+    pointOfSale?: number | null;
+    receiptNumber?: number | null;
+  } | null;
 };
 
 type Customer = { id: string; name: string; balance?: string | number };
@@ -658,7 +664,7 @@ export default function VentasPage() {
             <thead className="bg-slate-800 text-slate-300">
               <tr>
                 <th className="text-left p-3">Fecha y hora</th>
-                <th className="text-left p-3">ID</th>
+                <th className="text-left p-3">Comprobante</th>
                 <th className="text-left p-3">Cliente</th>
                 <th className="text-left p-3">Forma de pago</th>
                 <th className="text-right p-3">Ítems</th>
@@ -693,8 +699,25 @@ export default function VentasPage() {
                       <td className="p-3 text-slate-400 whitespace-nowrap">
                         {new Date(s.createdAt).toLocaleString('es-AR')}
                       </td>
-                      <td className="p-3 font-mono text-xs">
-                        <span className={isDuplicate ? 'text-amber-400' : 'text-slate-500'}>{s.id.slice(-8)}</span>
+                      <td className="p-3 text-xs whitespace-nowrap">
+                        {s.fiscalDocument?.kind === 'FACTURA_C' && s.fiscalDocument.status === 'AUTHORIZED' ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2 py-1 font-medium text-emerald-300">Factura C</span>
+                            {s.fiscalDocument.pointOfSale != null && s.fiscalDocument.receiptNumber != null && (
+                              <span className="font-mono text-[10px] text-slate-500">
+                                {String(s.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(s.fiscalDocument.receiptNumber).padStart(8, '0')}
+                              </span>
+                            )}
+                          </div>
+                        ) : s.fiscalDocument?.kind === 'FACTURA_C' ? (
+                          <span className="rounded border border-red-500/30 bg-red-500/15 px-2 py-1 font-medium text-red-300">
+                            {s.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}
+                          </span>
+                        ) : s.fiscalDocument?.kind === 'INTERNAL' ? (
+                          <span className="rounded border border-amber-500/30 bg-amber-500/15 px-2 py-1 font-medium text-amber-300">Comprobante interno</span>
+                        ) : (
+                          <span className="rounded border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-slate-400">Sin comprobante</span>
+                        )}
                         {isDuplicate && <span className="ml-1.5 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded px-1 py-0.5">dup</span>}
                       </td>
                       <td className="p-3 text-slate-200">
