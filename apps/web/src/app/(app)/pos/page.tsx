@@ -381,7 +381,7 @@ export default function POSPage() {
             cost?: unknown;
           }>
         >('/products/search', {
-          params: { q: term, limit: '15' },
+          params: { q: term, limit: '40', excludeCombos: '1' },
         });
         if (cancelled) return;
         const list = Array.isArray(data) ? data : [];

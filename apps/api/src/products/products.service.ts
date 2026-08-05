@@ -49,7 +49,7 @@ export class ProductsService {
     });
   }
 
-  async search(businessId: string, q: string, limit = 20) {
+  async search(businessId: string, q: string, limit = 20, excludeCombos = false) {
     const term = q.trim();
     if (!term) return [];
     const byBarcode = await this.prisma.product.findMany({
@@ -58,15 +58,23 @@ export class ProductsService {
       include: { category: true },
     });
     if (byBarcode.length) return byBarcode.map(decorateProductUnits);
+    const tokens = term.split(/\s+/).filter(Boolean);
     const results = await this.prisma.product.findMany({
       where: {
         businessId,
         isActive: true,
-        OR: [
-          { name: { contains: term, mode: 'insensitive' } },
-          { barcode: { contains: term } },
-          { brand: { contains: term, mode: 'insensitive' } },
-        ],
+        AND: tokens.map((token) => ({
+          OR: [
+            { name: { contains: token, mode: 'insensitive' } },
+            { barcode: { contains: token } },
+            { brand: { contains: token, mode: 'insensitive' } },
+          ],
+        })),
+        ...(excludeCombos && {
+          NOT: {
+            category: { is: { name: { equals: 'combo', mode: 'insensitive' } } },
+          },
+        }),
       },
       take: limit,
       include: { category: true },

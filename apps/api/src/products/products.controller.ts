@@ -12,8 +12,18 @@ export class ProductsController {
   constructor(private products: ProductsService) {}
 
   @Get('search')
-  search(@CurrentUser() user: User, @Query('q') q: string, @Query('limit') limit?: string) {
-    return this.products.search(user.businessId, q || '', limit ? parseInt(limit, 10) : 20);
+  search(
+    @CurrentUser() user: User,
+    @Query('q') q: string,
+    @Query('limit') limit?: string,
+    @Query('excludeCombos') excludeCombos?: string,
+  ) {
+    return this.products.search(
+      user.businessId,
+      q || '',
+      limit ? parseInt(limit, 10) : 20,
+      excludeCombos === '1' || excludeCombos === 'true',
+    );
   }
 
   @Get()
