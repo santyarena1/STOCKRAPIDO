@@ -22,7 +22,8 @@ type Sale = {
   discount: string | number;
   totalFinal: string | number;
   paymentMethod: string | null;
-  status: string;
+  status?: string;
+  voidedAt?: string | null;
   items: SaleItem[];
   user?: { name: string };
   customer?: { id: string; name: string; balance?: string | number } | null;
@@ -31,6 +32,10 @@ type Sale = {
     status: 'INTERNAL' | 'PENDING' | 'AUTHORIZED' | 'ERROR';
     pointOfSale?: number | null;
     receiptNumber?: number | null;
+    errorMessage?: string | null;
+    creditNoteNumber?: number | null;
+    creditNoteType?: number | null;
+    voidedAt?: string | null;
   } | null;
 };
 
@@ -370,6 +375,38 @@ export default function VentasPage() {
     }
   };
 
+  const handleFacturar = async (saleId: string, event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    try {
+      const fiscalDocument = await api<NonNullable<Sale['fiscalDocument']>>(
+        `/fiscal/sales/${saleId}/factura`,
+        { method: 'POST' },
+      );
+      await fetchSales();
+      if (viewSale?.id === saleId) await refreshSaleInModal(saleId);
+      if (fiscalDocument.status === 'ERROR') {
+        alert(fiscalDocument.errorMessage || 'ARCA no pudo autorizar la Factura C.');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo facturar la venta.');
+    }
+  };
+
+  const handleAnular = async (saleId: string, event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    if (!confirm('¿Anular la factura con una nota de crédito? Se revierte stock y fiado y no se puede deshacer.')) return;
+    try {
+      const updated = await api<Sale>(`/sales/${saleId}/void`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (viewSale?.id === saleId) setViewSale(updated);
+      await fetchSales();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo emitir la nota de crédito en ARCA.');
+    }
+  };
+
   const startEditItem = (it: SaleItem) => {
     setEditingItemId(it.id);
     setItemEditQty(String(it.qty));
@@ -694,16 +731,29 @@ export default function VentasPage() {
                   const itemCount = s.items?.reduce((sum, i) => sum + (i.qty ?? 0), 0) ?? 0;
                   const subtotalNum = Number(s.total ?? 0);
                   const isDuplicate = duplicateIds.has(s.id);
+                  const isVoided = s.status === 'voided';
+                  const isAuthorizedFactura =
+                    s.fiscalDocument?.kind === 'FACTURA_C' &&
+                    s.fiscalDocument.status === 'AUTHORIZED';
                   return (
                     <tr key={s.id} className={isDuplicate ? 'bg-amber-950/20 border-l-2 border-amber-500/60 hover:bg-amber-950/30' : 'hover:bg-slate-800/50'}>
                       <td className="p-3 text-slate-400 whitespace-nowrap">
                         {new Date(s.createdAt).toLocaleString('es-AR')}
                       </td>
                       <td className="p-3 text-xs whitespace-nowrap">
-                        {s.fiscalDocument?.kind === 'FACTURA_C' && s.fiscalDocument.status === 'AUTHORIZED' ? (
+                        {isVoided ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="rounded border border-red-500/30 bg-red-500/15 px-2 py-1 font-medium text-red-300">Anulada</span>
+                            {s.fiscalDocument?.creditNoteNumber != null && (
+                              <span className="font-mono text-[10px] text-red-300/70">
+                                NC {String(s.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(s.fiscalDocument.creditNoteNumber).padStart(8, '0')}
+                              </span>
+                            )}
+                          </div>
+                        ) : isAuthorizedFactura ? (
                           <div className="flex flex-col items-start gap-1">
                             <span className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2 py-1 font-medium text-emerald-300">Factura C</span>
-                            {s.fiscalDocument.pointOfSale != null && s.fiscalDocument.receiptNumber != null && (
+                            {s.fiscalDocument?.pointOfSale != null && s.fiscalDocument.receiptNumber != null && (
                               <span className="font-mono text-[10px] text-slate-500">
                                 {String(s.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(s.fiscalDocument.receiptNumber).padStart(8, '0')}
                               </span>
@@ -740,6 +790,24 @@ export default function VentasPage() {
                         {(s as Sale & { user?: { name: string } }).user?.name ?? '—'}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap space-x-2">
+                        {!isVoided && (!s.fiscalDocument || s.fiscalDocument.kind === 'INTERNAL') && (
+                          <button
+                            type="button"
+                            onClick={(e) => void handleFacturar(s.id, e)}
+                            className="text-emerald-400 hover:underline text-sm"
+                          >
+                            Facturar
+                          </button>
+                        )}
+                        {!isVoided && isAuthorizedFactura && (
+                          <button
+                            type="button"
+                            onClick={(e) => void handleAnular(s.id, e)}
+                            className="text-orange-400 hover:underline text-sm"
+                          >
+                            Anular (NC)
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => void handleReprint(s.id, e)}
@@ -755,23 +823,27 @@ export default function VentasPage() {
                         >
                           Detalle
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setViewSale(s);
-                          }}
-                          className="text-emerald-400 hover:underline text-sm"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => void handleDeleteSaleFromRow(s, e)}
-                          className="text-red-400 hover:underline text-sm"
-                        >
-                          Eliminar
-                        </button>
+                        {!isVoided && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewSale(s);
+                            }}
+                            className="text-emerald-400 hover:underline text-sm"
+                          >
+                            Editar
+                          </button>
+                        )}
+                        {!isVoided && !isAuthorizedFactura && (
+                          <button
+                            type="button"
+                            onClick={(e) => void handleDeleteSaleFromRow(s, e)}
+                            className="text-red-400 hover:underline text-sm"
+                          >
+                            Eliminar
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -828,7 +900,8 @@ export default function VentasPage() {
               </button>
             </div>
             <div className="p-4 space-y-6">
-              <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 space-y-3">
+              {viewSale.status !== 'voided' && (
+                <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 space-y-3">
                 <h3 className="text-slate-200 font-medium text-sm">Editar venta</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="block">
@@ -877,18 +950,38 @@ export default function VentasPage() {
                   >
                     {saleSaving ? 'Guardando…' : 'Guardar cambios de la venta'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteSale()}
-                    className="px-4 py-2 rounded-lg border border-red-500/50 text-red-400 text-sm hover:bg-red-950/50"
-                  >
-                    Eliminar venta completa
-                  </button>
+                  {(!viewSale.fiscalDocument || viewSale.fiscalDocument.kind === 'INTERNAL') && (
+                    <button
+                      type="button"
+                      onClick={() => void handleFacturar(viewSale.id)}
+                      className="px-4 py-2 rounded-lg border border-emerald-500/50 text-emerald-400 text-sm hover:bg-emerald-950/50"
+                    >
+                      Facturar
+                    </button>
+                  )}
+                  {viewSale.fiscalDocument?.kind === 'FACTURA_C' && viewSale.fiscalDocument.status === 'AUTHORIZED' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleAnular(viewSale.id)}
+                      className="px-4 py-2 rounded-lg border border-orange-500/50 text-orange-400 text-sm hover:bg-orange-950/50"
+                    >
+                      Anular (NC)
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteSale()}
+                      className="px-4 py-2 rounded-lg border border-red-500/50 text-red-400 text-sm hover:bg-red-950/50"
+                    >
+                      Eliminar venta completa
+                    </button>
+                  )}
                 </div>
                 <p className="text-slate-500 text-xs">
                   El saldo de fiado se ajusta solo si la forma de pago es <strong className="text-slate-400">Fiado</strong> y hay cliente. Al editar ítems, el descuento no puede superar el subtotal (se recalcula solo).
                 </p>
-              </div>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-slate-300 font-medium mb-2">Ítems</h3>
@@ -941,7 +1034,9 @@ export default function VentasPage() {
                               ${Number(it.subtotal ?? 0).toFixed(0)}
                             </td>
                             <td className="p-2 text-right whitespace-nowrap">
-                              {isEditing ? (
+                              {viewSale.status === 'voided' ? (
+                                <span className="text-slate-600">—</span>
+                              ) : isEditing ? (
                                 <>
                                   <button
                                     type="button"

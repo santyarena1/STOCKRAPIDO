@@ -118,9 +118,12 @@ export class SalesService {
   async deleteSale(businessId: string, saleId: string) {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, businessId },
-      include: { items: true },
+      include: { items: true, fiscalDocument: true },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.fiscalDocument?.kind === 'FACTURA_C' && sale.fiscalDocument.status === 'AUTHORIZED') {
+      throw new BadRequestException('No podés eliminar una venta facturada. Anulala con nota de crédito.');
+    }
 
     for (const it of sale.items) {
       if (it.productId && it.qty > 0) {
@@ -143,6 +146,52 @@ export class SalesService {
 
     await this.prisma.sale.delete({ where: { id: saleId } });
     return { ok: true };
+  }
+
+  async voidSaleWithCreditNote(businessId: string, userId: string, saleId: string, reason?: string) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, businessId },
+      include: { items: true, fiscalDocument: true },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    if (sale.status === 'voided') throw new BadRequestException('La venta ya está anulada.');
+    if (sale.fiscalDocument?.kind !== 'FACTURA_C' || sale.fiscalDocument.status !== 'AUTHORIZED') {
+      throw new BadRequestException(
+        'Solo se puede anular con nota de crédito una venta facturada. Para comprobantes internos usá Eliminar.',
+      );
+    }
+
+    await this.fiscal.issueCreditNote(businessId, saleId);
+
+    for (const item of sale.items) {
+      if (item.productId && item.qty > 0) {
+        await this.products.adjustStock(
+          item.productId,
+          businessId,
+          item.qty,
+          'anulacion_nc',
+          `nota-credito:${saleId}`,
+        );
+      }
+    }
+
+    if (sale.paymentMethod === 'fiado' && sale.customerId) {
+      await this.prisma.customer.update({
+        where: { id: sale.customerId },
+        data: { balance: { decrement: Number(sale.totalFinal) } },
+      });
+    }
+
+    await this.prisma.sale.update({
+      where: { id: saleId },
+      data: {
+        status: 'voided',
+        voidedAt: new Date(),
+        voidedById: userId,
+        voidReason: reason ?? null,
+      },
+    });
+    return this.getOne(saleId, businessId);
   }
 
   async updateSale(

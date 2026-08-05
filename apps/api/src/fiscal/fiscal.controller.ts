@@ -12,5 +12,6 @@ export class FiscalController {
   @Put('config') save(@CurrentUser() u: User, @Body() body: any) { return this.fiscal.saveConfig(u.businessId, body); }
   @Post('test') test(@CurrentUser() u: User) { return this.fiscal.testConnection(u.businessId); }
   @Get('sales/:saleId/receipt') receipt(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.receipt(u.businessId, saleId); }
+  @Post('sales/:saleId/factura') factura(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.issueFacturaC(u.businessId, saleId); }
   @Post('sales/:saleId/retry') retry(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.issueFacturaC(u.businessId, saleId); }
 }

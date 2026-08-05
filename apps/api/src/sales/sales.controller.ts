@@ -82,6 +82,15 @@ export class SalesController {
     return this.sales.updateSale(user.businessId, id, body);
   }
 
+  @Post(':id/void')
+  voidSale(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.sales.voidSaleWithCreditNote(user.businessId, user.id, id, body?.reason);
+  }
+
   @Delete('duplicates/cleanup')
   cleanupDuplicates(@CurrentUser() user: User) {
     return this.sales.cleanupDuplicates(user.businessId);
