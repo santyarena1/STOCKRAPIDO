@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { printFiscalReceipt } from '@/components/FiscalCheckout';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type SaleItem = {
   id: string;
@@ -480,8 +482,8 @@ export default function VentasPage() {
   };
 
   return (
-    <div className="p-4 max-w-[1400px] mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-4">Historial de ventas</h1>
+    <Container className="max-w-[1400px] space-y-6">
+      <PageHeader title="Historial de ventas" subtitle="Consultá operaciones, comprobantes y detalle de cada venta." />
 
       {!loading && stats && (
         <div data-tour="ventas-stats" className="mb-6 space-y-4">
@@ -501,33 +503,33 @@ export default function VentasPage() {
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Ventas</p>
               <p className="text-2xl font-bold text-white">{stats.saleCount}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Total cobrado</p>
               <p className="text-xl font-bold text-brand">{formatMoneyArs(stats.sumTotalFinal)}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Subtotal bruto</p>
               <p className="text-xl font-bold text-white">{formatMoneyArs(stats.sumSubtotal)}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Descuentos</p>
               <p className="text-xl font-bold text-amber-400">-{formatMoneyArs(stats.sumDiscount)}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Ticket promedio</p>
               <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stats.averageTicket)}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Unidades vendidas</p>
               <p className="text-2xl font-bold text-slate-100">{stats.unitsSold}</p>
             </div>
           </div>
           {Object.keys(stats.byPaymentMethod).length > 0 && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800/40 px-4 py-3">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
               <p className="text-slate-400 text-xs mb-2">Por forma de pago</p>
               <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-300">
                 {Object.entries(stats.byPaymentMethod)
@@ -567,8 +569,8 @@ export default function VentasPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden mb-4">
-        <div data-tour="ventas-filters" className="px-4 py-3 border-b border-slate-700 space-y-3">
+      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="ventas-filters" className="space-y-3 border-b border-slate-800 px-4 py-4 sm:px-5">
           <h2 className="text-lg font-medium text-slate-200">Filtros</h2>
           <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs text-slate-500 shrink-0">Período rápido:</span>
@@ -698,7 +700,7 @@ export default function VentasPage() {
 
         <div data-tour="ventas-table" className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-slate-950/70 text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="text-left p-3">Fecha y hora</th>
                 <th className="text-left p-3">Comprobante</th>
@@ -1102,6 +1104,6 @@ export default function VentasPage() {
           </div>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

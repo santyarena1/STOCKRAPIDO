@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
 import { ImageUploader } from '@/components/ImageUploader';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type ProductBatch = {
   id: string;
@@ -163,14 +165,11 @@ export default function EditarProductoPage() {
     : null;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/productos" className="text-slate-400 hover:text-white">← Productos</Link>
-        <h1 className="text-2xl font-bold text-white">{product.name}</h1>
-      </div>
+    <Container className="max-w-4xl space-y-6">
+      <PageHeader title={product.name} actions={<Link href="/productos" className="text-slate-400 hover:text-white">← Productos</Link>} />
 
       <div className="flex flex-col gap-6">
-        <form data-tour="editar-producto-form" onSubmit={handleSave} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 w-full">
+        <form data-tour="editar-producto-form" onSubmit={handleSave} className="w-full space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <div>
             <label className="block text-sm text-slate-400 mb-1">Nombre *</label>
             <input
@@ -341,7 +340,7 @@ export default function EditarProductoPage() {
               </p>
             </div>
           )}
-          <div data-tour="editar-producto-stock" className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 w-full">
+          <div data-tour="editar-producto-stock" className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="font-medium text-slate-200 mb-1">Stock actual</h3>
             <p className="text-2xl font-bold text-white mb-1">{product.stock} unidades</p>
             {nextExpiry && (
@@ -414,7 +413,7 @@ export default function EditarProductoPage() {
               </div>
             </form>
           </div>
-          <div data-tour="editar-producto-movimientos" className="rounded-lg border border-slate-700 overflow-hidden w-full">
+          <div data-tour="editar-producto-movimientos" className="w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
             <h3 className="px-4 py-2 bg-slate-800 text-slate-200 font-medium">Historial de movimientos</h3>
             <p className="px-4 py-1 text-slate-500 text-xs">Entradas y salidas de stock con fecha y motivo</p>
             <div className="overflow-x-auto">
@@ -446,6 +445,6 @@ export default function EditarProductoPage() {
           </div>
         </div>
       </div>
-    </div>
+    </Container>
   );
 }

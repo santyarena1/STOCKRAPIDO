@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { formatMoneyArs } from '@/lib/units';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Connection = {
   id: string;
@@ -258,16 +260,11 @@ export default function SincronizacionesPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Sincronizaciones</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Catálogo de proveedores → productos con precios <strong className="text-slate-400">unitarios</strong> en POS y listado.
-            Los valores por bulto quedan solo como referencia interna.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <Container className="max-w-[1600px] space-y-6">
+      <PageHeader
+        title="Sincronizaciones"
+        subtitle="Catálogo de proveedores → productos con precios unitarios en POS y listado. Los valores por bulto quedan como referencia interna."
+        actions={<div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setShowMap((v) => !v)}
@@ -291,8 +288,8 @@ export default function SincronizacionesPage() {
           >
             {busy === 'import' ? 'Importando…' : 'Importar a productos'}
           </button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {msg && (
         <div
@@ -357,19 +354,19 @@ export default function SincronizacionesPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-500 text-xs">En catálogo</p>
               <p className="text-2xl font-bold text-white">{conn._count?.items ?? items.length}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-500 text-xs">Con precio B2B</p>
               <p className="text-2xl font-bold text-emerald-400">{withCost}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-500 text-xs">Vinculados a productos</p>
               <p className="text-2xl font-bold text-brand">{linked}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-500 text-xs">Markup venta</p>
               <p className="text-2xl font-bold text-white">{mk}%</p>
             </div>
@@ -464,7 +461,7 @@ export default function SincronizacionesPage() {
             </label>
           </div>
 
-          <div className="rounded-xl border border-slate-700 overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-800/90 text-slate-400 text-left">
@@ -537,6 +534,6 @@ export default function SincronizacionesPage() {
           </div>
         </>
       )}
-    </div>
+    </Container>
   );
 }

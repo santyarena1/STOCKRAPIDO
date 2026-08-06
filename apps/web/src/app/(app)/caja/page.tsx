@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type CajaPreview = {
   openingEfectivo: number;
@@ -177,11 +179,11 @@ export default function CajaPage() {
   if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
 
   return (
-    <div className="p-6 max-w-4xl">
-      <h1 className="text-2xl font-bold text-white mb-6">Caja</h1>
+    <Container className="max-w-4xl space-y-6">
+      <PageHeader title="Caja" subtitle="Administrá la apertura, movimientos y cierre de caja." />
 
       {!open ? (
-        <form data-tour="caja-open" onSubmit={handleOpen} className="rounded-lg border border-slate-700 bg-slate-800/50 p-6 max-w-md">
+        <form data-tour="caja-open" onSubmit={handleOpen} className="max-w-md rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <h2 className="text-lg font-medium text-slate-200 mb-4">Abrir caja</h2>
           <div className="space-y-4">
             <div>
@@ -224,7 +226,7 @@ export default function CajaPage() {
         </form>
       ) : (
         <div className="space-y-6">
-          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 flex flex-wrap justify-between gap-4">
+          <div className="flex flex-wrap justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <div>
               <p className="text-slate-400 text-sm">Caja abierta desde {new Date(open.openedAt).toLocaleString()}</p>
               <p className="text-xl font-bold text-white">
@@ -259,7 +261,7 @@ export default function CajaPage() {
             </div>
           )}
 
-          <form data-tour="caja-movements" onSubmit={handleMovement} className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+          <form data-tour="caja-movements" onSubmit={handleMovement} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="font-medium text-slate-200 mb-3">Ingreso / Egreso</h3>
             <div className="flex flex-wrap gap-2 items-end">
               <select
@@ -301,7 +303,7 @@ export default function CajaPage() {
           </form>
 
           {open.movements && open.movements.length > 0 && (
-            <div className="rounded-lg border border-slate-700 overflow-hidden">
+            <div className="overflow-hidden rounded-xl border border-slate-800">
               <h3 className="px-4 py-2 bg-slate-800 text-slate-200 font-medium">Movimientos</h3>
               <ul className="divide-y divide-slate-700">
                 {open.movements.map((m) => (
@@ -319,7 +321,7 @@ export default function CajaPage() {
             </div>
           )}
 
-          <form data-tour="caja-close" onSubmit={handleClose} className="rounded-lg border border-slate-700 bg-slate-800/50 p-6">
+          <form data-tour="caja-close" onSubmit={handleClose} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="font-medium text-slate-200 mb-2">Cerrar caja</h3>
             <p className="text-slate-400 text-sm mb-4">
               Contá por separado el efectivo físico y lo que corresponde a banco/tarjetas (según tu criterio de cierre).
@@ -371,7 +373,7 @@ export default function CajaPage() {
         </div>
       )}
 
-      <div className="mt-10 rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
         <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-lg font-medium text-slate-200">Historial de aperturas y cierres</h2>
           <div className="flex flex-wrap items-center gap-2">
@@ -457,6 +459,6 @@ export default function CajaPage() {
           </table>
         </div>
       </div>
-    </div>
+    </Container>
   );
 }

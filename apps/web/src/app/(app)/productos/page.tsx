@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { UnitPriceDisplay } from '@/components/UnitPriceDisplay';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Product = {
   id: string;
@@ -282,10 +284,11 @@ export default function ProductosPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
-        <h1 className="text-2xl font-bold text-white">Productos</h1>
-        <div className="flex flex-wrap gap-2 items-center">
+    <Container className="space-y-6">
+      <PageHeader
+        title="Productos"
+        subtitle="Gestioná catálogo, precios, costos y niveles de stock."
+        actions={<div className="flex flex-wrap gap-2 items-center">
           <a
             href="#"
             role="button"
@@ -326,8 +329,8 @@ export default function ProductosPage() {
           >
             Nuevo producto
           </Link>
-        </div>
-      </div>
+        </div>}
+      />
 
       <p className="mb-2 text-slate-500 text-sm">
         <strong>Exportar stock (Excel)</strong> descarga el catálogo completo para editar e importar.{' '}
@@ -358,32 +361,32 @@ export default function ProductosPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Productos en catálogo</p>
               <p className="text-2xl font-bold text-white">{stockSummary.productCount}</p>
               <p className="text-slate-500 text-xs mt-1">Con stock: {stockSummary.productsWithStock} · Sin stock: {stockSummary.productsNoStock}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Unidades totales</p>
               <p className="text-2xl font-bold text-brand">{stockSummary.totalUnits}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Valor stock (costo producto)</p>
               <p className="text-xl font-bold text-white">{formatMoneyArs(stockSummary.valueAtCostProduct)}</p>
               {stockSummary.productsWithoutCostWithStock > 0 && (
                 <p className="text-amber-400/90 text-xs mt-1">{stockSummary.productsWithoutCostWithStock} con stock sin costo cargado</p>
               )}
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Valor stock (costo lotes)</p>
               <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stockSummary.valueAtCostBatches)}</p>
               <p className="text-slate-500 text-xs mt-1">Suma de cantidad × costo unitario por lote</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Valor stock (precio venta)</p>
               <p className="text-xl font-bold text-white">{formatMoneyArs(stockSummary.valueAtSale)}</p>
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Margen potencial</p>
               <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stockSummary.potentialMargin)}</p>
               <p className="text-slate-500 text-xs mt-1">Venta − costo (campo producto)</p>
@@ -402,7 +405,7 @@ export default function ProductosPage() {
           {(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && (
             <div className="grid gap-6 lg:grid-cols-2">
               {stockSummary.expiringBatches.length > 0 && (
-                <div className="rounded-xl border border-slate-700 overflow-hidden">
+                <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
                   <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700">
                     <h3 className="font-semibold text-white text-sm">Lotes por vencer (detalle)</h3>
                     <p className="text-slate-500 text-xs">Cantidad por lote en los próximos {stockSummary.expiringDaysWindow} días</p>
@@ -437,7 +440,7 @@ export default function ProductosPage() {
               )}
 
               {stockSummary.expiringByProduct.length > 0 && (
-                <div className="rounded-xl border border-slate-700 overflow-hidden">
+                <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
                   <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700">
                     <h3 className="font-semibold text-white text-sm">Próximo vencimiento por producto</h3>
                     <p className="text-slate-500 text-xs">Cantidad en la fecha de vencimiento más cercana</p>
@@ -521,7 +524,7 @@ export default function ProductosPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div data-tour="productos-table" className="rounded-lg border border-slate-700 overflow-hidden">
+        <div data-tour="productos-table" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-slate-300">
               <tr>
@@ -613,6 +616,6 @@ export default function ProductosPage() {
           </table>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

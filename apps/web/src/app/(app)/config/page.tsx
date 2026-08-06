@@ -5,6 +5,8 @@ import { api } from '@/lib/api';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 import { ImageUploader, MultiImageUploader } from '@/components/ImageUploader';
 import FiscalSettings from '@/components/FiscalSettings';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Business = {
   id: string;
@@ -89,7 +91,7 @@ function BrandColorRow({
 }) {
   const pickerSafe = /^#[0-9A-Fa-f]{6}$/.test(value) ? value : fallbackHex;
   return (
-    <div className="rounded-lg border border-slate-700/80 bg-slate-900/40 p-4">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-200">{label}</p>
@@ -358,12 +360,12 @@ export default function ConfigPage() {
   if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
 
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-white mb-6">Configuración</h1>
+    <Container className="max-w-3xl space-y-6">
+      <PageHeader title="Configuración" subtitle="Personalizá el negocio, la apariencia y sus parámetros operativos." />
 
       <FiscalSettings />
 
-      <form data-tour="config-negocio" onSubmit={handleSave} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6">
+      <form data-tour="config-negocio" onSubmit={handleSave} className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
         <h2 className="font-medium text-slate-200">Datos del negocio</h2>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Nombre</label>
@@ -401,7 +403,7 @@ export default function ConfigPage() {
       <form
         data-tour="config-apariencia"
         onSubmit={handleSaveBranding}
-        className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6"
+        className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5"
       >
         <h2 className="font-medium text-slate-200">Apariencia del sistema</h2>
         <p className="text-slate-500 text-sm">
@@ -589,7 +591,7 @@ export default function ConfigPage() {
         </div>
       </form>
 
-      <div data-tour="config-categorias" className="rounded-lg border border-slate-700 bg-slate-800/50 p-6">
+      <div data-tour="config-categorias" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
         <h2 className="font-medium text-slate-200 mb-4">Categorías de productos</h2>
         <form onSubmit={handleAddCategory} className="flex gap-2 mb-4">
           <input
@@ -607,6 +609,6 @@ export default function ConfigPage() {
           ))}
         </ul>
       </div>
-    </div>
+    </Container>
   );
 }

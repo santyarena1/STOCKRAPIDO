@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Supplier = { id: string; name: string; phone?: string; email?: string; _count?: { purchases: number } };
 
@@ -32,21 +34,22 @@ export default function ProveedoresPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-white">Proveedores</h1>
-        <button
+    <Container className="space-y-6">
+      <PageHeader
+        title="Proveedores"
+        subtitle="Centralizá los datos y el historial de tus proveedores."
+        actions={<button
           type="button"
           onClick={() => setShowForm(!showForm)}
           data-tour="proveedores-nuevo"
           className="px-4 py-2 rounded-lg btn-brand font-medium"
         >
           {showForm ? 'Cerrar' : 'Nuevo proveedor'}
-        </button>
-      </div>
+        </button>}
+      />
 
       {showForm && (
-        <form data-tour="proveedores-form" onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6 max-w-md">
+        <form data-tour="proveedores-form" onSubmit={handleSubmit} className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <input
             type="text"
             placeholder="Nombre *"
@@ -83,7 +86,7 @@ export default function ProveedoresPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div data-tour="proveedores-list" className="rounded-lg border border-slate-700 overflow-hidden">
+        <div data-tour="proveedores-list" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-slate-300">
               <tr>
@@ -106,6 +109,6 @@ export default function ProveedoresPage() {
           </table>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

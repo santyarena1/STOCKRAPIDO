@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Move = {
   id: string;
@@ -37,8 +39,8 @@ export default function MovimientosPage() {
   const reasonLabel = (r: string) => STOCK_REASONS.find((x) => x.value === r)?.label ?? r;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-white mb-2">Movimientos de stock</h1>
+    <Container className="space-y-6">
+      <PageHeader title="Movimientos de stock" />
       <p className="text-slate-400 text-sm mb-4">
         Por defecto se muestran las <strong className="text-slate-300">altas de producto</strong> (creaciones y stock
         inicial). En &quot;Todos&quot; ves ventas, compras y ajustes mezclados (lista global limitada: las ventas pueden
@@ -72,7 +74,7 @@ export default function MovimientosPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div data-tour="movimientos-table" className="rounded-lg border border-slate-700 overflow-hidden">
+        <div data-tour="movimientos-table" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -122,6 +124,6 @@ export default function MovimientosPage() {
           </div>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

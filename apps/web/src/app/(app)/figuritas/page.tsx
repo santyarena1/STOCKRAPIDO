@@ -25,6 +25,7 @@ import {
 import { CountryPicker } from '@/components/figuritas/PublicHero';
 import { fig } from '@/components/figuritas/theme';
 import type { CountryRow } from '@/components/figuritas/types';
+import { Container } from '@/components/ui/Container';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -907,7 +908,7 @@ export default function FigurityasPage() {
   return (
     <div className="relative min-h-screen">
       <div className={fig.pageGlow} />
-      <div className="relative p-4 md:p-6 space-y-4 sm:space-y-5 max-w-6xl mx-auto">
+      <Container className="relative max-w-6xl space-y-4 sm:space-y-5">
         <AdminHero />
         <FigTabs tabs={[...TABS]} active={tab} onChange={setTab} />
         <div className="pt-1">
@@ -916,7 +917,7 @@ export default function FigurityasPage() {
           {tab === 'catalogo' && <TabCatalogo />}
           {tab === 'pedidos' && <TabPedidos />}
         </div>
-      </div>
+      </Container>
     </div>
   );
 }

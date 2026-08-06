@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { api, apiUpload } from '@/lib/api';
 import { SupplierSelector } from '@/components/SupplierSelector';
 import { CategorySelector } from '@/components/CategorySelector';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Product = {
   id: string;
@@ -315,13 +317,14 @@ export default function ComprasIaPage() {
   if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
 
   return (
-    <div className="p-6 max-w-6xl">
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <Link href="/compras" className="text-slate-400 hover:text-white text-sm">
+    <Container className="max-w-6xl space-y-6">
+      <PageHeader
+        title="Compras con IA"
+        subtitle="Procesá facturas y revisá los datos detectados antes de confirmar."
+        actions={<Link href="/compras" className="text-slate-400 hover:text-white text-sm">
           ← Compras
-        </Link>
-        <h1 className="text-2xl font-bold text-white">Compras con IA</h1>
-      </div>
+        </Link>}
+      />
 
       <p className="text-slate-400 text-sm mb-6 max-w-3xl">
         Subí una factura de compra (PDF o imagen). La API la envía a tu flujo en N8N; cuando N8N devuelve los
@@ -450,7 +453,7 @@ export default function ComprasIaPage() {
         )}
       </div>
 
-      <form data-tour="compras-ia-form" onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-8">
+      <form data-tour="compras-ia-form" onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
         <h2 className="text-lg font-medium text-slate-200">2. Revisar y confirmar compra</h2>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Proveedor *</label>
@@ -478,7 +481,7 @@ export default function ComprasIaPage() {
             {form.items.map((item, i) => (
               <div
                 key={i}
-                className="rounded-lg border border-slate-600 bg-slate-800/30 p-4 space-y-3"
+                className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4"
               >
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Ítem {i + 1}</span>
@@ -611,6 +614,6 @@ export default function ComprasIaPage() {
           Confirmar compra
         </button>
       </form>
-    </div>
+    </Container>
   );
 }

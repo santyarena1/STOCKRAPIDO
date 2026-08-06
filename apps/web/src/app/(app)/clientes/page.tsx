@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api, getApiBaseUrl, getToken } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Customer = { id: string; name: string; phone?: string; balance: string | number };
 type SaleItem = { id: string; productName?: string | null; product?: { name: string } | null; qty: number; unitPrice: string | number; subtotal: string | number };
@@ -117,27 +119,28 @@ export default function ClientesPage() {
     item.product?.name ?? item.productName ?? 'Producto manual';
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-white">Clientes / Fiados</h1>
-        <button type="button" onClick={() => setShowForm(!showForm)} data-tour="clientes-nuevo" className="px-4 py-2 rounded-lg btn-brand font-medium">
+    <Container className="space-y-6">
+      <PageHeader
+        title="Clientes / Fiados"
+        subtitle="Gestioná clientes, saldos pendientes y cobranzas."
+        actions={<button type="button" onClick={() => setShowForm(!showForm)} data-tour="clientes-nuevo" className="px-4 py-2 rounded-lg btn-brand font-medium">
           {showForm ? 'Cerrar' : 'Nuevo cliente'}
-        </button>
-      </div>
+        </button>}
+      />
 
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-4">
           <h3 className="text-amber-400 font-medium">Morosos ({morosos.length})</h3>
           <p className="text-sm text-slate-400">Clientes con saldo pendiente</p>
         </div>
-        <div data-tour="clientes-total" className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+        <div data-tour="clientes-total" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <h3 className="text-slate-200 font-medium">Saldo total fiado</h3>
           <p className="text-2xl font-bold text-white">${totalFiado.toFixed(0)}</p>
         </div>
       </div>
 
       {showForm && (
-        <form data-tour="clientes-form" onSubmit={handleCreate} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6 max-w-md">
+        <form data-tour="clientes-form" onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <input
             type="text"
             placeholder="Nombre *"
@@ -312,7 +315,7 @@ export default function ClientesPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div data-tour="clientes-cobrar" className="rounded-lg border border-slate-700 overflow-hidden">
+        <div data-tour="clientes-cobrar" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-slate-300">
               <tr>
@@ -362,6 +365,6 @@ export default function ClientesPage() {
           </table>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

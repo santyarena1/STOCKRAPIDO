@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Category = { id: string; name: string };
 
@@ -59,13 +61,10 @@ export default function NuevoProductoPage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/productos" className="text-slate-400 hover:text-white">← Productos</Link>
-        <h1 className="text-2xl font-bold text-white">Nuevo producto</h1>
-      </div>
+    <Container className="max-w-3xl space-y-6">
+      <PageHeader title="Nuevo producto" actions={<Link href="/productos" className="text-slate-400 hover:text-white">← Productos</Link>} />
 
-      <form data-tour="nuevo-producto-form" onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6">
+      <form data-tour="nuevo-producto-form" onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
         <div data-tour="nuevo-producto-nombre">
           <label className="block text-sm text-slate-400 mb-1">Nombre *</label>
           <input
@@ -176,6 +175,6 @@ export default function NuevoProductoPage() {
           </Link>
         </div>
       </form>
-    </div>
+    </Container>
   );
 }

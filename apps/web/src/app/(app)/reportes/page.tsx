@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type SalesSummary = { total: number; count: number };
 type TopProduct = { name: string; qty: number; total: number };
@@ -47,10 +49,11 @@ export default function ReportesPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-white">Reportes</h1>
-        <div data-tour="reportes-periodo" className="flex gap-2">
+    <Container className="space-y-6">
+      <PageHeader
+        title="Reportes"
+        subtitle="Analizá ventas, margen, formas de pago y productos destacados."
+        actions={<div data-tour="reportes-periodo" className="flex gap-2">
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value as 'today' | 'week' | 'month')}
@@ -63,20 +66,20 @@ export default function ReportesPage() {
           <button data-tour="reportes-export" onClick={handleExportCsv} className="px-4 py-2 rounded-lg btn-brand">
             Exportar CSV
           </button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
         <div className="space-y-6">
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <h3 className="text-slate-400 text-sm">Ventas totales</h3>
               <p className="text-2xl font-bold text-white">${sales?.total?.toFixed(0) ?? 0}</p>
               <p className="text-slate-500 text-sm">{sales?.count ?? 0} ventas</p>
             </div>
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <h3 className="text-slate-400 text-sm">Margen estimado</h3>
               <p className="text-2xl font-bold text-white">${margin?.margin?.toFixed(0) ?? 0}</p>
               <p className="text-slate-500 text-sm">Ingresos: ${margin?.revenue?.toFixed(0) ?? 0} - Costo: ${margin?.cost?.toFixed(0) ?? 0}</p>
@@ -93,7 +96,7 @@ export default function ReportesPage() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
             <h3 className="font-medium text-slate-200 mb-4">Top productos</h3>
             <ul className="space-y-2">
               {(Array.isArray(topProducts) ? topProducts : []).slice(0, 10).map((p, i) => (
@@ -106,7 +109,7 @@ export default function ReportesPage() {
           </div>
 
           {(Array.isArray(lowStock) ? lowStock : []).length > 0 && (
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <h3 className="font-medium text-amber-400 mb-4">Productos con stock bajo</h3>
               <ul className="space-y-2 text-sm">
                 {(Array.isArray(lowStock) ? lowStock : []).map((p, i) => (
@@ -120,7 +123,7 @@ export default function ReportesPage() {
           )}
 
           {(Array.isArray(expiring) ? expiring : []).length > 0 && (
-            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
               <h3 className="font-medium text-orange-400 mb-4">Productos por vencer (próximos 30 días)</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -154,6 +157,6 @@ export default function ReportesPage() {
           )}
         </div>
       )}
-    </div>
+    </Container>
   );
 }

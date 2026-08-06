@@ -624,11 +624,11 @@ export default function POSPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="shrink-0 px-4 py-2 border-b border-slate-800 bg-slate-950/40 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-slate-400 uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-slate-600 overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-amber-600 text-white':'bg-slate-800 text-slate-300')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-emerald-600 text-white':'bg-slate-800 text-slate-300')}>Factura C</button></div><div className="inline-flex rounded-lg border border-slate-600 overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-blue-600 text-white':'bg-slate-800 text-slate-300')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-slate-600 text-white':'bg-slate-800 text-slate-300')}>No imprimir</button></div><button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="ml-auto px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200">En espera ({pausedList.length})</button></div>
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
+    <div className="flex h-full flex-col bg-slate-950/30">
+      <div className="shrink-0 px-4 py-2 border-b border-slate-800 bg-slate-950/60 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-slate-400 uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-slate-700 overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-amber-600 text-white':'bg-slate-900 text-slate-300')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-emerald-600 text-white':'bg-slate-900 text-slate-300')}>Factura C</button></div><div className="inline-flex rounded-lg border border-slate-700 overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-blue-600 text-white':'bg-slate-900 text-slate-300')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-slate-600 text-white':'bg-slate-900 text-slate-300')}>No imprimir</button></div><button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="ml-auto px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-200">En espera ({pausedList.length})</button></div>
+      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/40 px-4 py-2.5">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-xl font-bold text-white">POS</h1>
+          <h1 className="text-2xl font-bold leading-tight text-white">POS</h1>
           {openCashRegisterId ? (
             <span className="text-xs text-emerald-400/90 border border-emerald-700/50 rounded px-2 py-0.5" title="Las ventas (excepto fiado) se suman al cierre de caja">
               Caja abierta
@@ -699,7 +699,7 @@ export default function POSPage() {
         </div>
       )}
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-4 min-h-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-3">
         <div className="lg:col-span-2 flex flex-col min-h-0">
           <div className="mb-2 flex gap-2">
             <input
@@ -721,7 +721,7 @@ export default function POSPage() {
               Producto manual
             </button>
           </div>
-          <div data-tour="pos-results" className="flex-1 overflow-auto rounded-lg border border-slate-700 bg-slate-800/30 min-h-[200px]">
+          <div data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-slate-800 bg-slate-900/60">
             {loading && <p className="p-2 text-slate-500">Buscando...</p>}
             {!loading && results.length > 0 && (
               <ul className="divide-y divide-slate-700">
@@ -762,8 +762,8 @@ export default function POSPage() {
           </div>
         </div>
 
-        <div className="flex flex-col rounded-xl border border-slate-700 bg-slate-900/50 overflow-hidden min-h-0" data-pos-cart>
-          <div className="px-4 py-2 border-b border-slate-700 font-medium text-slate-300 flex justify-between">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60" data-pos-cart>
+          <div className="flex justify-between border-b border-slate-800 px-4 py-2.5 font-medium text-slate-300">
             <span>Carrito</span>
             {discountTotal > 0 && <span className="text-amber-400">-${discountTotal.toFixed(0)}</span>}
           </div>
@@ -786,7 +786,7 @@ export default function POSPage() {
               </ul>
             )}
           </div>
-          <div className="p-4 border-t border-slate-700 space-y-2">
+          <div className="space-y-2 border-t border-slate-800 p-4">
             <div className="flex justify-between text-slate-300">
               <span>Subtotal</span>
               <span>${subtotal.toFixed(0)}</span>

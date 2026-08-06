@@ -3,10 +3,21 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import {
+  BarChart3,
+  ChevronDown,
+  LayoutDashboard,
+  Package,
+  Receipt,
+  Settings,
+  ShoppingCart,
+  Truck,
+} from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
+import { cn } from '@/lib/cn';
 
 type Branding = {
   accentColor?: string;
@@ -29,24 +40,74 @@ const OPTIONAL_BRAND_CSS: { key: keyof Branding; cssVar: string }[] = [
   { key: 'shadowTintColor', cssVar: '--brand-shadow' },
 ];
 
-const nav = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/pos', label: 'POS' },
-  { href: '/ventas', label: 'Historial de ventas' },
-  { href: '/caja', label: 'Caja' },
-  { href: '/productos', label: 'Productos' },
-  { href: '/movimientos', label: 'Movimientos' },
-  { href: '/compras', label: 'Compras' },
-  { href: '/proveedores', label: 'Proveedores' },
-  { href: '/sincronizaciones', label: 'Sincronizaciones' },
-  { href: '/figuritas', label: 'Figuritas Mundial' },
-  { href: '/clientes', label: 'Clientes / Fiados' },
-  { href: '/reportes', label: 'Reportes' },
-  { href: '/promociones', label: 'Promociones' },
-  { href: '/config', label: 'Configuración' },
-  { href: '/usuarios', label: 'Usuarios' },
-  { href: '/billing', label: 'Plan & Facturación' },
+const PINNED = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/pos', label: 'POS', icon: ShoppingCart },
 ];
+
+const GROUPS = [
+  {
+    title: 'Ventas y caja',
+    icon: Receipt,
+    items: [
+      { href: '/ventas', label: 'Historial de ventas' },
+      { href: '/caja', label: 'Caja' },
+      { href: '/clientes', label: 'Clientes / Fiados' },
+    ],
+  },
+  {
+    title: 'Inventario',
+    icon: Package,
+    items: [
+      { href: '/productos', label: 'Productos' },
+      { href: '/movimientos', label: 'Movimientos' },
+      { href: '/promociones', label: 'Promociones' },
+      { href: '/figuritas', label: 'Figuritas Mundial' },
+    ],
+  },
+  {
+    title: 'Abastecimiento',
+    icon: Truck,
+    items: [
+      { href: '/compras', label: 'Compras' },
+      { href: '/proveedores', label: 'Proveedores' },
+      { href: '/sincronizaciones', label: 'Sincronizaciones' },
+    ],
+  },
+  {
+    title: 'Análisis',
+    icon: BarChart3,
+    items: [{ href: '/reportes', label: 'Reportes' }],
+  },
+  {
+    title: 'Administración',
+    icon: Settings,
+    items: [
+      { href: '/config', label: 'Configuración' },
+      { href: '/usuarios', label: 'Usuarios' },
+      { href: '/billing', label: 'Plan & Facturación' },
+    ],
+  },
+];
+
+const SIDEBAR_GROUPS_KEY = 'sr-sidebar-groups';
+
+function isActivePath(pathname: string, href: string) {
+  return (
+    pathname === href ||
+    (href === '/compras' && pathname.startsWith('/compras')) ||
+    (href === '/figuritas' && pathname.startsWith('/figuritas'))
+  );
+}
+
+function activeGroups(pathname: string) {
+  return Object.fromEntries(
+    GROUPS.map((group) => [
+      group.title,
+      group.items.some(({ href }) => isActivePath(pathname, href)),
+    ]),
+  );
+}
 
 function applyCssBrandVars(br: Branding | undefined) {
   const root = document.documentElement;
@@ -68,6 +129,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [brand, setBrand] = useState<Branding>({});
   const [sidebarTitle, setSidebarTitle] = useState('StockRápido');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => activeGroups(pathname));
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
 
   const applyBranding = useCallback(() => {
     api<{ name: string; posConfig?: { branding?: Branding } }>('/business/me')
@@ -113,6 +176,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener(STOCKRAPIDO_BRANDING_EVENT, onBrand);
   }, [ready, applyBranding]);
 
+  useEffect(() => {
+    let stored: Record<string, boolean> = {};
+    try {
+      stored = JSON.parse(localStorage.getItem(SIDEBAR_GROUPS_KEY) || '{}') as Record<string, boolean>;
+    } catch {
+      stored = {};
+    }
+    const active = activeGroups(pathname);
+    setOpenGroups(
+      Object.fromEntries(
+        GROUPS.map((group) => [group.title, active[group.title] || stored[group.title] || false]),
+      ),
+    );
+    setGroupsLoaded(true);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!groupsLoaded) return;
+    localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(openGroups));
+  }, [groupsLoaded, openGroups]);
+
   if (!ready) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando...</div>;
 
   const handleLogoutAll = async () => {
@@ -128,9 +212,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen min-h-0 overflow-hidden bg-slate-950 text-slate-200">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
-        <div className="shrink-0 p-4 border-b border-slate-800">
-          <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-white min-w-0">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
+        <div className="shrink-0 border-b border-slate-800 p-4">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-white">
             {brand.logoUrl &&
             (brand.logoUrl.startsWith('data:') ||
               brand.logoUrl.startsWith('http://') ||
@@ -145,28 +229,82 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="truncate">{sidebarTitle}</span>
           </Link>
         </div>
-        <nav className="min-h-0 flex-1 overflow-y-auto py-2">
-          {nav.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`block px-4 py-2.5 text-sm border-r-2 border-transparent ${
-                pathname === href ||
-                (href === '/compras' && pathname.startsWith('/compras')) ||
-                (href === '/figuritas' && pathname.startsWith('/figuritas'))
-                  ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                  : 'hover:bg-slate-800'
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+          <div className="space-y-1">
+            {PINNED.map(({ href, label, icon: Icon }) => {
+              const active = isActivePath(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg border-r-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
+                    active
+                      ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] text-[color:var(--brand-nav-active,var(--brand-accent))]'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                  )}
+                >
+                  <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-current' : 'text-slate-400')} />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 space-y-1">
+            {GROUPS.map(({ title, icon: Icon, items }) => {
+              const open = openGroups[title] ?? false;
+              const groupActive = items.some(({ href }) => isActivePath(pathname, href));
+              return (
+                <div key={title}>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => setOpenGroups((current) => ({ ...current, [title]: !open }))}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white',
+                      groupActive
+                        ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]'
+                        : 'text-slate-400',
+                    )}
+                  >
+                    <Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-slate-400')} />
+                    <span className="min-w-0 flex-1 truncate">{title}</span>
+                    <ChevronDown
+                      className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform', open && 'rotate-180')}
+                    />
+                  </button>
+                  {open ? (
+                    <div className="ml-5 mt-0.5 space-y-0.5 border-l border-slate-800 pl-3">
+                      {items.map(({ href, label }) => {
+                        const active = isActivePath(pathname, href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            className={cn(
+                              'flex items-center rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors',
+                              active
+                                ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                            )}
+                          >
+                            {label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </nav>
-        <div className="shrink-0 p-2 border-t border-slate-800">
+        <div className="shrink-0 border-t border-slate-800 p-2">
           <button
             type="button"
             onClick={handleLogoutAll}
-            className="w-full text-left px-4 py-2 text-sm text-slate-400 hover:text-red-400"
+            className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-slate-400 transition-colors hover:bg-red-950/30 hover:text-red-400"
           >
             Cerrar sesión en todos los dispositivos
           </button>

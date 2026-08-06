@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { SupplierSelector } from '@/components/SupplierSelector';
 import { CategorySelector } from '@/components/CategorySelector';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type Product = {
   id: string;
@@ -255,17 +257,17 @@ export default function ComprasPage() {
   if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
 
   return (
-    <div className="p-6 max-w-6xl">
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-white">Compras</h1>
+    <Container className="max-w-6xl space-y-6">
+      <PageHeader
+        title="Compras"
+        subtitle="Registrá ingresos de mercadería y mantené costos y stock actualizados."
+        actions={<div className="flex flex-wrap items-center gap-3">
           <Link
             href="/compras/ia"
             className="text-sm text-violet-400 hover:text-violet-300 border border-violet-600/50 rounded-lg px-3 py-1.5"
           >
             Compras con IA
           </Link>
-        </div>
         <button
           type="button"
           onClick={() => { setShowNew(!showNew); setEditingPurchaseId(null); }}
@@ -273,7 +275,8 @@ export default function ComprasPage() {
         >
           {showNew ? 'Cerrar' : 'Nueva compra'}
         </button>
-      </div>
+        </div>}
+      />
 
       {lowStock.length > 0 && (
         <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-4 mb-6">
@@ -287,7 +290,7 @@ export default function ComprasPage() {
       )}
 
       {showNew && (
-        <form data-tour="compras-form" onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-8">
+        <form data-tour="compras-form" onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           {editingPurchaseId && (
             <p className="text-amber-400 text-sm">Editando compra existente. Al confirmar se actualizará la compra (se revierte el stock anterior y se aplican los nuevos ítems).</p>
           )}
@@ -317,7 +320,7 @@ export default function ComprasPage() {
               {form.items.map((item, i) => (
                 <div
                   key={i}
-                  className="rounded-lg border border-slate-600 bg-slate-800/30 p-4 space-y-3"
+                  className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4"
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400 text-sm">Ítem {i + 1}</span>
@@ -456,7 +459,7 @@ export default function ComprasPage() {
         </form>
       )}
 
-      <div data-tour="compras-history" className="rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden">
+      <div data-tour="compras-history" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
         <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-lg font-medium text-slate-200">Historial de compras</h2>
           <div className="flex flex-wrap items-center gap-2">
@@ -606,6 +609,6 @@ export default function ComprasPage() {
           </div>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

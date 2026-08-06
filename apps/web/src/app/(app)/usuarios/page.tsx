@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type User = { id: string; email: string; name: string; role: string; isActive: boolean };
 
@@ -44,16 +46,17 @@ export default function UsuariosPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-white">Usuarios</h1>
-        <button type="button" onClick={() => setShowForm(!showForm)} data-tour="usuarios-nuevo" className="px-4 py-2 rounded-lg btn-brand font-medium">
+    <Container className="space-y-6">
+      <PageHeader
+        title="Usuarios"
+        subtitle="Administrá accesos, roles y permisos del equipo."
+        actions={<button type="button" onClick={() => setShowForm(!showForm)} data-tour="usuarios-nuevo" className="px-4 py-2 rounded-lg btn-brand font-medium">
           {showForm ? 'Cerrar' : 'Nuevo usuario'}
-        </button>
-      </div>
+        </button>}
+      />
 
       {showForm && (
-        <form data-tour="usuarios-form" onSubmit={handleCreate} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6 max-w-md">
+        <form data-tour="usuarios-form" onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <input
             type="email"
             placeholder="Email *"
@@ -95,7 +98,7 @@ export default function UsuariosPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div data-tour="usuarios-list" className="rounded-lg border border-slate-700 overflow-hidden">
+        <div data-tour="usuarios-list" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-slate-300">
               <tr>
@@ -132,6 +135,6 @@ export default function UsuariosPage() {
           </table>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

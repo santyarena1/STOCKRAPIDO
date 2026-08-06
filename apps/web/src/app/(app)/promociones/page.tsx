@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 type ProductItem = { productId: string; qty: number };
 
@@ -269,10 +271,11 @@ export default function PromocionesPage() {
   };
 
   return (
-    <div className="p-4 max-w-[1200px] mx-auto">
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-white">Promociones y ofertas</h1>
-        <div className="flex gap-2">
+    <Container className="max-w-7xl space-y-6">
+      <PageHeader
+        title="Promociones y ofertas"
+        subtitle="Creá reglas comerciales y controlá su vigencia."
+        actions={<div className="flex gap-2">
           <label className="flex items-center gap-2 text-slate-400 text-sm cursor-pointer">
             <input
               type="checkbox"
@@ -293,11 +296,11 @@ export default function PromocionesPage() {
           >
             Nueva promoción
           </button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {showForm && (
-        <form data-tour="promos-form" onSubmit={handleSubmit} className="rounded-lg border border-slate-700 bg-slate-800/50 p-6 mb-6 space-y-4">
+        <form data-tour="promos-form" onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
           <h2 className="text-lg font-bold text-white">{editingId ? 'Editar promoción' : 'Nueva promoción'}</h2>
 
           <div>
@@ -535,7 +538,7 @@ export default function PromocionesPage() {
       {loading ? (
         <p className="text-slate-500">Cargando...</p>
       ) : (
-        <div data-tour="promos-list" className="rounded-lg border border-slate-700 overflow-hidden">
+        <div data-tour="promos-list" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-slate-300">
               <tr>
@@ -583,6 +586,6 @@ export default function PromocionesPage() {
           </table>
         </div>
       )}
-    </div>
+    </Container>
   );
 }

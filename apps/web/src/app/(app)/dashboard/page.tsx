@@ -15,6 +15,8 @@ import {
 import { WidthProvider, Responsive } from 'react-grid-layout/legacy';
 import 'react-grid-layout/css/styles.css';
 import { api } from '@/lib/api';
+import { Container } from '@/components/ui/Container';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 const ResponsiveGrid = WidthProvider(Responsive);
 
@@ -159,29 +161,31 @@ export default function DashboardPage() {
   const currentMonth = monthNames[new Date().getMonth()];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <button
+    <Container>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Tu operación diaria, ventas e inventario en un solo lugar."
+        className="mb-6"
+        actions={<button
           type="button"
           onClick={() => setIsEditing((e) => !e)}
           className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-slate-600 text-slate-300 hover:bg-slate-800'}`}
         >
           {isEditing ? 'Listo (guardado)' : 'Editar dashboard'}
-        </button>
-      </div>
+        </button>}
+      />
 
       {/* KPIs fijos */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <Link
           href="/pos"
           data-tour="dashboard-pos"
-          className="rounded-xl border border-slate-700 bg-slate-800/60 p-4 border-brand-card-hover transition-all"
+          className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 border-brand-card-hover transition-all"
         >
           <h3 className="text-brand font-semibold mb-1 text-sm">POS</h3>
           <p className="text-slate-400 text-xs">Ir al punto de venta</p>
         </Link>
-        <div data-tour="dashboard-ventas-hoy" className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <div data-tour="dashboard-ventas-hoy" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="text-slate-400 font-medium mb-1 text-sm">Ventas hoy</h3>
           <p className="text-lg font-bold text-white">${salesToday?.total?.toFixed(0) ?? 0}</p>
           <p className="text-slate-500 text-xs">{salesToday?.count ?? 0} ventas</p>
@@ -191,7 +195,7 @@ export default function DashboardPage() {
           <p className="text-lg font-bold text-emerald-400">${marginToday?.margin?.toFixed(0) ?? 0}</p>
           <p className="text-slate-500 text-xs">Ingresos − costo mercadería</p>
         </div>
-        <div data-tour="dashboard-stock-bajo" className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <div data-tour="dashboard-stock-bajo" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="text-slate-400 font-medium mb-1 text-sm">Stock bajo</h3>
           <p className="text-lg font-bold text-white">{lowStockCount}</p>
         </div>
@@ -225,7 +229,7 @@ export default function DashboardPage() {
         draggableHandle={isEditing ? '.drag-handle' : undefined}
         margin={[16, 16]}
       >
-        <div key="ventas" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg flex flex-col min-h-0">
+        <div key="ventas" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-slate-200 font-semibold mb-2 shrink-0">Ventas por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
@@ -247,7 +251,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="compras" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg flex flex-col min-h-0">
+        <div key="compras" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-slate-200 font-semibold mb-2 shrink-0">Compras por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
@@ -269,7 +273,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="gastos" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg flex flex-col min-h-0">
+        <div key="gastos" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-slate-200 font-semibold mb-2 shrink-0">Gastos por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
@@ -291,7 +295,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="resumen" className="rounded-xl border border-slate-700 bg-slate-800/50 p-5 shadow-lg flex flex-col min-h-0">
+        <div key="resumen" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-slate-200 font-semibold mb-3 shrink-0">Resumen del mes</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0 flex-1">
@@ -310,7 +314,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="top-vendidos" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg overflow-auto">
+        <div key="top-vendidos" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
           <h3 className="text-brand font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-brand-dot" />Más vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
@@ -320,7 +324,7 @@ export default function DashboardPage() {
           </ul>
         </div>
 
-        <div key="top-ganancia" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg overflow-auto">
+        <div key="top-ganancia" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
           <h3 className="text-emerald-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" />Más ganancia</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
@@ -330,7 +334,7 @@ export default function DashboardPage() {
           </ul>
         </div>
 
-        <div key="top-menos" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg overflow-auto">
+        <div key="top-menos" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
           <h3 className="text-amber-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-400" />Menos vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
@@ -340,7 +344,7 @@ export default function DashboardPage() {
           </ul>
         </div>
 
-        <div key="top-vencer" className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 shadow-lg overflow-auto">
+        <div key="top-vencer" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
           <h3 className="text-rose-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-400" />Próximos a vencer</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
@@ -375,6 +379,6 @@ export default function DashboardPage() {
           <Link href="/clientes" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800">Clientes</Link>
         </div>
       </div>
-    </div>
+    </Container>
   );
 }
