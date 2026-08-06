@@ -11,7 +11,7 @@ export type Business = {
   currency: string;
   posConfig?: {
     aiInvoice?: { n8nWebhookUrl?: string; publicApiUrl?: string; hasWebhookSecret?: boolean };
-    branding?: { accentColor?: string; logoUrl?: string; faviconUrl?: string; appTitle?: string; linkColor?: string; primaryButtonColor?: string; focusRingColor?: string; navActiveColor?: string; selectionColor?: string; shadowTintColor?: string };
+    branding?: { accentColor?: string; logoUrl?: string; faviconUrl?: string; appTitle?: string; receiptName?: string; receiptTemplate?: 'clasico' | 'moderno'; linkColor?: string; primaryButtonColor?: string; focusRingColor?: string; navActiveColor?: string; selectionColor?: string; shadowTintColor?: string };
     customerDisplay?: { mercadopagoAlias?: string; mercadopagoQrUrl?: string; promoImageUrls?: string[] };
   };
 };

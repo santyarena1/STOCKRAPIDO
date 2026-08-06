@@ -273,12 +273,26 @@ export class FiscalService {
   }
 
   async receipt(businessId: string, saleId: string) {
-    const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { items: { include: { product: true } }, fiscalDocument: true, business: { select: { name: true, cuit: true, address: true, fiscalConfig: true } } } });
+    const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { items: { include: { product: true } }, fiscalDocument: true, business: { select: { name: true, cuit: true, address: true, posConfig: true, fiscalConfig: true } } } });
     if (!sale) throw new NotFoundException('Venta no encontrada.');
     const fc = sale.business.fiscalConfig;
+    const posConfig = sale.business.posConfig && typeof sale.business.posConfig === 'object'
+      ? sale.business.posConfig as Record<string, any>
+      : {};
+    const branding = posConfig.branding && typeof posConfig.branding === 'object'
+      ? posConfig.branding as Record<string, unknown>
+      : {};
+    const legalName = fc?.legalName || sale.business.name;
+    const fantasyName =
+      (typeof branding.receiptName === 'string' && branding.receiptName.trim()) ||
+      (typeof branding.appTitle === 'string' && branding.appTitle.trim()) ||
+      sale.business.name;
+    const logoUrl = typeof branding.logoUrl === 'string' && branding.logoUrl.trim() ? branding.logoUrl.trim() : null;
+    const template = branding.receiptTemplate === 'moderno' ? 'moderno' : 'clasico';
     return { id: sale.id, createdAt: sale.createdAt, total: sale.total, discount: sale.discount, totalFinal: sale.totalFinal, paymentMethod: sale.paymentMethod,
       items: sale.items.map(i => ({ name: i.product?.name || i.productName || 'Producto', qty: i.qty, unitPrice: i.unitPrice, subtotal: i.subtotal })),
-      business: { name: fc?.legalName || sale.business.name, cuit: fc?.cuit || sale.business.cuit, address: fc?.address || sale.business.address,
-        grossIncomeNumber: fc?.grossIncomeNumber, activityStartDate: fc?.activityStartDate }, fiscalDocument: sale.fiscalDocument };
+      business: { name: legalName, cuit: fc?.cuit || sale.business.cuit, address: fc?.address || sale.business.address,
+        grossIncomeNumber: fc?.grossIncomeNumber, activityStartDate: fc?.activityStartDate },
+      ticket: { fantasyName, logoUrl, template, legalName }, fiscalDocument: sale.fiscalDocument };
   }
 }

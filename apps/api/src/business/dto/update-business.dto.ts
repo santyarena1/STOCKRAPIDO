@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class BusinessAiInvoiceDto {
   @IsOptional()
@@ -26,7 +26,19 @@ export class BusinessBrandingDto {
 
   @IsOptional()
   @IsString()
+  faviconUrl?: string;
+
+  @IsOptional()
+  @IsString()
   appTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  receiptName?: string;
+
+  @IsOptional()
+  @IsIn(['clasico', 'moderno'])
+  receiptTemplate?: 'clasico' | 'moderno';
 
   @IsOptional()
   @IsString()

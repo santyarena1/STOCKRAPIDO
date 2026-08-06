@@ -11,6 +11,8 @@ export type BrandingPosConfig = {
   logoUrl?: string;
   faviconUrl?: string;
   appTitle?: string;
+  receiptName?: string;
+  receiptTemplate?: 'clasico' | 'moderno';
   /** Textos/enlaces y montos destacados */
   linkColor?: string;
   /** Botones primarios (guardar, cobrar, etc.) */
@@ -163,6 +165,18 @@ export function mergePosConfigUpdate(
       const v = inc.appTitle;
       if (typeof v === 'string' && v.trim() !== '') next.appTitle = v.trim().slice(0, 80);
       else delete next.appTitle;
+    }
+    if ('receiptName' in inc) {
+      const v = inc.receiptName;
+      if (typeof v === 'string' && v.trim() !== '') next.receiptName = v.trim().slice(0, 80);
+      else delete next.receiptName;
+    }
+    if ('receiptTemplate' in inc) {
+      const v = inc.receiptTemplate;
+      if (v !== 'clasico' && v !== 'moderno') {
+        throw new Error('El diseño del ticket debe ser clásico o moderno.');
+      }
+      next.receiptTemplate = v;
     }
     base.branding = next;
   }

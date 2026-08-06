@@ -89,6 +89,7 @@ const GROUPS = [
     items: [
       { href: '/config/negocio', label: 'Negocio' },
       { href: '/config/apariencia', label: 'Apariencia' },
+      { href: '/config/ticket', label: 'Ticket' },
       { href: '/config/proveedores', label: 'Proveedores' },
       { href: '/config/pantalla', label: 'Pantalla cliente' },
       { href: '/config/compras-ia', label: 'Compras IA' },
