@@ -41,8 +41,8 @@ export default function MovimientosPage() {
   return (
     <Container className="space-y-6">
       <PageHeader title="Movimientos de stock" />
-      <p className="text-slate-400 text-sm mb-4">
-        Por defecto se muestran las <strong className="text-slate-300">altas de producto</strong> (creaciones y stock
+      <p className="text-fg-muted text-sm mb-4">
+        Por defecto se muestran las <strong className="text-fg-muted">altas de producto</strong> (creaciones y stock
         inicial). En &quot;Todos&quot; ves ventas, compras y ajustes mezclados (lista global limitada: las ventas pueden
         ocultar altas antiguas).
       </p>
@@ -52,8 +52,8 @@ export default function MovimientosPage() {
           onClick={() => setKind('altas')}
           className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
             kind === 'altas'
-              ? 'bg-emerald-900/40 border-emerald-600 text-emerald-200'
-              : 'border-slate-600 text-slate-400 hover:bg-slate-800'
+              ? 'bg-[var(--ok-soft)] border-ok/30 text-ok'
+              : 'border-hair00 text-fg-muted hover:bg-raised'
           }`}
         >
           Altas de productos
@@ -63,8 +63,8 @@ export default function MovimientosPage() {
           onClick={() => setKind('all')}
           className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
             kind === 'all'
-              ? 'bg-emerald-900/40 border-emerald-600 text-emerald-200'
-              : 'border-slate-600 text-slate-400 hover:bg-slate-800'
+              ? 'bg-[var(--ok-soft)] border-ok/30 text-ok'
+              : 'border-hair00 text-fg-muted hover:bg-raised'
           }`}
         >
           Todos los movimientos
@@ -72,26 +72,26 @@ export default function MovimientosPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
-        <div data-tour="movimientos-table" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="movimientos-table" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-slate-500 bg-slate-800 border-b border-slate-700">
+                <tr className="text-left text-fg-faint bg-raised border-b border-hair00">
                   <th className="px-4 py-3">Fecha y hora</th>
                   <th className="px-4 py-3">Producto</th>
-                  <th className="px-4 py-3 text-right">Cantidad</th>
+                  <th className="px-4 py-3 text-right font-mono tabular-nums">Cantidad</th>
                   <th className="px-4 py-3">Motivo</th>
                 </tr>
               </thead>
               <tbody>
                 {moves.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-slate-500 text-center space-y-2">
+                    <td colSpan={4} className="px-4 py-8 text-fg-faint text-center space-y-2">
                       <p>Sin movimientos registrados</p>
                       {kind === 'altas' && (
-                        <p className="text-slate-600 text-xs max-w-md mx-auto">
+                        <p className="text-fg-faint text-xs max-w-md mx-auto">
                           Solo aparecen productos dados de alta con la versión actual del sistema. Las ventas no ocultan
                           esta lista.
                         </p>
@@ -100,8 +100,8 @@ export default function MovimientosPage() {
                   </tr>
                 ) : (
                   (Array.isArray(moves) ? moves : []).map((m) => (
-                    <tr key={m.id} className="border-b border-slate-700/50 hover:bg-slate-800/30">
-                      <td className="px-4 py-2 text-slate-400">
+                    <tr key={m.id} className="border-b border-hair00/50 hover:bg-raised">
+                      <td className="px-4 py-2 text-fg-muted">
                         {new Date(m.createdAt).toLocaleString('es-AR')}
                       </td>
                       <td className="px-4 py-2">
@@ -109,13 +109,13 @@ export default function MovimientosPage() {
                           {m.product?.name ?? '-'}
                         </Link>
                         {m.product?.barcode && (
-                          <span className="text-slate-600 text-xs block">{m.product.barcode}</span>
+                          <span className="text-fg-faint text-xs block">{m.product.barcode}</span>
                         )}
                       </td>
-                      <td className={`px-4 py-2 text-right font-medium ${m.qty > 0 ? 'text-green-400' : m.qty < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                      <td className={`px-4 py-2 text-right font-medium ${m.qty > 0 ? 'text-ok' : m.qty < 0 ? 'text-crit' : 'text-fg-muted'}`}>
                         {m.reason === 'alta_producto' && m.qty === 0 ? '—' : `${m.qty >= 0 ? '+' : ''}${m.qty}`}
                       </td>
-                      <td className="px-4 py-2 text-slate-300">{reasonLabel(m.reason)}</td>
+                      <td className="px-4 py-2 text-fg-muted">{reasonLabel(m.reason)}</td>
                     </tr>
                   ))
                 )}

@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { UnitPriceDisplay } from '@/components/UnitPriceDisplay';
 import { Container } from '@/components/ui/Container';
@@ -10,616 +9,262 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Search } from 'lucide-react';
 
 type Product = {
-  id: string;
-  name: string;
-  barcode?: string;
-  price: string | number;
-  cost?: string | number;
-  stock: number;
-  minStock: number;
-  stockControl?: boolean;
-  brand?: string | null;
-  category?: { name: string };
-  expiresAt?: string | null;
-  imageUrl?: string | null;
-  unitsPerBox?: string | null;
-  unitsPerBoxNum?: number | null;
-  costBox?: number | null;
-  priceBox?: number | null;
-  weight?: string | null;
-  format?: string | null;
+  id: string; name: string; barcode?: string | null; price: string | number; cost?: string | number | null;
+  stock: number; minStock: number; stockControl?: boolean; isActive?: boolean; brand?: string | null;
+  categoryId?: string | null; category?: { id?: string; name: string } | null; expiresAt?: string | null;
+  imageUrl?: string | null; unitsPerBox?: string | null; unitsPerBoxNum?: number | null;
+  costBox?: number | null; priceBox?: number | null; weight?: string | null; format?: string | null;
+  supplierSku?: string | null; sourceProvider?: string | null; sourceConnectionId?: string | null; updatedAt?: string;
 };
-type Category = { id: string; name: string };
-
+type Facets = {
+  providers: { value: string; label: string; count: number }[];
+  brands: { value: string; count: number }[];
+  categories: { id: string; name: string; count: number }[];
+  types: { value: string; count: number }[];
+};
 type StockSummary = {
-  productCount: number;
-  productsWithStock: number;
-  productsNoStock: number;
-  totalUnits: number;
-  valueAtCostProduct: number;
-  valueAtCostBatches: number;
-  valueAtSale: number;
-  potentialMargin: number;
-  lowStockCount: number;
-  expiringDaysWindow: number;
-  expiringProductsCount: number;
-  expiringUnitsInWindow: number;
+  productCount: number; productsWithStock: number; productsNoStock: number; totalUnits: number;
+  valueAtCostProduct: number; valueAtCostBatches: number; valueAtSale: number; potentialMargin: number;
+  lowStockCount: number; expiringDaysWindow: number; expiringProductsCount: number; expiringUnitsInWindow: number;
   productsWithoutCostWithStock: number;
   expiringByProduct: { name: string; expiresAt: string; qtyExpiring: number }[];
-  expiringBatches: {
-    id: string;
-    productId: string;
-    productName: string;
-    qty: number;
-    expiresAt: string;
-    unitCost: number;
-  }[];
+  expiringBatches: { id: string; productId: string; productName: string; qty: number; expiresAt: string; unitCost: number }[];
 };
+type Filters = { q: string; categoryId: string; brand: string; provider: string; type: string; status: 'active' | 'inactive' | 'all'; hasStock: boolean; stockControl: boolean };
+type SortKey = 'name' | 'price' | 'cost' | 'stock' | 'updatedAt' | 'brand' | 'category';
+type ColumnKey = 'image' | 'name' | 'origin' | 'sku' | 'category' | 'brand' | 'type' | 'cost' | 'price' | 'margin' | 'stock' | 'minStock' | 'expiresAt' | 'stockControl' | 'actions';
+type ColumnSetting = { key: ColumnKey; label: string; visible: boolean };
+type SavedView = { id: string; name: string; filters: Filters; columns: ColumnSetting[]; mode: 'catalog' | 'stock'; sort: SortKey; dir: 'asc' | 'desc' };
+
+const EMPTY_FILTERS: Filters = { q: '', categoryId: '', brand: '', provider: '', type: '', status: 'active', hasStock: false, stockControl: false };
+const DEFAULT_COLUMNS: ColumnSetting[] = [
+  { key: 'image', label: 'Imagen', visible: true }, { key: 'name', label: 'Nombre', visible: true },
+  { key: 'origin', label: 'Origen', visible: true }, { key: 'sku', label: 'SKU', visible: true },
+  { key: 'category', label: 'Categoría', visible: true }, { key: 'brand', label: 'Marca', visible: true },
+  { key: 'type', label: 'Tipo', visible: true }, { key: 'cost', label: 'Costo c/u', visible: true },
+  { key: 'price', label: 'Precio c/u', visible: true }, { key: 'margin', label: 'Margen', visible: true },
+  { key: 'stock', label: 'Stock', visible: true }, { key: 'minStock', label: 'Mínimo', visible: true },
+  { key: 'expiresAt', label: 'Vencimiento', visible: true }, { key: 'stockControl', label: 'Control', visible: true },
+  { key: 'actions', label: 'Acciones', visible: true },
+];
+const STOCK_COLUMNS = new Set<ColumnKey>(['stock', 'minStock', 'expiresAt', 'stockControl']);
+const SORTABLE: Partial<Record<ColumnKey, SortKey>> = { name: 'name', price: 'price', cost: 'cost', stock: 'stock', brand: 'brand', category: 'category' };
 
 function formatMoneyArs(n: number) {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    maximumFractionDigits: 0,
-  }).format(n);
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
 }
 
 export default function ProductosPage() {
-  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [facets, setFacets] = useState<Facets>({ providers: [], brands: [], categories: [], types: [] });
+  const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [categoryId, setCategoryId] = useState('');
-  const [lowStock, setLowStock] = useState(false);
-  const [expiringSoon, setExpiringSoon] = useState(false);
-  const [search, setSearch] = useState('');
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [searchInput, setSearchInput] = useState('');
+  const [mode, setMode] = useState<'catalog' | 'stock'>('catalog');
+  const [columns, setColumns] = useState<ColumnSetting[]>(DEFAULT_COLUMNS);
+  const [showColumns, setShowColumns] = useState(false);
+  const [views, setViews] = useState<SavedView[]>([]);
+  const [sort, setSort] = useState<SortKey>('name');
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showBulkInternal, setShowBulkInternal] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [duplicates, setDuplicates] = useState<Array<{ barcode: string; count: number; products: Product[] }>>([]);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicateKeep, setDuplicateKeep] = useState<Record<string, string>>({});
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: number; errors: Array<{ row: number; message: string }> } | null>(null);
-  const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
-  const [showBulkInternal, setShowBulkInternal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchProducts = useCallback(() => {
-    setLoading(true);
-    Promise.allSettled([
-      api<Product[]>('/products', { params: { categoryId: categoryId || undefined, lowStock: lowStock ? 'true' : undefined } }),
-      api<Category[]>('/business/categories'),
-      api<StockSummary>('/reports/stock-summary'),
-    ]).then(([prodsRes, catsRes, sumRes]) => {
-      setProducts(prodsRes.status === 'fulfilled' && Array.isArray(prodsRes.value) ? prodsRes.value : []);
-      setCategories(catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) ? catsRes.value : []);
-      setStockSummary(sumRes.status === 'fulfilled' ? sumRes.value : null);
-    }).finally(() => setLoading(false));
-  }, [categoryId, lowStock]);
-
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    try {
+      const savedMode = localStorage.getItem('sr-prod-mode');
+      if (savedMode === 'stock' || savedMode === 'catalog') setMode(savedMode);
+      const savedColumns = JSON.parse(localStorage.getItem('sr-prod-columns') || 'null');
+      if (Array.isArray(savedColumns)) setColumns(savedColumns);
+      const savedViews = JSON.parse(localStorage.getItem('sr-prod-views') || '[]');
+      if (Array.isArray(savedViews)) setViews(savedViews);
+    } catch {}
+    setHydrated(true);
+  }, []);
+  useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-mode', mode); }, [hydrated, mode]);
+  useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-columns', JSON.stringify(columns)); }, [hydrated, columns]);
+  useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-views', JSON.stringify(views)); }, [hydrated, views]);
+  useEffect(() => { const timer = window.setTimeout(() => setFilters((current) => ({ ...current, q: searchInput.trim() })), 300); return () => window.clearTimeout(timer); }, [searchInput]);
 
-  const DAYS_VENCER = 30;
+  const fetchProducts = useCallback(async () => {
+    if (!hydrated) return;
+    setLoading(true);
+    try {
+      const result = await api<{ items: Product[]; total: number; page: number; pageSize: number; totalPages: number }>('/products/catalog', {
+        params: {
+          q: filters.q || undefined, categoryId: filters.categoryId || undefined, brand: filters.brand || undefined,
+          provider: filters.provider || undefined, type: filters.type || undefined, status: filters.status,
+          hasStock: filters.hasStock ? 'true' : undefined, stockControl: filters.stockControl ? 'true' : undefined,
+          sort, dir, page: String(page), pageSize: String(pageSize),
+        },
+      });
+      setProducts(result.items); setTotal(result.total); setTotalPages(result.totalPages);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Error al cargar productos'); }
+    finally { setLoading(false); }
+  }, [hydrated, filters, sort, dir, page, pageSize]);
+
+  useEffect(() => { if (!hydrated) return; Promise.allSettled([api<Facets>('/products/facets'), api<StockSummary>('/reports/stock-summary')]).then(([facetResult, summaryResult]) => { if (facetResult.status === 'fulfilled') setFacets(facetResult.value); if (summaryResult.status === 'fulfilled') setStockSummary(summaryResult.value); }); }, [hydrated]);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { setPage(1); setSelected(new Set()); }, [filters, sort, dir, pageSize]);
+
+  const filtered = products;
   const now = new Date();
-  const limitVencer = new Date(now.getTime() + DAYS_VENCER * 24 * 60 * 60 * 1000);
-
-  const list = Array.isArray(products) ? products : [];
-  let filtered = search.trim()
-    ? list.filter((p) => p?.name?.toLowerCase().includes(search.toLowerCase()) || (p?.barcode && p.barcode.includes(search)))
-    : list;
-  if (expiringSoon) {
-    filtered = filtered.filter((p) => p?.expiresAt && new Date(p.expiresAt) <= limitVencer && new Date(p.expiresAt) >= now);
-  }
-  const safeHighlighted = filtered.length > 0 ? Math.min(highlightedIndex, filtered.length - 1) : 0;
-
-  const handleListKeyDown = (e: React.KeyboardEvent) => {
-    if (filtered.length === 0) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex((i) => Math.min(i + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter') {
-      const p = filtered[safeHighlighted];
-      if (p?.id) {
-        e.preventDefault();
-        router.push(`/productos/${p.id}`);
-      }
-    }
-  };
-
-  function diasHastaVencimiento(expiresAt: string | null | undefined): number | null {
-    if (!expiresAt) return null;
-    const d = new Date(expiresAt);
-    return Math.ceil((d.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-  }
+  const visibleColumns = columns.filter((column) => column.visible && (mode === 'stock' || !STOCK_COLUMNS.has(column.key)));
+  const daysUntilExpiry = (value?: string | null) => value ? Math.ceil((new Date(value).getTime() - now.getTime()) / 86400000) : null;
 
   const handleExportStock = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     if (exporting) return;
-    setExportMsg('Preparando descarga…');
-    setExporting(true);
-    setImportResult(null);
+    setExportMsg('Preparando descarga…'); setExporting(true); setImportResult(null);
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     const url = `${getApiBaseUrl()}/products/export-stock`;
     fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       .then((res) => res.text().then((raw) => ({ ok: res.ok, raw })))
       .then(({ ok, raw }) => {
         let parsed: { message?: string; filename?: string; content?: string };
-        try {
-          parsed = JSON.parse(raw) as { message?: string; filename?: string; content?: string };
-        } catch {
-          throw new Error('La respuesta no es JSON válido');
-        }
+        try { parsed = JSON.parse(raw) as { message?: string; filename?: string; content?: string }; }
+        catch { throw new Error('La respuesta no es JSON válido'); }
         if (!ok) throw new Error(parsed?.message || 'Error al exportar');
-        if (!parsed?.content || typeof parsed.filename !== 'string') {
-          throw new Error(parsed?.message || 'La API no devolvió el archivo');
-        }
-        const base64 = String(parsed.content).replace(/\s/g, '');
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
+        if (!parsed?.content || typeof parsed.filename !== 'string') throw new Error(parsed?.message || 'La API no devolvió el archivo');
+        const base64 = String(parsed.content).replace(/\s/g, ''); const binary = atob(base64); const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], {
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = parsed.filename;
-        link.style.position = 'fixed';
-        link.style.left = '-9999px';
-        link.style.top = '0';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(link.href);
-        }, 2000);
-        setExportMsg(null);
-      })
-      .catch((err) => {
-        setExportMsg(null);
-        alert(err instanceof Error ? err.message : 'Error al exportar');
-      })
-      .finally(() => setExporting(false));
+        const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = parsed.filename; link.style.position = 'fixed'; link.style.left = '-9999px'; link.style.top = '0'; document.body.appendChild(link); link.click();
+        setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(link.href); }, 2000); setExportMsg(null);
+      }).catch((err) => { setExportMsg(null); alert(err instanceof Error ? err.message : 'Error al exportar'); }).finally(() => setExporting(false));
   };
 
-  /**
-   * Lista visible con los filtros actuales.
-   * CSV con punto y coma: Excel en español usa ; como separador; el .txt con tabs suele abrirse como una sola columna.
-   */
   const handleExportTxt = () => {
-    if (filtered.length === 0) {
-      alert('No hay productos para exportar con los filtros actuales.');
-      return;
-    }
-    const plain = (s: string) =>
-      String(s)
-        .replace(/\t/g, ' ')
-        .replace(/\r?\n/g, ' ')
-        .trim();
-    const csvCell = (raw: string | number) => {
-      const s = String(raw);
-      if (/[";\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    };
+    if (filtered.length === 0) { alert('No hay productos para exportar con los filtros actuales.'); return; }
+    const plain = (s: string) => String(s).replace(/\t/g, ' ').replace(/\r?\n/g, ' ').trim();
+    const csvCell = (raw: string | number) => { const s = String(raw); if (/[";\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`; return s; };
     const SEP = ';';
-    const header = [
-      'id',
-      'nombre',
-      'codigo_barras',
-      'stock',
-      'stock_minimo',
-      'categoria',
-      'precio_venta',
-      'costo',
-      'marca',
-      'vencimiento',
-      'control_stock',
-    ];
+    const header = ['id', 'nombre', 'codigo_barras', 'stock', 'stock_minimo', 'categoria', 'precio_venta', 'costo', 'marca', 'vencimiento', 'control_stock'];
     const lines = filtered.map((p) => {
       const price = typeof p.price === 'number' ? p.price : parseFloat(String(p.price ?? '0')) || 0;
-      const costRaw = p.cost;
-      const costNum =
-        costRaw != null && costRaw !== ''
-          ? (typeof costRaw === 'number' ? costRaw : parseFloat(String(costRaw))) || 0
-          : null;
+      const costRaw = p.cost; const costNum = costRaw != null && costRaw !== '' ? (typeof costRaw === 'number' ? costRaw : parseFloat(String(costRaw))) || 0 : null;
       const ven = p.expiresAt ? new Date(p.expiresAt).toISOString().slice(0, 10) : '';
-      const row = [
-        csvCell(p.id ?? ''),
-        csvCell(plain(p.name ?? '')),
-        csvCell(plain(p.barcode ?? '')),
-        csvCell(String(p.stock ?? 0)),
-        csvCell(String(p.minStock ?? 0)),
-        csvCell(plain(p.category?.name ?? '')),
-        csvCell(price.toFixed(2)),
-        csvCell(costNum == null ? '' : costNum.toFixed(2)),
-        csvCell(plain(p.brand ?? '')),
-        csvCell(ven),
-        csvCell(p.stockControl === false ? 'No' : 'Sí'),
-      ];
-      return row.join(SEP);
+      return [csvCell(p.id ?? ''), csvCell(plain(p.name ?? '')), csvCell(plain(p.barcode ?? '')), csvCell(String(p.stock ?? 0)), csvCell(String(p.minStock ?? 0)), csvCell(plain(p.category?.name ?? '')), csvCell(price.toFixed(2)), csvCell(costNum == null ? '' : costNum.toFixed(2)), csvCell(plain(p.brand ?? '')), csvCell(ven), csvCell(p.stockControl === false ? 'No' : 'Sí')].join(SEP);
     });
-    const content = `\uFEFF${header.join(SEP)}\n${lines.join('\n')}`;
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `stock-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.style.position = 'fixed';
-    link.style.left = '-9999px';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-    }, 500);
+    const content = `\uFEFF${header.join(SEP)}\n${lines.join('\n')}`; const blob = new Blob([content], { type: 'text/csv;charset=utf-8' }); const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = `stock-${new Date().toISOString().slice(0, 10)}.csv`; link.style.position = 'fixed'; link.style.left = '-9999px'; document.body.appendChild(link); link.click();
+    setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(link.href); }, 500);
   };
 
   const handleImportStock = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     try {
-      setImporting(true);
-      setImportResult(null);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch(`${getApiBaseUrl()}/products/import-stock`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { message?: string }).message || res.statusText);
-      setImportResult(data as { updated: number; errors: Array<{ row: number; message: string }> });
-      fetchProducts();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al importar');
-    } finally {
-      setImporting(false);
-      e.target.value = '';
-    }
+      setImporting(true); setImportResult(null); const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null; const form = new FormData(); form.append('file', file);
+      const res = await fetch(`${getApiBaseUrl()}/products/import-stock`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
+      const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error((data as { message?: string }).message || res.statusText);
+      setImportResult(data as { updated: number; errors: Array<{ row: number; message: string }> }); fetchProducts();
+    } catch (err) { alert(err instanceof Error ? err.message : 'Error al importar'); }
+    finally { setImporting(false); e.target.value = ''; }
   };
 
-  return (
-    <Container className="space-y-6">
-      <PageHeader
-        title="Productos"
-        subtitle="Gestioná catálogo, precios, costos y niveles de stock."
-        actions={<div className="flex flex-wrap gap-2 items-center">
-          <a
-            href="#"
-            role="button"
-            onClick={(e) => handleExportStock(e)}
-            className="px-4 py-2 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500 disabled:opacity-50 inline-block cursor-pointer select-none no-underline"
-            style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}
-          >
-            {exporting ? 'Exportando…' : 'Exportar stock (Excel)'}
-          </a>
-          <button
-            type="button"
-            onClick={handleExportTxt}
-            className="px-4 py-2 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500"
-            title="CSV separado por punto y coma (UTF-8): abre en Excel con todas las columnas. Respeta filtros de la tabla."
-          >
-            Exportar lista (CSV)
-          </button>
-          {exportMsg && <span className="text-amber-400 text-sm ml-2">{exportMsg}</span>}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="px-4 py-2 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500 disabled:opacity-50"
-          >
-            {importing ? 'Importando…' : 'Importar stock (Excel)'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleImportStock}
-          />
-          <Link
-            href="/productos/nuevo"
-            data-tour="productos-nuevo"
-            className="px-4 py-2 rounded-lg btn-brand font-medium"
-          >
-            Nuevo producto
-          </Link>
-        </div>}
-      />
+  const changeFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => setFilters((current) => ({ ...current, [key]: value }));
+  const changeSort = (next: SortKey) => { if (sort === next) setDir((current) => current === 'asc' ? 'desc' : 'asc'); else { setSort(next); setDir('asc'); } };
+  const moveColumn = (index: number, direction: -1 | 1) => setColumns((current) => { const target = index + direction; if (target < 0 || target >= current.length) return current; const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; });
 
-      <p className="mb-2 text-sm text-fg-faint">
-        <strong>Exportar stock (Excel)</strong> descarga el catálogo completo para editar e importar.{' '}
-        <strong>Exportar lista (CSV)</strong> usa los filtros actuales de la tabla e incluye id, código, precio, costo,
-        categoría, marca y más (separador <code className="text-fg-muted">;</code> para Excel en español). Para importar:
-        editá solo <strong>Stock actual</strong> y/o <strong>Stock mínimo</strong> en el Excel de exportación masiva, guardá y subilo. No borres las columnas id ni codigo_barras.
-      </p>
+  const saveView = () => {
+    const name = prompt('Nombre de la vista:')?.trim(); if (!name) return;
+    setViews((current) => [...current, { id: `${Date.now()}`, name, filters, columns, mode, sort, dir }]);
+  };
+  const applyView = (id: string) => { const view = views.find((item) => item.id === id); if (!view) return; setFilters(view.filters); setSearchInput(view.filters.q); setColumns(view.columns); setMode(view.mode); setSort(view.sort); setDir(view.dir); };
 
-      {importResult && (
-        <div className="rounded-lg border border-hair bg-raised p-3 text-sm">
-          <p className="text-fg">
-            Importación: <strong>{importResult.updated}</strong> producto(s) actualizado(s).
-            {importResult.errors.length > 0 && (
-              <span className="text-warn"> Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((e) => `Fila ${e.row}: ${e.message}`).join('; ')}
-                {importResult.errors.length > 5 ? '…' : ''}</span>
-            )}
-          </p>
-        </div>
-      )}
+  const runBulk = async (action: 'setPrice' | 'applyMarkup' | 'setCategory' | 'setStockControl' | 'setActive' | 'delete', value?: unknown) => {
+    if (selected.size === 0) return;
+    try {
+      const result = await api<{ updated: number; skipped: { id: string; reason: string }[] }>('/products/bulk', { method: 'POST', body: JSON.stringify({ ids: [...selected], action, value }) });
+      setBulkMessage(`${result.updated} actualizados${result.skipped.length ? ` · ${result.skipped.length} omitidos: ${result.skipped.slice(0, 3).map((item) => item.reason).join('; ')}` : ''}`);
+      setSelected(new Set()); await fetchProducts();
+    } catch (error) { alert(error instanceof Error ? error.message : 'Error en acción masiva'); }
+  };
+  const promptBulkNumber = (action: 'setPrice' | 'applyMarkup', label: string) => { const raw = prompt(label); if (raw == null) return; const value = Number(raw); if (!Number.isFinite(value)) return alert('Ingresá un número válido.'); runBulk(action, value); };
 
-      {!loading && stockSummary && (
-        <div data-tour="productos-stock-summary" className="mb-8 space-y-6">
-          <div>
-            <h2 className="mb-1 text-lg font-semibold text-fg">Valorización y estadísticas de stock</h2>
-            <p className="text-sm text-fg-faint">
-              Productos activos. Costo según precio de compra cargado en el producto; si usás lotes, también mostramos valorización por lotes.
-            </p>
-          </div>
+  const openDuplicates = async () => {
+    try { const groups = await api<Array<{ barcode: string; count: number; products: Product[] }>>('/products/duplicates'); setDuplicates(groups); setDuplicateKeep(Object.fromEntries(groups.map((group) => [group.barcode, group.products[0]?.id ?? '']))); setShowDuplicates(true); }
+    catch (error) { alert(error instanceof Error ? error.message : 'Error al buscar duplicados'); }
+  };
+  const mergeDuplicate = async (group: { barcode: string; products: Product[] }) => {
+    const keepId = duplicateKeep[group.barcode]; if (!keepId) return;
+    try { await api('/products/duplicates/merge', { method: 'POST', body: JSON.stringify({ keepId, mergeIds: group.products.filter((product) => product.id !== keepId).map((product) => product.id) }) }); await openDuplicates(); await fetchProducts(); }
+    catch (error) { alert(error instanceof Error ? error.message : 'Error al fusionar duplicados'); }
+  };
 
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-surface p-4 sm:p-5">
-              <p className="mb-1 text-xs text-fg-muted">Productos en catálogo</p>
-              <p className="font-mono text-3xl font-bold tabular-nums text-fg">{stockSummary.productCount}</p>
-              <p className="mt-1 font-mono text-xs tabular-nums text-fg-faint">Con stock: {stockSummary.productsWithStock} · Sin stock: {stockSummary.productsNoStock}</p>
-            </div>
-            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="mb-1 text-xs text-fg-muted">Unidades totales</p>
-              <p className="font-mono text-3xl font-bold tabular-nums text-brand">{stockSummary.totalUnits}</p>
-            </div>
-            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Valor stock (costo producto)</p>
-              <p className="font-mono text-xl font-bold tabular-nums text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</p>
-              {stockSummary.productsWithoutCostWithStock > 0 && (
-                <p className="mt-1 text-xs text-warn">{stockSummary.productsWithoutCostWithStock} con stock sin costo cargado</p>
-              )}
-            </div>
-            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Valor stock (costo lotes)</p>
-              <p className="font-mono text-xl font-bold tabular-nums text-ok">{formatMoneyArs(stockSummary.valueAtCostBatches)}</p>
-              <p className="text-slate-500 text-xs mt-1">Suma de cantidad × costo unitario por lote</p>
-            </div>
-            <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Valor stock (precio venta)</p>
-              <p className="font-mono text-3xl font-bold tabular-nums text-fg">{formatMoneyArs(stockSummary.valueAtSale)}</p>
-            </div>
-            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Margen potencial</p>
-              <p className="font-mono text-xl font-bold tabular-nums text-ok">{formatMoneyArs(stockSummary.potentialMargin)}</p>
-              <p className="text-slate-500 text-xs mt-1">Venta − costo (campo producto)</p>
-            </div>
-            <div className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4">
-              <p className="mb-1 text-xs text-warn">Stock bajo / mínimo</p>
-              <p className="font-mono text-3xl font-bold tabular-nums text-warn">{stockSummary.lowStockCount}</p>
-            </div>
-            <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4">
-              <p className="mb-1 text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p>
-              <p className="font-mono text-3xl font-bold tabular-nums text-crit">{stockSummary.expiringUnitsInWindow}</p>
-              <p className="text-slate-500 text-xs mt-1">{stockSummary.expiringProductsCount} productos con lotes en ventana</p>
-            </div>
-          </div>
+  const renderCell = (product: Product, key: ColumnKey): ReactNode => {
+    const cost = product.cost == null ? null : Number(product.cost); const price = Number(product.price); const margin = cost == null ? null : price - cost;
+    if (key === 'image') return product.imageUrl ? <img src={product.imageUrl} alt="" className="h-10 w-10 rounded-lg bg-raised2 object-contain" /> : <div className="h-10 w-10 rounded-lg bg-raised2" />;
+    if (key === 'name') return <div><Link href={`/productos/${product.id}`} className="font-semibold text-fg hover:text-brand hover:underline">{product.name}</Link><span className="block font-mono text-xs tabular-nums text-fg-faint">{[product.barcode, product.unitsPerBox ? `x${product.unitsPerBox}` : null].filter(Boolean).join(' · ')}</span></div>;
+    if (key === 'origin') return product.sourceProvider ? <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="text-fg-faint">—</span>;
+    if (key === 'sku') return <span className="font-mono text-xs text-fg-muted">{product.supplierSku || '—'}</span>;
+    if (key === 'category') return <span className="text-fg-muted">{product.category?.name || '—'}</span>;
+    if (key === 'brand') return <span className="text-fg-muted">{product.brand || '—'}</span>;
+    if (key === 'type') return <span className="text-fg-muted">{product.format || '—'}</span>;
+    if (key === 'cost') return cost == null ? <span className="text-fg-faint">—</span> : <UnitPriceDisplay cost={product.cost} unitsPerBox={product.unitsPerBox} unitsPerBoxNum={product.unitsPerBoxNum} costBox={product.costBox} showCost showPrice={false} showBulkInternal={showBulkInternal} />;
+    if (key === 'price') return <UnitPriceDisplay price={product.price} unitsPerBox={product.unitsPerBox} unitsPerBoxNum={product.unitsPerBoxNum} priceBox={product.priceBox} showBulkInternal={showBulkInternal} />;
+    if (key === 'margin') return <span className={`font-mono tabular-nums ${margin != null && margin >= 0 ? 'text-ok' : 'text-crit'}`}>{margin == null ? '—' : formatMoneyArs(margin)}</span>;
+    if (key === 'stock') return <span className={`rounded-md border px-2 py-1 font-mono text-xs tabular-nums ${product.stock <= product.minStock ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{product.stock}</span>;
+    if (key === 'minStock') return <span className="font-mono tabular-nums text-fg-faint">{product.minStock}</span>;
+    if (key === 'expiresAt') { const days = daysUntilExpiry(product.expiresAt); if (days == null) return <span className="text-fg-faint">—</span>; if (days < 0) return <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-crit">Vencido</span>; if (days <= 30) return <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 font-mono text-crit">{days} días</span>; return <span className="font-mono text-fg-muted">{new Date(product.expiresAt!).toLocaleDateString('es-AR')}</span>; }
+    if (key === 'stockControl') return <span className={`rounded-md border px-2 py-1 text-xs ${product.stockControl ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-hair bg-raised2 text-fg-faint'}`}>{product.stockControl ? 'Sí' : 'No'}</span>;
+    return <Link href={`/productos/${product.id}`} className="text-brand hover:underline">Editar</Link>;
+  };
 
-          {(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && (
-            <div className="grid gap-6 lg:grid-cols-2">
-              {stockSummary.expiringBatches.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-                  <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700">
-                    <h3 className="font-semibold text-white text-sm">Lotes por vencer (detalle)</h3>
-                    <p className="text-slate-500 text-xs">Cantidad por lote en los próximos {stockSummary.expiringDaysWindow} días</p>
-                  </div>
-                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-slate-500 border-b border-slate-700 bg-slate-900/50">
-                          <th className="px-3 py-2">Producto</th>
-                          <th className="px-3 py-2 text-right">Cant.</th>
-                          <th className="px-3 py-2">Vence</th>
-                          <th className="px-3 py-2 text-right">Costo u.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-700/60">
-                        {stockSummary.expiringBatches.map((b) => (
-                          <tr key={b.id} className="hover:bg-slate-800/40">
-                            <td className="px-3 py-2">
-                              <Link href={`/productos/${b.productId}`} className="text-brand hover:underline">
-                                {b.productName}
-                              </Link>
-                            </td>
-                            <td className="px-3 py-2 text-right text-slate-200">{b.qty}</td>
-                            <td className="px-3 py-2 text-slate-400">{new Date(b.expiresAt).toLocaleDateString('es-AR')}</td>
-                            <td className="px-3 py-2 text-right text-slate-500">{formatMoneyArs(b.unitCost)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+  return <Container className="space-y-6">
+    <PageHeader title="Productos" subtitle="Gestioná catálogo, precios, costos y niveles de stock." actions={<div className="flex flex-wrap items-center gap-2">
+      <a href="#" role="button" onClick={(event) => handleExportStock(event)} className="inline-block cursor-pointer select-none rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg no-underline hover:bg-raised2" style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}>{exporting ? 'Exportando…' : 'Exportar stock (Excel)'}</a>
+      <button type="button" onClick={handleExportTxt} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2">Exportar lista (CSV)</button>
+      <button type="button" onClick={() => fileInputRef.current?.click()} disabled={importing} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2 disabled:opacity-50">{importing ? 'Importando…' : 'Importar stock (Excel)'}</button>
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportStock} />
+      <Link href="/productos/nuevo" data-tour="productos-nuevo" className="btn-brand rounded-lg px-4 py-2 font-medium">Nuevo producto</Link>
+    </div>} />
+    {exportMsg && <p className="text-sm text-warn">{exportMsg}</p>}
+    {importResult && <div className="rounded-lg border border-hair bg-raised p-3 text-sm text-fg">Importación: <strong className="font-mono">{importResult.updated}</strong> producto(s) actualizado(s). {importResult.errors.length > 0 && <span className="text-warn">Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((error) => `Fila ${error.row}: ${error.message}`).join('; ')}</span>}</div>}
 
-              {stockSummary.expiringByProduct.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-                  <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700">
-                    <h3 className="font-semibold text-white text-sm">Próximo vencimiento por producto</h3>
-                    <p className="text-slate-500 text-xs">Cantidad en la fecha de vencimiento más cercana</p>
-                  </div>
-                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-slate-500 border-b border-slate-700 bg-slate-900/50">
-                          <th className="px-3 py-2">Producto</th>
-                          <th className="px-3 py-2 text-right">Cant.</th>
-                          <th className="px-3 py-2">Vence</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-700/60">
-                        {stockSummary.expiringByProduct.map((row, i) => (
-                          <tr key={`${row.name}-${row.expiresAt}-${i}`} className="hover:bg-slate-800/40">
-                            <td className="px-3 py-2 text-slate-200">{row.name}</td>
-                            <td className="px-3 py-2 text-right">{row.qtyExpiring}</td>
-                            <td className="px-3 py-2 text-slate-400">{new Date(row.expiresAt + 'T12:00:00').toLocaleDateString('es-AR')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+    {stockSummary && <section data-tour="productos-stock-summary" className="space-y-4"><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-surface p-4"><p className="text-xs text-fg-muted">Productos</p><p className="font-mono text-3xl font-bold tabular-nums text-fg">{stockSummary.productCount}</p><p className="font-mono text-xs text-fg-faint">Con stock {stockSummary.productsWithStock} · Sin stock {stockSummary.productsNoStock}</p></div>
+      <div className="rounded-xl border border-hair-soft bg-surface p-4"><p className="text-xs text-fg-muted">Valor de venta</p><p className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</p><p className="font-mono text-xs text-ok">Margen {formatMoneyArs(stockSummary.potentialMargin)}</p></div>
+      <div className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4"><p className="text-xs text-warn">Stock bajo</p><p className="font-mono text-3xl font-bold text-warn">{stockSummary.lowStockCount}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.totalUnits} unidades totales</p></div>
+      <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4"><p className="text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p><p className="font-mono text-3xl font-bold text-crit">{stockSummary.expiringUnitsInWindow}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.expiringProductsCount} productos</p></div>
+    </div><details className="rounded-xl border border-hair-soft bg-surface p-4"><summary className="cursor-pointer font-medium text-fg">Más estadísticas y vencimientos</summary><div className="mt-4 grid gap-3 sm:grid-cols-3"><p className="text-sm text-fg-muted">Costo productos <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</strong></p><p className="text-sm text-fg-muted">Costo lotes <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostBatches)}</strong></p><p className="text-sm text-fg-muted">Sin costo con stock <strong className="block font-mono text-warn">{stockSummary.productsWithoutCostWithStock}</strong></p></div>{(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && <div className="mt-4 grid gap-4 lg:grid-cols-2"><div><h3 className="mb-2 text-sm font-semibold text-fg">Lotes por vencer</h3>{stockSummary.expiringBatches.map((batch) => <div key={batch.id} className="flex justify-between border-t border-hair-soft py-2 text-sm"><Link href={`/productos/${batch.productId}`} className="text-brand">{batch.productName}</Link><span className="font-mono text-fg-muted">{batch.qty} · {new Date(batch.expiresAt).toLocaleDateString('es-AR')}</span></div>)}</div><div><h3 className="mb-2 text-sm font-semibold text-fg">Próximo vencimiento por producto</h3>{stockSummary.expiringByProduct.map((item, index) => <div key={`${item.name}-${index}`} className="flex justify-between border-t border-hair-soft py-2 text-sm"><span className="text-fg">{item.name}</span><span className="font-mono text-fg-muted">{item.qtyExpiring} · {new Date(`${item.expiresAt}T12:00:00`).toLocaleDateString('es-AR')}</span></div>)}</div></div>}</details></section>}
 
-          {stockSummary.expiringBatches.length === 0 && stockSummary.expiringByProduct.length === 0 && (
-            <p className="text-slate-500 text-sm border border-slate-700/80 rounded-lg px-4 py-3 bg-slate-900/30">
-              No hay lotes registrados por vencer en los próximos {stockSummary.expiringDaysWindow} días. Si cargás compras con vencimiento, aparecerán aquí.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div data-tour="productos-filters" className="flex flex-wrap items-center gap-2 rounded-xl border border-hair-soft bg-surface p-3 sm:p-4">
-        <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setHighlightedIndex(0);
-          }}
-          onKeyDown={handleListKeyDown}
-          className="w-64 rounded-lg border border-hair bg-raised py-2 pl-9 pr-3 text-fg placeholder:text-fg-faint"
-        />
-        </div>
-        <select
-          value={categoryId}
-          onChange={(e) => { setCategoryId(e.target.value); setHighlightedIndex(0); }}
-          className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"
-        >
-          <option value="">Todas las categorías</option>
-          {(Array.isArray(categories) ? categories : []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${lowStock ? 'border-warn/40 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised text-fg-muted'}`}>
-          <input type="checkbox" checked={lowStock} onChange={(e) => { setLowStock(e.target.checked); setHighlightedIndex(0); }} />
-          Stock bajo
-        </label>
-        <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${expiringSoon ? 'border-crit/40 bg-[var(--crit-soft)] text-crit' : 'border-hair bg-raised text-fg-muted'}`}>
-          <input type="checkbox" checked={expiringSoon} onChange={(e) => { setExpiringSoon(e.target.checked); setHighlightedIndex(0); }} />
-          Por vencer (30 días)
-        </label>
-        <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${showBulkInternal ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-brand' : 'border-hair bg-raised text-fg-faint'}`} title="Costo y venta por bulto — solo referencia interna">
-          <input type="checkbox" checked={showBulkInternal} onChange={(e) => setShowBulkInternal(e.target.checked)} />
-          Ver bulto (interno)
-        </label>
+    <section data-tour="productos-filters" className="space-y-3 rounded-xl border border-hair-soft bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2"><div className="inline-flex rounded-lg border border-hair bg-raised p-1"><button type="button" onClick={() => setMode('catalog')} className={`rounded-md px-3 py-1.5 text-sm ${mode === 'catalog' ? 'bg-raised2 text-fg' : 'text-fg-faint'}`}>Catálogo</button><button type="button" onClick={() => setMode('stock')} className={`rounded-md px-3 py-1.5 text-sm ${mode === 'stock' ? 'bg-raised2 text-fg' : 'text-fg-faint'}`}>Stock</button></div>
+        <select defaultValue="" onChange={(event) => { applyView(event.target.value); event.target.value = ''; }} className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg"><option value="">Mis vistas</option>{views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}</select><button type="button" onClick={saveView} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Guardar vista</button>{views.length > 0 && <button type="button" onClick={() => { const id = prompt(`ID de vista a borrar:\n${views.map((view) => `${view.id}: ${view.name}`).join('\n')}`); if (id) setViews((current) => current.filter((view) => view.id !== id)); }} className="rounded-lg border border-hair px-3 py-2 text-sm text-crit">Borrar vista</button>}
+        <button type="button" onClick={() => setShowColumns((current) => !current)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Columnas</button><button type="button" onClick={openDuplicates} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Duplicados (EAN)</button>
       </div>
+      {showColumns && <div className="grid gap-2 rounded-lg border border-hair bg-raised p-3 sm:grid-cols-2 lg:grid-cols-3">{columns.map((column, index) => <div key={column.key} className="flex items-center gap-2"><input type="checkbox" checked={column.visible} onChange={(event) => setColumns((current) => current.map((item) => item.key === column.key ? { ...item, visible: event.target.checked } : item))} /><span className="min-w-0 flex-1 text-sm text-fg-muted">{column.label}</span><button type="button" onClick={() => moveColumn(index, -1)} className="text-fg-faint">↑</button><button type="button" onClick={() => moveColumn(index, 1)} className="text-fg-faint">↓</button></div>)}</div>}
+      <div className="flex flex-wrap gap-2"><div className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Buscar nombre, EAN, marca, SKU…" className="w-full rounded-lg border border-hair bg-raised py-2 pl-9 pr-3 text-fg placeholder:text-fg-faint" /></div>
+        <select value={filters.provider} onChange={(event) => changeFilter('provider', event.target.value)} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"><option value="">Todos los proveedores</option>{facets.providers.map((item) => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select>
+        <select value={filters.categoryId} onChange={(event) => changeFilter('categoryId', event.target.value)} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"><option value="">Todas las categorías</option>{facets.categories.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.count})</option>)}</select>
+        <select value={filters.brand} onChange={(event) => changeFilter('brand', event.target.value)} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"><option value="">Todas las marcas</option>{facets.brands.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}</select>
+        <select value={filters.type} onChange={(event) => changeFilter('type', event.target.value)} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"><option value="">Todos los tipos</option>{facets.types.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}</select>
+        <select value={filters.status} onChange={(event) => changeFilter('status', event.target.value as Filters['status'])} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"><option value="active">Activos</option><option value="inactive">Inactivos</option><option value="all">Todos</option></select>
+      </div><div className="flex flex-wrap gap-3"><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={filters.hasStock} onChange={(event) => changeFilter('hasStock', event.target.checked)} />Con stock</label><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={filters.stockControl} onChange={(event) => changeFilter('stockControl', event.target.checked)} />Control de stock</label><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={showBulkInternal} onChange={(event) => setShowBulkInternal(event.target.checked)} />Ver bulto interno</label><button type="button" onClick={() => { setFilters(EMPTY_FILTERS); setSearchInput(''); }} className="text-sm text-brand hover:underline">Limpiar filtros</button></div>
+    </section>
 
-      <p className="text-xs text-fg-faint">
-        Costo y precio de venta se muestran <strong className="text-fg-muted">por unidad (c/u)</strong> — así los usa el POS.
-        Los productos importados por bulto se convierten automáticamente al importar desde Sincronizaciones.
-      </p>
+    {selected.size > 0 && <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button onClick={() => promptBulkNumber('applyMarkup', 'Markup (%):')} className="rounded-lg border border-hair px-3 py-1.5 text-sm">Aplicar markup</button><button onClick={() => promptBulkNumber('setPrice', 'Precio fijo:')} className="rounded-lg border border-hair px-3 py-1.5 text-sm">Fijar precio</button><button onClick={() => { const id = prompt(`ID de categoría:\n${facets.categories.map((item) => `${item.id}: ${item.name}`).join('\n')}`); if (id) runBulk('setCategory', id); }} className="rounded-lg border border-hair px-3 py-1.5 text-sm">Asignar categoría</button><button onClick={() => runBulk('setActive', true)} className="rounded-lg border border-ok/30 px-3 py-1.5 text-sm text-ok">Activar</button><button onClick={() => runBulk('setActive', false)} className="rounded-lg border border-warn/30 px-3 py-1.5 text-sm text-warn">Desactivar</button><button onClick={() => runBulk('setStockControl', true)} className="rounded-lg border border-hair px-3 py-1.5 text-sm">Control on</button><button onClick={() => runBulk('setStockControl', false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm">Control off</button><button onClick={() => confirm('¿Eliminar los productos seleccionados?') && runBulk('delete')} className="rounded-lg border border-crit/30 px-3 py-1.5 text-sm text-crit">Eliminar</button></div>}
+    {bulkMessage && <div className="rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-4 py-3 text-sm text-ok">{bulkMessage}</div>}
 
-      {loading ? (
-        <p className="text-fg-faint">Cargando...</p>
-      ) : (
-        <div data-tour="productos-table" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
-          <table className="w-full text-sm">
-            <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint">
-              <tr>
-                <th className="p-3 w-12"></th>
-                <th className="text-left p-3">Producto</th>
-                <th className="text-left p-3">Categoría</th>
-                <th className="text-left p-3">Marca</th>
-                <th className="text-right p-3">Costo c/u</th>
-                <th className="text-right p-3">Precio c/u</th>
-                <th className="text-right p-3">Stock</th>
-                <th className="text-right p-3">Mín.</th>
-                <th className="text-left p-3">Vencimiento</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hair-soft">
-              {(Array.isArray(filtered) ? filtered : []).map((p, idx) => (
-                <tr
-                  key={p?.id ?? ''}
-                  className={`hover:bg-raised/70 ${idx === safeHighlighted ? 'bg-brand-highlight' : ''}`}
-                >
-                  <td className="p-2">
-                    {p?.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.imageUrl} alt="" className="h-10 w-10 rounded-lg bg-raised2 object-contain" />
-                    ) : (
-                      <div className="h-10 w-10 rounded-lg bg-raised2" />
-                    )}
-                  </td>
-                  <td className="p-3">
-                    <Link href={`/productos/${p?.id ?? ''}`} className="font-semibold text-fg hover:text-brand hover:underline">
-                      {p?.name ?? '-'}
-                    </Link>
-                    {(p?.barcode || p?.weight || p?.unitsPerBox) && (
-                      <span className="block font-mono text-xs tabular-nums text-fg-faint">
-                        {[p?.barcode, p?.weight ? `${p.weight}g` : null, p?.unitsPerBox ? `x${p.unitsPerBox}` : null].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3 text-fg-muted">{p?.category?.name || '-'}</td>
-                  <td className="p-3 text-fg-muted">{p?.brand || '-'}</td>
-                  <td className="p-3 text-right font-mono tabular-nums">
-                    {p?.cost != null ? (
-                      <UnitPriceDisplay
-                        cost={p.cost}
-                        unitsPerBox={p.unitsPerBox}
-                        unitsPerBoxNum={p.unitsPerBoxNum}
-                        costBox={p.costBox}
-                        showCost
-                        showPrice={false}
-                        showBulkInternal={showBulkInternal}
-                      />
-                    ) : (
-                      <span className="text-fg-faint">—</span>
-                    )}
-                  </td>
-                  <td className="p-3 text-right font-mono tabular-nums">
-                    <UnitPriceDisplay
-                      price={p?.price}
-                      unitsPerBox={p?.unitsPerBox}
-                      unitsPerBoxNum={p?.unitsPerBoxNum}
-                      priceBox={p?.priceBox}
-                      showBulkInternal={showBulkInternal}
-                    />
-                  </td>
-                  <td className="p-3 text-right"><span className={`rounded-md border px-2 py-1 font-mono text-xs tabular-nums ${(p?.stock ?? 0) <= (p?.minStock ?? 0) ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{p?.stock ?? 0}</span></td>
-                  <td className="p-3 text-right font-mono tabular-nums text-fg-faint">{p?.minStock ?? 0}</td>
-                  <td className="p-3">
-                    {p?.expiresAt ? (
-                      (() => {
-                        const dias = diasHastaVencimiento(p?.expiresAt);
-                        if (dias === null) return '-';
-                        if (dias < 0) return <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-crit">Vencido</span>;
-                        if (dias <= 7) return <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 font-mono tabular-nums text-warn">{dias} días</span>;
-                        return <span className="font-mono tabular-nums text-fg-muted">{new Date(p.expiresAt).toLocaleDateString('es-AR')}</span>;
-                      })()
-                    ) : (
-                      <span className="text-fg-faint">-</span>
-                    )}
-                  </td>
-                  <td className="p-3">
-                    <Link href={`/productos/${p?.id ?? ''}`} className="text-brand hover:underline text-xs">
-                      Editar
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Container>
-  );
+    <div data-tour="productos-table" className="overflow-hidden rounded-xl border border-hair-soft bg-surface"><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3"><input type="checkbox" checked={products.length > 0 && products.every((product) => selected.has(product.id))} onChange={(event) => setSelected(event.target.checked ? new Set(products.map((product) => product.id)) : new Set())} /></th>{visibleColumns.map((column) => <th key={column.key} className="whitespace-nowrap p-3 text-left">{SORTABLE[column.key] ? <button type="button" onClick={() => changeSort(SORTABLE[column.key]!)} className="hover:text-fg">{column.label}{sort === SORTABLE[column.key] ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}</button> : column.label}</th>)}</tr></thead><tbody className="divide-y divide-hair-soft">{products.map((product) => <tr key={product.id} className="hover:bg-raised/70"><td className="p-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></td>{visibleColumns.map((column) => <td key={column.key} className={`whitespace-nowrap p-3 ${['cost', 'price', 'margin', 'stock', 'minStock'].includes(column.key) ? 'text-right font-mono tabular-nums' : ''}`}>{renderCell(product, column.key)}</td>)}</tr>)}{!loading && products.length === 0 && <tr><td colSpan={visibleColumns.length + 1} className="p-10 text-center text-fg-faint">No hay productos para estos filtros.</td></tr>}</tbody></table></div>{loading && <div className="p-8 text-center text-fg-faint">Cargando...</div>}</div>
+
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted"><p><span className="font-mono tabular-nums text-fg">{total}</span> productos · Página <span className="font-mono">{page}</span> de <span className="font-mono">{totalPages || 1}</span></p><div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg border border-hair px-3 py-2 disabled:opacity-40">Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-hair px-3 py-2 disabled:opacity-40">Siguiente</button><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg">{[25, 50, 100, 200].map((size) => <option key={size} value={size}>{size} por página</option>)}</select></div></div>
+
+    {showDuplicates && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowDuplicates(false); }}><div className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-hair bg-surface p-5"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-bold text-fg">Duplicados por EAN</h2><button type="button" onClick={() => setShowDuplicates(false)} className="text-fg-muted">Cerrar</button></div>{duplicates.length === 0 ? <p className="text-fg-muted">No hay códigos duplicados activos.</p> : <div className="space-y-4">{duplicates.map((group) => <section key={group.barcode} className="rounded-xl border border-hair bg-raised p-4"><div className="mb-3 flex justify-between"><strong className="font-mono text-fg">EAN {group.barcode}</strong><span className="font-mono text-warn">{group.count}</span></div><div className="space-y-2">{group.products.map((product) => <label key={product.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-hair-soft bg-surface p-3"><input type="radio" name={`keep-${group.barcode}`} checked={duplicateKeep[group.barcode] === product.id} onChange={() => setDuplicateKeep((current) => ({ ...current, [group.barcode]: product.id }))} /><span className="min-w-0 flex-1"><strong className="block text-fg">{product.name}</strong><span className="font-mono text-xs text-fg-faint">{product.sourceProvider || 'Sin origen'} · stock {product.stock} · {formatMoneyArs(Number(product.price))}</span></span></label>)}</div><button type="button" onClick={() => mergeDuplicate(group)} className="btn-brand mt-3 rounded-lg px-4 py-2">Conservar seleccionado y fusionar</button></section>)}</div>}</div></div>}
+  </Container>;
 }

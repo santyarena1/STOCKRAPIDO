@@ -129,24 +129,24 @@ export default function ClientesPage() {
       />
 
       <div className="grid md:grid-cols-2 gap-4 mb-6">
-        <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-4">
-          <h3 className="text-amber-400 font-medium">Morosos ({morosos.length})</h3>
-          <p className="text-sm text-slate-400">Clientes con saldo pendiente</p>
+        <div className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] p-4">
+          <h3 className="text-warn font-medium">Morosos ({morosos.length})</h3>
+          <p className="text-sm text-fg-muted">Clientes con saldo pendiente</p>
         </div>
-        <div data-tour="clientes-total" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-          <h3 className="text-slate-200 font-medium">Saldo total fiado</h3>
-          <p className="text-2xl font-bold text-white">${totalFiado.toFixed(0)}</p>
+        <div data-tour="clientes-total" className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+          <h3 className="text-fg font-medium">Saldo total fiado</h3>
+          <p className="text-2xl font-bold text-fg">${totalFiado.toFixed(0)}</p>
         </div>
       </div>
 
       {showForm && (
-        <form data-tour="clientes-form" onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+        <form data-tour="clientes-form" onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
           <input
             type="text"
             placeholder="Nombre *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             required
           />
           <input
@@ -154,14 +154,14 @@ export default function ClientesPage() {
             placeholder="Teléfono"
             value={form.phone}
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
           <input
             type="text"
             placeholder="Notas"
             value={form.notes}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
           <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Guardar</button>
         </form>
@@ -170,15 +170,15 @@ export default function ClientesPage() {
       {/* Modal registrar pago */}
       {paymentFor && (
         <form onSubmit={handlePayment} className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-white mb-4">Registrar pago</h3>
+          <div className="bg-surface border border-hair00 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-fg mb-4">Registrar pago</h3>
             <input
               type="number"
               step="0.01"
               placeholder="Monto"
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 mb-2"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg mb-2"
               autoFocus
             />
             <input
@@ -186,11 +186,11 @@ export default function ClientesPage() {
               placeholder="Nota"
               value={paymentNote}
               onChange={(e) => setPaymentNote(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 mb-4"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg mb-4"
             />
             <div className="flex gap-2">
-              <button type="button" onClick={() => setPaymentFor(null)} className="flex-1 py-2 rounded-lg border border-slate-600 text-slate-300">Cancelar</button>
-              <button type="submit" className="flex-1 py-2 rounded-lg bg-green-600 text-white">Registrar</button>
+              <button type="button" onClick={() => setPaymentFor(null)} className="flex-1 py-2 rounded-lg border border-hair00 text-fg-muted">Cancelar</button>
+              <button type="submit" className="flex-1 py-2 rounded-lg bg-[var(--ok-soft)] text-fg">Registrar</button>
             </div>
           </div>
         </form>
@@ -200,15 +200,15 @@ export default function ClientesPage() {
       {detailCustomer && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setDetailCustomer(null)}>
           <div
-            className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90dvh] flex flex-col"
+            className="bg-surface border border-hair00 rounded-xl w-full max-w-2xl max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-700">
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-hair00">
               <div>
-                <h2 className="text-xl font-bold text-white">{detailCustomer.name}</h2>
-                {detailCustomer.phone && <p className="text-slate-400 text-sm">{detailCustomer.phone}</p>}
-                <p className={`text-sm font-medium mt-1 ${Number(detailCustomer.balance) > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                <h2 className="text-xl font-bold text-fg">{detailCustomer.name}</h2>
+                {detailCustomer.phone && <p className="text-fg-muted text-sm">{detailCustomer.phone}</p>}
+                <p className={`text-sm font-medium mt-1 ${Number(detailCustomer.balance) > 0 ? 'text-warn' : 'text-fg-muted'}`}>
                   Saldo: {formatMoney(detailCustomer.balance)}
                 </p>
               </div>
@@ -217,28 +217,28 @@ export default function ClientesPage() {
                   <button
                     type="button"
                     onClick={() => { setPaymentFor(detailCustomer.id); setDetailCustomer(null); }}
-                    className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-500"
+                    className="px-3 py-1.5 rounded-lg bg-[var(--ok-soft)] text-fg text-sm font-medium hover:bg-[var(--ok-soft)]"
                   >
                     Registrar pago
                   </button>
                 )}
-                <button type="button" onClick={() => setDetailCustomer(null)} className="text-slate-400 hover:text-white text-xl px-1">×</button>
+                <button type="button" onClick={() => setDetailCustomer(null)} className="text-fg-muted hover:text-fg text-xl px-1">×</button>
               </div>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-slate-700 px-5">
+            <div className="flex border-b border-hair00 px-5">
               <button
                 type="button"
                 onClick={() => setDetailTab('ventas')}
-                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'ventas' ? 'border-brand text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'ventas' ? 'border-brand text-fg' : 'border-transparent text-fg-muted hover:text-fg'}`}
               >
                 Ventas al fiado {detailSales.length > 0 && `(${detailSales.length})`}
               </button>
               <button
                 type="button"
                 onClick={() => setDetailTab('pagos')}
-                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'pagos' ? 'border-brand text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'pagos' ? 'border-brand text-fg' : 'border-transparent text-fg-muted hover:text-fg'}`}
               >
                 Pagos {detailPayments.length > 0 && `(${detailPayments.length})`}
               </button>
@@ -247,40 +247,40 @@ export default function ClientesPage() {
             {/* Contenido */}
             <div className="flex-1 overflow-y-auto p-4">
               {detailLoading ? (
-                <p className="text-slate-500 text-sm p-4">Cargando...</p>
+                <p className="text-fg-faint text-sm p-4">Cargando...</p>
               ) : detailTab === 'ventas' ? (
                 detailSales.length === 0 ? (
-                  <p className="text-slate-500 text-sm p-4">Sin ventas registradas.</p>
+                  <p className="text-fg-faint text-sm p-4">Sin ventas registradas.</p>
                 ) : (
                   <ul className="space-y-2">
                     {detailSales.map((sale) => {
                       const isOpen = expandedSaleId === sale.id;
                       return (
-                        <li key={sale.id} className="rounded-lg border border-slate-700 bg-slate-800/40 overflow-hidden">
+                        <li key={sale.id} className="rounded-lg border border-hair00 bg-raised overflow-hidden">
                           <button
                             type="button"
                             onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
-                            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-700/30"
+                            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-raised2"
                           >
                             <span className="flex flex-col gap-0.5">
-                              <span className="text-slate-200 text-sm font-medium">{formatDate(sale.createdAt)}</span>
-                              <span className="text-slate-500 text-xs">
+                              <span className="text-fg text-sm font-medium">{formatDate(sale.createdAt)}</span>
+                              <span className="text-fg-faint text-xs">
                                 {sale.items.length} {sale.items.length === 1 ? 'ítem' : 'ítems'}
                                 {Number(sale.discount) > 0 && ` · Desc. ${formatMoney(sale.discount)}`}
                               </span>
                             </span>
                             <span className="flex items-center gap-2">
-                              <span className="text-amber-400 font-semibold">{formatMoney(sale.totalFinal)}</span>
-                              <span className="text-slate-500 text-xs">{isOpen ? '▲' : '▼'}</span>
+                              <span className="text-warn font-semibold">{formatMoney(sale.totalFinal)}</span>
+                              <span className="text-fg-faint text-xs">{isOpen ? '▲' : '▼'}</span>
                             </span>
                           </button>
                           {isOpen && (
-                            <ul className="border-t border-slate-700 divide-y divide-slate-700/50">
+                            <ul className="border-t border-hair00 divide-y divide-hair-soft00/50">
                               {sale.items.map((item) => (
                                 <li key={item.id} className="flex justify-between items-center px-4 py-2 text-sm">
-                                  <span className="text-slate-300 flex-1 min-w-0 truncate">{itemName(item)}</span>
-                                  <span className="text-slate-500 mx-3 shrink-0">×{item.qty}</span>
-                                  <span className="text-slate-400 shrink-0">{formatMoney(item.subtotal)}</span>
+                                  <span className="text-fg-muted flex-1 min-w-0 truncate">{itemName(item)}</span>
+                                  <span className="text-fg-faint mx-3 shrink-0">×{item.qty}</span>
+                                  <span className="text-fg-muted shrink-0">{formatMoney(item.subtotal)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -292,16 +292,16 @@ export default function ClientesPage() {
                 )
               ) : (
                 detailPayments.length === 0 ? (
-                  <p className="text-slate-500 text-sm p-4">Sin pagos registrados.</p>
+                  <p className="text-fg-faint text-sm p-4">Sin pagos registrados.</p>
                 ) : (
                   <ul className="space-y-2">
                     {detailPayments.map((p) => (
-                      <li key={p.id} className="flex justify-between items-center rounded-lg border border-slate-700 bg-slate-800/40 px-4 py-3">
+                      <li key={p.id} className="flex justify-between items-center rounded-lg border border-hair00 bg-raised px-4 py-3">
                         <span className="flex flex-col gap-0.5">
-                          <span className="text-slate-200 text-sm">{formatDate(p.createdAt)}</span>
-                          {p.note && <span className="text-slate-500 text-xs">{p.note}</span>}
+                          <span className="text-fg text-sm">{formatDate(p.createdAt)}</span>
+                          {p.note && <span className="text-fg-faint text-xs">{p.note}</span>}
                         </span>
-                        <span className="text-green-400 font-semibold">{formatMoney(p.amount)}</span>
+                        <span className="text-ok font-semibold">{formatMoney(p.amount)}</span>
                       </li>
                     ))}
                   </ul>
@@ -313,39 +313,39 @@ export default function ClientesPage() {
       )}
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
-        <div data-tour="clientes-cobrar" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="clientes-cobrar" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
                 <th className="text-left p-3">Teléfono</th>
-                <th className="text-right p-3">Saldo</th>
+                <th className="text-right p-3 font-mono tabular-nums">Saldo</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft00">
               {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-800/50">
+                <tr key={c.id} className="hover:bg-raised">
                   <td className="p-3">
                     <button
                       type="button"
                       onClick={() => openDetail(c)}
-                      className="text-slate-200 hover:text-white hover:underline text-left"
+                      className="text-fg hover:text-fg hover:underline text-left"
                     >
                       {c.name}
                     </button>
                   </td>
-                  <td className="p-3 text-slate-400">{c.phone || '-'}</td>
-                  <td className={`p-3 text-right ${Number(c.balance) > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                  <td className="p-3 text-fg-muted">{c.phone || '-'}</td>
+                  <td className={`p-3 text-right ${Number(c.balance) > 0 ? 'text-warn' : 'text-fg-muted'}`}>
                     ${Number(c.balance).toFixed(0)}
                   </td>
                   <td className="p-3 flex gap-3 justify-end">
                     <button
                       type="button"
                       onClick={() => openDetail(c)}
-                      className="text-slate-400 hover:text-white text-xs"
+                      className="text-fg-muted hover:text-fg text-xs"
                     >
                       Ver detalle
                     </button>
@@ -353,7 +353,7 @@ export default function ClientesPage() {
                       <button
                         type="button"
                         onClick={() => setPaymentFor(c.id)}
-                        className="text-green-400 hover:underline text-xs"
+                        className="text-ok hover:underline text-xs"
                       >
                         Registrar pago
                       </button>

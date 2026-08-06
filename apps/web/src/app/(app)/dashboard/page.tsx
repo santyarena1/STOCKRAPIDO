@@ -155,7 +155,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
+  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
 
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const currentMonth = monthNames[new Date().getMonth()];
@@ -169,7 +169,7 @@ export default function DashboardPage() {
         actions={<button
           type="button"
           onClick={() => setIsEditing((e) => !e)}
-          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-slate-600 text-slate-300 hover:bg-slate-800'}`}
+          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-hair00 text-fg-muted hover:bg-raised'}`}
         >
           {isEditing ? 'Listo (guardado)' : 'Editar dashboard'}
         </button>}
@@ -180,38 +180,38 @@ export default function DashboardPage() {
         <Link
           href="/pos"
           data-tour="dashboard-pos"
-          className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 border-brand-card-hover transition-all"
+          className="rounded-xl border border-hair-soft bg-surface p-4 border-brand-card-hover transition-all"
         >
           <h3 className="text-brand font-semibold mb-1 text-sm">POS</h3>
-          <p className="text-slate-400 text-xs">Ir al punto de venta</p>
+          <p className="text-fg-muted text-xs">Ir al punto de venta</p>
         </Link>
-        <div data-tour="dashboard-ventas-hoy" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="text-slate-400 font-medium mb-1 text-sm">Ventas hoy</h3>
-          <p className="text-lg font-bold text-white">${salesToday?.total?.toFixed(0) ?? 0}</p>
-          <p className="text-slate-500 text-xs">{salesToday?.count ?? 0} ventas</p>
+        <div data-tour="dashboard-ventas-hoy" className="rounded-xl border border-hair-soft bg-surface p-4">
+          <h3 className="text-fg-muted font-medium mb-1 text-sm">Ventas hoy</h3>
+          <p className="text-lg font-bold text-fg">${salesToday?.total?.toFixed(0) ?? 0}</p>
+          <p className="text-fg-faint text-xs">{salesToday?.count ?? 0} ventas</p>
         </div>
-        <div className="rounded-xl border border-emerald-700/40 bg-emerald-900/20 p-4">
-          <h3 className="text-emerald-400 font-medium mb-1 text-sm">Ganancia hoy</h3>
-          <p className="text-lg font-bold text-emerald-400">${marginToday?.margin?.toFixed(0) ?? 0}</p>
-          <p className="text-slate-500 text-xs">Ingresos − costo mercadería</p>
+        <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4">
+          <h3 className="text-ok font-medium mb-1 text-sm">Ganancia hoy</h3>
+          <p className="text-lg font-bold text-ok">${marginToday?.margin?.toFixed(0) ?? 0}</p>
+          <p className="text-fg-faint text-xs">Ingresos − costo mercadería</p>
         </div>
-        <div data-tour="dashboard-stock-bajo" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="text-slate-400 font-medium mb-1 text-sm">Stock bajo</h3>
-          <p className="text-lg font-bold text-white">{lowStockCount}</p>
+        <div data-tour="dashboard-stock-bajo" className="rounded-xl border border-hair-soft bg-surface p-4">
+          <h3 className="text-fg-muted font-medium mb-1 text-sm">Stock bajo</h3>
+          <p className="text-lg font-bold text-fg">{lowStockCount}</p>
         </div>
         <Link
           href="/reportes"
           data-tour="dashboard-por-vencer"
-          className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-4 hover:border-amber-500/70 transition-all block"
+          className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] p-4 hover:border-warn/30 transition-all block"
         >
-          <h3 className="text-amber-400 font-medium mb-1 text-sm">Por vencer</h3>
-          <p className="text-lg font-bold text-white">{expiringCount}</p>
-          <p className="text-slate-500 text-xs">30 días</p>
+          <h3 className="text-warn font-medium mb-1 text-sm">Por vencer</h3>
+          <p className="text-lg font-bold text-fg">{expiringCount}</p>
+          <p className="text-fg-faint text-xs">30 días</p>
         </Link>
-        <div className="rounded-xl border border-emerald-700/40 bg-emerald-900/20 p-4">
-          <h3 className="text-emerald-400 font-medium mb-1 text-sm">Ganancia mes</h3>
-          <p className="text-lg font-bold text-emerald-400">${marginMonth?.margin?.toFixed(0) ?? 0}</p>
-          <p className="text-slate-500 text-xs">Ingresos − costo mercadería</p>
+        <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4">
+          <h3 className="text-ok font-medium mb-1 text-sm">Ganancia mes</h3>
+          <p className="text-lg font-bold text-ok">${marginMonth?.margin?.toFixed(0) ?? 0}</p>
+          <p className="text-fg-faint text-xs">Ingresos − costo mercadería</p>
         </div>
       </div>
 
@@ -229,9 +229,9 @@ export default function DashboardPage() {
         draggableHandle={isEditing ? '.drag-handle' : undefined}
         margin={[16, 16]}
       >
-        <div key="ventas" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
-          <h3 className="text-slate-200 font-semibold mb-2 shrink-0">Ventas por día · {currentMonth}</h3>
+        <div key="ventas" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          <h3 className="text-fg font-semibold mb-2 shrink-0">Ventas por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {salesByDay.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -246,14 +246,14 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-slate-500 text-sm flex items-center h-full justify-center">Sin ventas este mes</p>
+              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin ventas este mes</p>
             )}
           </div>
         </div>
 
-        <div key="compras" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
-          <h3 className="text-slate-200 font-semibold mb-2 shrink-0">Compras por día · {currentMonth}</h3>
+        <div key="compras" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          <h3 className="text-fg font-semibold mb-2 shrink-0">Compras por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {purchasesByDay.some((d) => d.total > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -268,14 +268,14 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-slate-500 text-sm flex items-center h-full justify-center">Sin compras este mes</p>
+              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin compras este mes</p>
             )}
           </div>
         </div>
 
-        <div key="gastos" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
-          <h3 className="text-slate-200 font-semibold mb-2 shrink-0">Gastos por día · {currentMonth}</h3>
+        <div key="gastos" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          <h3 className="text-fg font-semibold mb-2 shrink-0">Gastos por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {expensesByDay.some((d) => d.total > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -290,68 +290,68 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-slate-500 text-sm flex items-center h-full justify-center">Sin gastos este mes</p>
+              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin gastos este mes</p>
             )}
           </div>
         </div>
 
-        <div key="resumen" className="flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600 shrink-0">⋮⋮ Arrastrar</div>}
-          <h3 className="text-slate-200 font-semibold mb-3 shrink-0">Resumen del mes</h3>
+        <div key="resumen" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-5 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          <h3 className="text-fg font-semibold mb-3 shrink-0">Resumen del mes</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0 flex-1">
-            <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-slate-700/40 text-base min-w-0">
-              <span className="text-slate-400">Ventas</span>
-              <span className="font-bold text-white text-lg shrink-0">${salesMonth?.total?.toFixed(0) ?? 0}</span>
+            <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-raised2 text-base min-w-0">
+              <span className="text-fg-muted">Ventas</span>
+              <span className="font-bold text-fg text-lg shrink-0">${salesMonth?.total?.toFixed(0) ?? 0}</span>
             </div>
-            <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-slate-700/40 text-base min-w-0">
-              <span className="text-slate-400">Cant. ventas</span>
-              <span className="font-bold text-white text-lg shrink-0">{salesMonth?.count ?? 0}</span>
+            <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-raised2 text-base min-w-0">
+              <span className="text-fg-muted">Cant. ventas</span>
+              <span className="font-bold text-fg text-lg shrink-0">{salesMonth?.count ?? 0}</span>
             </div>
-            <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-emerald-900/30 border border-emerald-700/40 text-base min-w-0">
-              <span className="text-emerald-300">Ganancia</span>
-              <span className="font-bold text-emerald-400 text-lg shrink-0">${marginMonth?.margin?.toFixed(0) ?? 0}</span>
+            <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-[var(--ok-soft)] border border-ok/30 text-base min-w-0">
+              <span className="text-ok">Ganancia</span>
+              <span className="font-bold text-ok text-lg shrink-0">${marginMonth?.margin?.toFixed(0) ?? 0}</span>
             </div>
           </div>
         </div>
 
-        <div key="top-vendidos" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
+        <div key="top-vendidos" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
           <h3 className="text-brand font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-brand-dot" />Más vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
-            {topSold.length === 0 ? <li className="text-slate-500">Sin datos</li> : topSold.map((p, i) => (
-              <li key={i} className="flex justify-between gap-2"><span className="text-slate-300 truncate" title={p.name}>{p.name}</span><span className="text-slate-400 whitespace-nowrap">{p.qty} un.</span></li>
+            {topSold.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topSold.map((p, i) => (
+              <li key={i} className="flex justify-between gap-2"><span className="text-fg-muted truncate" title={p.name}>{p.name}</span><span className="text-fg-muted whitespace-nowrap">{p.qty} un.</span></li>
             ))}
           </ul>
         </div>
 
-        <div key="top-ganancia" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
-          <h3 className="text-emerald-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" />Más ganancia</h3>
+        <div key="top-ganancia" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          <h3 className="text-ok font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--ok-soft)]" />Más ganancia</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
-            {topProfit.length === 0 ? <li className="text-slate-500">Sin datos</li> : topProfit.map((p, i) => (
-              <li key={i} className="flex justify-between gap-2"><span className="text-slate-300 truncate" title={p.name}>{p.name}</span><span className="text-emerald-400 font-medium whitespace-nowrap">${p.profit?.toFixed(0) ?? 0}</span></li>
+            {topProfit.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topProfit.map((p, i) => (
+              <li key={i} className="flex justify-between gap-2"><span className="text-fg-muted truncate" title={p.name}>{p.name}</span><span className="text-ok font-medium whitespace-nowrap">${p.profit?.toFixed(0) ?? 0}</span></li>
             ))}
           </ul>
         </div>
 
-        <div key="top-menos" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
-          <h3 className="text-amber-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-400" />Menos vendidos</h3>
+        <div key="top-menos" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          <h3 className="text-warn font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--warn-soft)]" />Menos vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
-            {leastSold.length === 0 ? <li className="text-slate-500">Sin datos</li> : leastSold.map((p, i) => (
-              <li key={i} className="flex justify-between gap-2"><span className="text-slate-300 truncate" title={p.name}>{p.name}</span><span className="text-slate-400 whitespace-nowrap">{p.qty} un.</span></li>
+            {leastSold.length === 0 ? <li className="text-fg-faint">Sin datos</li> : leastSold.map((p, i) => (
+              <li key={i} className="flex justify-between gap-2"><span className="text-fg-muted truncate" title={p.name}>{p.name}</span><span className="text-fg-muted whitespace-nowrap">{p.qty} un.</span></li>
             ))}
           </ul>
         </div>
 
-        <div key="top-vencer" className="overflow-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-slate-500 text-xs mb-2 pb-2 border-b border-slate-600">⋮⋮ Arrastrar</div>}
-          <h3 className="text-rose-400 font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-400" />Próximos a vencer</h3>
+        <div key="top-vencer" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          <h3 className="text-crit font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--crit-soft)]" />Próximos a vencer</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
-            {topExpiringSoon.length === 0 ? <li className="text-slate-500">Sin datos</li> : topExpiringSoon.map((p, i) => (
+            {topExpiringSoon.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topExpiringSoon.map((p, i) => (
               <li key={i}>
-                <div className="flex justify-between gap-2"><span className="text-slate-300 truncate" title={p.name}>{p.name}</span><span className="text-rose-400 whitespace-nowrap">{p.qty} un.</span></div>
-                <div className="text-slate-500 text-xs mt-0.5">Vence: {formatDate(p.nextExpiry)}</div>
+                <div className="flex justify-between gap-2"><span className="text-fg-muted truncate" title={p.name}>{p.name}</span><span className="text-crit whitespace-nowrap">{p.qty} un.</span></div>
+                <div className="text-fg-faint text-xs mt-0.5">Vence: {formatDate(p.nextExpiry)}</div>
               </li>
             ))}
           </ul>
@@ -362,21 +362,21 @@ export default function DashboardPage() {
       {/* Caja y links */}
       <div className="mt-8 space-y-4">
         {openCaja ? (
-          <div data-tour="dashboard-caja" className="rounded-xl border border-emerald-700/50 bg-emerald-900/20 p-4">
-            <p className="text-emerald-400 font-medium">Caja abierta</p>
+          <div data-tour="dashboard-caja" className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4">
+            <p className="text-ok font-medium">Caja abierta</p>
             <Link href="/caja" className="text-brand hover:underline text-sm">Ver caja →</Link>
           </div>
         ) : (
-          <div data-tour="dashboard-caja" className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-4">
-            <p className="text-amber-400 font-medium">Caja cerrada</p>
+          <div data-tour="dashboard-caja" className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] p-4">
+            <p className="text-warn font-medium">Caja cerrada</p>
             <Link href="/caja" className="text-brand hover:underline text-sm">Abrir caja →</Link>
           </div>
         )}
         <div data-tour="dashboard-links" className="flex flex-wrap gap-2">
-          <Link href="/reportes" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800">Reportes</Link>
-          <Link href="/productos" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800">Productos</Link>
-          <Link href="/compras" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800">Compras</Link>
-          <Link href="/clientes" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800">Clientes</Link>
+          <Link href="/reportes" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Reportes</Link>
+          <Link href="/productos" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Productos</Link>
+          <Link href="/compras" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Compras</Link>
+          <Link href="/clientes" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Clientes</Link>
         </div>
       </div>
     </Container>

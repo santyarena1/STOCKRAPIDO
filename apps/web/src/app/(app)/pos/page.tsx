@@ -79,11 +79,11 @@ function CartItemRow({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.imageUrl} alt="" className="w-8 h-8 object-contain rounded bg-white/5 shrink-0" />
       ) : (
-        <div className="w-8 h-8 rounded bg-slate-700 shrink-0" />
+        <div className="w-8 h-8 rounded bg-raised2 shrink-0" />
       )}
-      <span className="text-slate-300 truncate flex-1 min-w-0 basis-full sm:basis-0">{item.name}</span>
+      <span className="text-fg-muted truncate flex-1 min-w-0 basis-full sm:basis-0">{item.name}</span>
       <div className="flex items-center gap-1 shrink-0">
-        <button type="button" onClick={handleMinus} className="w-7 h-7 rounded bg-slate-600 text-slate-200 hover:bg-slate-500" aria-label="Menos">
+        <button type="button" onClick={handleMinus} className="w-7 h-7 rounded bg-raised2 text-fg hover:bg-raised2" aria-label="Menos">
           −
         </button>
         <input
@@ -101,15 +101,15 @@ function CartItemRow({
             const n = parseInt(v, 10);
             if (v === '' || Number.isNaN(n) || n < 1) onQtyChange(1);
           }}
-          className="w-10 text-center rounded bg-slate-700 border border-slate-600 text-slate-200 py-1 text-sm"
+          className="w-10 text-center rounded bg-raised2 border border-hair text-fg py-1 text-sm"
           aria-label="Cantidad"
         />
-        <button type="button" onClick={handlePlus} className="w-7 h-7 rounded bg-slate-600 text-slate-200 hover:bg-slate-500" aria-label="Más">
+        <button type="button" onClick={handlePlus} className="w-7 h-7 rounded bg-raised2 text-fg hover:bg-raised2" aria-label="Más">
           +
         </button>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <span className="text-slate-500 text-xs">$</span>
+        <span className="text-fg-faint text-xs">$</span>
         <input
           type="text"
           inputMode="decimal"
@@ -124,13 +124,13 @@ function CartItemRow({
             const n = parseFloat(e.target.value.replace(',', '.'));
             if (Number.isNaN(n) || n < 0) onPriceChange(0);
           }}
-          className="w-16 text-right rounded bg-slate-700 border border-slate-600 text-slate-200 py-1 text-sm"
+          className="w-16 text-right rounded bg-raised2 border border-hair text-fg py-1 text-sm"
           aria-label="Precio unitario"
         />
-        <span className="text-slate-600 text-[10px] shrink-0">c/u</span>
+        <span className="text-fg-faint text-[10px] shrink-0">c/u</span>
       </div>
       <span className="text-brand font-medium w-16 text-right shrink-0">${(item.subtotal - (item.discount || 0)).toFixed(0)}</span>
-      <button type="button" onClick={onRemove} className="text-slate-500 hover:text-red-400 shrink-0" title="Quitar">×</button>
+      <button type="button" onClick={onRemove} className="text-fg-faint hover:text-red-400 shrink-0" title="Quitar">×</button>
     </li>
   );
 }
@@ -636,7 +636,7 @@ export default function POSPage() {
             </span>
           ) : (
             <>
-              <span className="text-xs text-slate-500" title="Abrí turno para vincular ventas al arqueo">
+              <span className="text-xs text-fg-faint" title="Abrí turno para vincular ventas al arqueo">
                 Sin caja abierta
               </span>
               <button
@@ -645,7 +645,7 @@ export default function POSPage() {
                   pendingPaymentAfterOpenRef.current = false;
                   setShowOpenCaja(true);
                 }}
-                className="text-xs px-2.5 py-1 rounded-lg bg-amber-600/90 text-white font-medium hover:bg-amber-500"
+                className="text-xs px-2.5 py-1 rounded-lg bg-amber-600/90 text-fg font-medium hover:bg-amber-500"
               >
                 Abrir caja
               </button>
@@ -656,7 +656,7 @@ export default function POSPage() {
           <button
             type="button"
             onClick={() => openCustomerDisplayWindow()}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 font-semibold tracking-wide"
+            className="text-xs px-3 py-1.5 rounded-lg border border-hair text-fg hover:bg-raised font-semibold tracking-wide"
             title="Abre la pantalla para el cliente (segundo monitor)"
           >
             VISTA CLIENTE
@@ -665,7 +665,7 @@ export default function POSPage() {
             type="button"
             onClick={() => setShowShortcuts(true)}
             data-tour="pos-shortcuts"
-            className="text-slate-400 hover:text-white text-sm px-2 py-1 rounded"
+            className="text-fg-muted hover:text-fg text-sm px-2 py-1 rounded"
             title="Atajos (?)"
           >
             ?
@@ -741,7 +741,7 @@ export default function POSPage() {
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5 shrink-0" />
                         ) : (
-                          <span className="w-9 h-9 rounded bg-slate-700 shrink-0" />
+                          <span className="w-9 h-9 rounded bg-raised2 shrink-0" />
                         )}
                         <span className="flex flex-col min-w-0">
                           <span className="truncate font-semibold text-fg">{p.name}</span>
@@ -813,7 +813,7 @@ export default function POSPage() {
                 type="button"
                 onClick={() => setShowCustomer(true)}
                 data-tour="pos-fiado"
-                className={`flex-1 py-3 rounded-lg font-medium ${selectedCustomer ? 'bg-amber-600 text-white' : 'bg-slate-600 text-white hover:bg-slate-500'}`}
+                className={`flex-1 py-3 rounded-lg font-medium ${selectedCustomer ? 'bg-amber-600 text-fg' : 'bg-raised2 text-fg hover:bg-raised2'}`}
               >
                 {selectedCustomer ? 'Fiado: ' + selectedCustomer.name : 'Vender al fiado'}
               </button>
@@ -821,7 +821,7 @@ export default function POSPage() {
                 type="button"
                 onClick={() => setShowPaused(true)}
                 data-tour="pos-pausar"
-                className="flex-1 py-3 rounded-lg bg-slate-600 text-white font-medium hover:bg-slate-500"
+                className="flex-1 py-3 rounded-lg bg-raised2 text-fg font-medium hover:bg-raised2"
               >
                 Pausar (F6)
               </button>
@@ -838,7 +838,7 @@ export default function POSPage() {
                 }}
                 disabled={cart.length === 0}
                 data-tour="pos-cobrar"
-                className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-3 rounded-lg bg-green-600 text-fg font-bold hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cobrar (F5)
               </button>
@@ -849,46 +849,46 @@ export default function POSPage() {
 
       {showOpenCaja && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-1">Abrir caja</h2>
-            <p className="text-slate-500 text-sm mb-4">Ingresá el efectivo y banco inicial del turno (podés dejar 0).</p>
+          <div className="bg-surface border border-hair rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg mb-1">Abrir caja</h2>
+            <p className="text-fg-faint text-sm mb-4">Ingresá el efectivo y banco inicial del turno (podés dejar 0).</p>
             <form onSubmit={handleOpenCaja} className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Efectivo inicial</label>
+                <label className="block text-xs text-fg-muted mb-1">Efectivo inicial</label>
                 <input
                   type="text"
                   inputMode="decimal"
                   value={openCajaCash}
                   onChange={(e) => setOpenCajaCash(e.target.value)}
                   placeholder="0"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Banco inicial (opcional)</label>
+                <label className="block text-xs text-fg-muted mb-1">Banco inicial (opcional)</label>
                 <input
                   type="text"
                   inputMode="decimal"
                   value={openCajaBank}
                   onChange={(e) => setOpenCajaBank(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Notas (opcional)</label>
+                <label className="block text-xs text-fg-muted mb-1">Notas (opcional)</label>
                 <input
                   type="text"
                   value={openCajaNotes}
                   onChange={(e) => setOpenCajaNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg"
                 />
               </div>
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}
-                  className="flex-1 py-2.5 rounded-lg bg-slate-600 text-white"
+                  className="flex-1 py-2.5 rounded-lg bg-raised2 text-fg"
                 >
                   Cancelar
                 </button>
@@ -907,36 +907,36 @@ export default function POSPage() {
 
       {showShortcuts && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowShortcuts(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">Atajos de teclado</h2>
-            <ul className="space-y-2 text-slate-300">
+          <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg mb-4">Atajos de teclado</h2>
+            <ul className="space-y-2 text-fg-muted">
               {SHORTCUTS.map(({ key, desc }) => (
                 <li key={key} className="flex justify-between">
-                  <kbd className="px-2 py-0.5 rounded bg-slate-700 text-brand font-mono text-sm">{key}</kbd>
+                  <kbd className="px-2 py-0.5 rounded bg-raised2 text-brand font-mono text-sm">{key}</kbd>
                   <span>{desc}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-slate-500 text-sm">Presioná ? para cerrar</p>
+            <p className="mt-4 text-fg-faint text-sm">Presioná ? para cerrar</p>
           </div>
         </div>
       )}
 
       {showDiscount && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowDiscount(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">Descuento total (monto)</h2>
+          <div className="bg-surface border border-hair rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg mb-4">Descuento total (monto)</h2>
             <input
               type="text"
               value={discountInput}
               onChange={(e) => setDiscountInput(e.target.value)}
               placeholder="0"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 mb-4"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg mb-4"
               onKeyDown={(e) => e.key === 'Enter' && applyDiscount()}
               autoFocus
             />
             <div className="flex gap-2">
-              <button type="button" onClick={() => setShowDiscount(false)} className="flex-1 py-2 rounded-lg bg-slate-600 text-white">Cancelar</button>
+              <button type="button" onClick={() => setShowDiscount(false)} className="flex-1 py-2 rounded-lg bg-raised2 text-fg">Cancelar</button>
               <button type="button" onClick={applyDiscount} className="flex-1 py-2 rounded-lg btn-brand">Aplicar</button>
             </div>
           </div>
@@ -965,7 +965,7 @@ export default function POSPage() {
                     pendingPaymentAfterOpenRef.current = true;
                     setShowOpenCaja(true);
                   }}
-                  className="w-full py-2 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-500"
+                  className="w-full py-2 rounded-lg bg-amber-600 text-fg font-medium hover:bg-amber-500"
                 >
                   Abrir caja desde el POS
                 </button>
@@ -1021,25 +1021,25 @@ export default function POSPage() {
 
       {showManual && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowManual(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">Producto manual</h2>
+          <div className="bg-surface border border-hair rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg mb-4">Producto manual</h2>
             <input
               type="text"
               value={manualName}
               onChange={(e) => setManualName(e.target.value)}
               placeholder="Nombre"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 mb-2"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg mb-2"
             />
             <input
               type="text"
               value={manualPrice}
               onChange={(e) => setManualPrice(e.target.value)}
               placeholder="Precio"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 mb-4"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg mb-4"
               onKeyDown={(e) => e.key === 'Enter' && addManualProduct()}
             />
             <div className="flex gap-2">
-              <button type="button" onClick={() => setShowManual(false)} className="flex-1 py-2 rounded-lg bg-slate-600 text-white">Cancelar</button>
+              <button type="button" onClick={() => setShowManual(false)} className="flex-1 py-2 rounded-lg bg-raised2 text-fg">Cancelar</button>
               <button type="button" onClick={addManualProduct} className="flex-1 py-2 rounded-lg btn-brand">Agregar</button>
             </div>
           </div>
@@ -1048,8 +1048,8 @@ export default function POSPage() {
 
       {showPaused && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPaused(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">Ventas en espera</h2>
+          <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg mb-4">Ventas en espera</h2>
             {cart.length > 0 && (
               <button
                 type="button"
@@ -1060,12 +1060,12 @@ export default function POSPage() {
               </button>
             )}
             {pausedList.length === 0 ? (
-              <p className="text-slate-500 text-sm">No hay ventas pausadas.</p>
+              <p className="text-fg-faint text-sm">No hay ventas pausadas.</p>
             ) : (
               <ul className="space-y-2">
                 {pausedList.map((p) => (
-                  <li key={p.id} className="flex justify-between items-center gap-2 p-2 rounded bg-slate-800">
-                    <span className="text-slate-300 text-sm truncate">
+                  <li key={p.id} className="flex justify-between items-center gap-2 p-2 rounded bg-raised">
+                    <span className="text-fg-muted text-sm truncate">
                       {(p.payload?.items as CartItem[])?.length || 0} ítems · {new Date(p.createdAt).toLocaleString()}
                     </span>
                     <button
@@ -1079,19 +1079,19 @@ export default function POSPage() {
                 ))}
               </ul>
             )}
-            <button type="button" onClick={() => setShowPaused(false)} className="mt-4 w-full py-2 rounded-lg border border-slate-600 text-slate-300">Cerrar</button>
+            <button type="button" onClick={() => setShowPaused(false)} className="mt-4 w-full py-2 rounded-lg border border-hair text-fg-muted">Cerrar</button>
           </div>
         </div>
       )}
 
       {showCustomer && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowCustomer(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">Vender al fiado</h2>
+          <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg mb-4">Vender al fiado</h2>
             <button
               type="button"
               onClick={() => { setSelectedCustomer(null); setShowCustomer(false); }}
-              className="w-full py-2 rounded-lg bg-slate-600 text-white mb-2"
+              className="w-full py-2 rounded-lg bg-raised2 text-fg mb-2"
             >
               Cobro normal (sin fiado)
             </button>
@@ -1101,14 +1101,14 @@ export default function POSPage() {
                   <button
                     type="button"
                     onClick={() => { setSelectedCustomer({ id: c.id, name: c.name }); setShowCustomer(false); }}
-                    className="w-full text-left px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+                    className="w-full text-left px-4 py-2 rounded bg-raised hover:bg-raised2 text-fg"
                   >
                     {c.name} {Number(c.balance) > 0 && <span className="text-amber-400 text-sm">(saldo: ${Number(c.balance).toFixed(0)})</span>}
                   </button>
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setShowCustomer(false)} className="mt-4 w-full py-2 rounded-lg border border-slate-600 text-slate-300">Cerrar</button>
+            <button type="button" onClick={() => setShowCustomer(false)} className="mt-4 w-full py-2 rounded-lg border border-hair text-fg-muted">Cerrar</button>
           </div>
         </div>
       )}

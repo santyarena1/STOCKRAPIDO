@@ -802,7 +802,7 @@ function TabPedidos() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <StatusBadge status={order.status} />
-                    <p className="text-lg font-black text-white">
+                    <p className="text-lg font-black text-fg">
                       {formatFiguritasMoney(order.total)}
                     </p>
                   </div>
@@ -852,7 +852,7 @@ function TabPedidos() {
                     href={whatsappUrl(waText)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm px-4 py-2 transition-colors sm:flex-1"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-fg font-bold text-sm px-4 py-2 transition-colors sm:flex-1"
                   >
                     💬 WhatsApp
                   </a>

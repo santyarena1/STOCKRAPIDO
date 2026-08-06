@@ -254,7 +254,7 @@ export default function ComprasPage() {
     }
   };
 
-  if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
+  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
 
   return (
     <Container className="max-w-6xl space-y-6">
@@ -264,7 +264,7 @@ export default function ComprasPage() {
         actions={<div className="flex flex-wrap items-center gap-3">
           <Link
             href="/compras/ia"
-            className="text-sm text-violet-400 hover:text-violet-300 border border-violet-600/50 rounded-lg px-3 py-1.5"
+            className="text-sm text-fg hover:text-fg border border-hair rounded-lg px-3 py-1.5"
           >
             Compras con IA
           </Link>
@@ -279,9 +279,9 @@ export default function ComprasPage() {
       />
 
       {lowStock.length > 0 && (
-        <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-4 mb-6">
-          <h3 className="font-medium text-amber-400 mb-2">Productos con stock bajo (sugeridos)</h3>
-          <ul className="text-sm text-slate-300 space-y-1">
+        <div className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] p-4 mb-6">
+          <h3 className="font-medium text-warn mb-2">Productos con stock bajo (sugeridos)</h3>
+          <ul className="text-sm text-fg-muted space-y-1">
             {lowStock.slice(0, 10).map((p) => (
               <li key={p.id}>{p.name} – Stock: {p.stock} (mín: {p.minStock})</li>
             ))}
@@ -290,12 +290,12 @@ export default function ComprasPage() {
       )}
 
       {showNew && (
-        <form data-tour="compras-form" onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+        <form data-tour="compras-form" onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
           {editingPurchaseId && (
-            <p className="text-amber-400 text-sm">Editando compra existente. Al confirmar se actualizará la compra (se revierte el stock anterior y se aplican los nuevos ítems).</p>
+            <p className="text-warn text-sm">Editando compra existente. Al confirmar se actualizará la compra (se revierte el stock anterior y se aplican los nuevos ítems).</p>
           )}
           <div data-tour="compras-proveedor">
-            <label className="block text-sm text-slate-400 mb-1">Proveedor *</label>
+            <label className="block text-sm text-fg-muted mb-1">Proveedor *</label>
             <SupplierSelector
               value={form.supplierId}
               onChange={(id) => setForm((f) => ({ ...f, supplierId: id }))}
@@ -307,12 +307,12 @@ export default function ComprasPage() {
 
           <div data-tour="compras-items">
             <div className="flex justify-between items-center mb-2">
-              <label className="text-sm text-slate-400">Ítems de la compra</label>
+              <label className="text-sm text-fg-muted">Ítems de la compra</label>
               <button type="button" onClick={addItem} className="text-brand text-sm hover:underline">
                 + Agregar ítem
               </button>
             </div>
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-fg-faint mb-3">
               Buscá por nombre o código de barras para elegir un producto existente, o escribí nombre/código para crear uno nuevo. Podés indicar vencimiento por ítem (mismo producto, distintos lotes).
             </p>
 
@@ -320,15 +320,15 @@ export default function ComprasPage() {
               {form.items.map((item, i) => (
                 <div
                   key={i}
-                  className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4"
+                  className="space-y-3 rounded-xl border border-hair-soft bg-app p-4"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-400 text-sm">Ítem {i + 1}</span>
+                    <span className="text-fg-muted text-sm">Ítem {i + 1}</span>
                     {form.items.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeItem(i)}
-                        className="text-red-400 text-sm hover:underline"
+                        className="text-crit text-sm hover:underline"
                       >
                         Quitar
                       </button>
@@ -336,7 +336,7 @@ export default function ComprasPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="lg:col-span-2">
-                      <label className="block text-xs text-slate-500 mb-0.5">Producto (buscar o escribir nombre) *</label>
+                      <label className="block text-xs text-fg-faint mb-0.5">Producto (buscar o escribir nombre) *</label>
                       <input
                         type="text"
                         value={item.productId ? item.productName : searchTerm[i] ?? item.productName}
@@ -353,11 +353,11 @@ export default function ComprasPage() {
                         }}
                         onKeyDown={(e) => handleProductInputKeyDown(i, e)}
                         placeholder="Nombre o buscar..."
-                        className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
                       />
                       {!item.productId && (searchResults[i]?.length ?? 0) > 0 && (
                         <ul
-                          className="mt-1 border border-slate-600 rounded bg-slate-800 max-h-32 overflow-auto"
+                          className="mt-1 border border-hair00 rounded bg-raised max-h-32 overflow-auto"
                           role="listbox"
                           aria-label="Resultados de búsqueda"
                         >
@@ -368,28 +368,28 @@ export default function ComprasPage() {
                               key={p.id}
                               role="option"
                               aria-selected={idx === highlighted}
-                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-brand-highlight' : 'hover:bg-slate-700'}`}
+                              className={`px-2 py-1.5 text-sm text-fg cursor-pointer flex justify-between ${idx === highlighted ? 'bg-brand-highlight' : 'hover:bg-raised2'}`}
                               onClick={() => selectProduct(i, p)}
                             >
                               <span>{p.name}</span>
-                              {p.barcode && <span className="text-slate-500 text-xs">{p.barcode}</span>}
+                              {p.barcode && <span className="text-fg-faint text-xs">{p.barcode}</span>}
                             </li>
                           );})}
                         </ul>
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-0.5" title="Para asociar a producto existente o nuevo">Código de barras</label>
+                      <label className="block text-xs text-fg-faint mb-0.5" title="Para asociar a producto existente o nuevo">Código de barras</label>
                       <input
                         type="text"
                         value={item.barcode}
                         onChange={(e) => setItem(i, { barcode: e.target.value })}
                         placeholder="Opcional"
-                        className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-0.5">Categoría (si creás producto nuevo)</label>
+                      <label className="block text-xs text-fg-faint mb-0.5">Categoría (si creás producto nuevo)</label>
                       <CategorySelector
                         value={item.categoryId}
                         onChange={(id) => setItem(i, { categoryId: id })}
@@ -402,28 +402,28 @@ export default function ComprasPage() {
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-0.5" title="Cantidad comprada">Cantidad *</label>
+                      <label className="block text-xs text-fg-faint mb-0.5" title="Cantidad comprada">Cantidad *</label>
                       <input
                         type="number"
                         min="1"
                         value={item.qty}
                         onChange={(e) => setItem(i, { qty: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-0.5" title="Costo unitario de esta compra">Costo unitario *</label>
+                      <label className="block text-xs text-fg-faint mb-0.5" title="Costo unitario de esta compra">Costo unitario *</label>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
                         value={item.unitCost}
                         onChange={(e) => setItem(i, { unitCost: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-0.5" title="Precio de venta (si creás producto)">Precio venta</label>
+                      <label className="block text-xs text-fg-faint mb-0.5" title="Precio de venta (si creás producto)">Precio venta</label>
                       <input
                         type="number"
                         step="0.01"
@@ -431,16 +431,16 @@ export default function ComprasPage() {
                         value={item.price}
                         onChange={(e) => setItem(i, { price: e.target.value })}
                         placeholder="Opcional"
-                        className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-0.5" title="Fecha de vencimiento de este lote">Vencimiento (lote)</label>
+                      <label className="block text-xs text-fg-faint mb-0.5" title="Fecha de vencimiento de este lote">Vencimiento (lote)</label>
                       <input
                         type="date"
                         value={item.expiresAt}
                         onChange={(e) => setItem(i, { expiresAt: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                       />
                     </div>
                   </div>
@@ -459,14 +459,14 @@ export default function ComprasPage() {
         </form>
       )}
 
-      <div data-tour="compras-history" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-        <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-lg font-medium text-slate-200">Historial de compras</h2>
+      <div data-tour="compras-history" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div className="px-4 py-3 border-b border-hair00 flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-lg font-medium text-fg">Historial de compras</h2>
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={historyFilters.supplierId}
               onChange={(e) => setHistoryFilters((f) => ({ ...f, supplierId: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
             >
               <option value="">Todos los proveedores</option>
               {suppliers.map((s) => (
@@ -477,54 +477,54 @@ export default function ComprasPage() {
               type="date"
               value={historyFilters.from}
               onChange={(e) => setHistoryFilters((f) => ({ ...f, from: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
               title="Desde (fecha)"
             />
-            <span className="text-slate-500">a</span>
+            <span className="text-fg-faint">a</span>
             <input
               type="date"
               value={historyFilters.to}
               onChange={(e) => setHistoryFilters((f) => ({ ...f, to: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
               title="Hasta (fecha)"
             />
           </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3" title="Fecha y hora en que se registró la compra">Fecha</th>
                 <th className="text-left p-3" title="Proveedor del cual se compró">Proveedor</th>
-                <th className="text-right p-3" title="Monto total de la compra">Total</th>
+                <th className="text-right p-3 font-mono tabular-nums" title="Monto total de la compra">Total</th>
                 <th className="text-left p-3" title="Resumen de productos y cantidades">Detalle</th>
-                <th className="text-right p-3">Acciones</th>
+                <th className="text-right p-3 font-mono tabular-nums">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft00">
               {purchases.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-6 text-slate-500 text-center">
+                  <td colSpan={5} className="p-6 text-fg-faint text-center">
                     No hay compras en el período o con el filtro seleccionado.
                   </td>
                 </tr>
               ) : (
                 purchases.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-800/50">
-                    <td className="p-3 text-slate-400" title="Fecha de la compra">
+                  <tr key={p.id} className="hover:bg-raised">
+                    <td className="p-3 text-fg-muted" title="Fecha de la compra">
                       {new Date(p.createdAt).toLocaleString('es-AR')}
                     </td>
-                    <td className="p-3 text-slate-200">{p.supplier.name}</td>
-                    <td className="p-3 text-right text-slate-200 font-medium">
+                    <td className="p-3 text-fg">{p.supplier.name}</td>
+                    <td className="p-3 text-right text-fg font-medium font-mono tabular-nums">
                       ${Number(p.total).toFixed(0)}
                     </td>
-                    <td className="p-3 text-slate-400">
+                    <td className="p-3 text-fg-muted">
                       <ul className="space-y-0.5">
                         {p.items.map((it, j) => (
                           <li key={j}>
                             {it.qty} × {it.product.name}
                             {it.expiresAt && (
-                              <span className="text-slate-500 text-xs ml-1">
+                              <span className="text-fg-faint text-xs ml-1">
                                 (vence {new Date(it.expiresAt).toLocaleDateString('es-AR')})
                               </span>
                             )}
@@ -532,7 +532,7 @@ export default function ComprasPage() {
                         ))}
                       </ul>
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="p-3 text-right font-mono tabular-nums">
                       <div className="flex gap-2 justify-end">
                         <button
                           type="button"
@@ -544,7 +544,7 @@ export default function ComprasPage() {
                         <button
                           type="button"
                           onClick={() => handleEditar(p)}
-                          className="text-slate-400 hover:underline text-sm"
+                          className="text-fg-muted hover:underline text-sm"
                           title="Cargar con los mismos datos (incl. vencimientos) para modificar y guardar como nueva compra"
                         >
                           Editar
@@ -552,7 +552,7 @@ export default function ComprasPage() {
                         <button
                           type="button"
                           onClick={() => handleVer(p)}
-                          className="text-slate-400 hover:underline text-sm"
+                          className="text-fg-muted hover:underline text-sm"
                         >
                           Ver
                         </button>
@@ -564,40 +564,40 @@ export default function ComprasPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2 border-t border-slate-700 bg-slate-800/30 text-xs text-slate-500">
+        <div className="px-4 py-2 border-t border-hair00 bg-raised text-xs text-fg-faint">
           <strong>Columnas:</strong> Fecha = cuándo se cargó la compra · Proveedor = quién vendió · Total = monto pagado · Detalle = productos y cantidades (con vencimiento si se cargó). <strong>Repetir</strong> = cargar misma compra como nueva para cambiar vencimientos/costos. <strong>Editar</strong> = igual, cargar para modificar y guardar. <strong>Ver</strong> = ver detalle.
         </div>
       </div>
 
       {viewPurchase && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setViewPurchase(null)}>
-          <div className="rounded-lg border border-slate-600 bg-slate-800 max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-lg font-medium text-white">Detalle de compra</h3>
-              <button type="button" onClick={() => setViewPurchase(null)} className="text-slate-400 hover:text-white">Cerrar</button>
+          <div className="rounded-lg border border-hair00 bg-raised max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-hair00 flex justify-between items-center">
+              <h3 className="text-lg font-medium text-fg">Detalle de compra</h3>
+              <button type="button" onClick={() => setViewPurchase(null)} className="text-fg-muted hover:text-fg">Cerrar</button>
             </div>
             <div className="p-4 space-y-4">
-              <p className="text-slate-400 text-sm">
+              <p className="text-fg-muted text-sm">
                 {new Date(viewPurchase.createdAt).toLocaleString('es-AR')} · {viewPurchase.supplier.name}
               </p>
-              <p className="text-xl font-bold text-white">Total: ${Number(viewPurchase.total).toFixed(0)}</p>
+              <p className="text-xl font-bold text-fg">Total: ${Number(viewPurchase.total).toFixed(0)}</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-slate-500 border-b border-slate-600">
+                    <tr className="text-left text-fg-faint border-b border-hair00">
                       <th className="py-2 pr-3">Producto</th>
-                      <th className="py-2 pr-3 text-right">Cant.</th>
-                      <th className="py-2 pr-3 text-right">Costo unit.</th>
+                      <th className="py-2 pr-3 text-right font-mono tabular-nums">Cant.</th>
+                      <th className="py-2 pr-3 text-right font-mono tabular-nums">Costo unit.</th>
                       <th className="py-2">Vencimiento</th>
                     </tr>
                   </thead>
                   <tbody>
                     {viewPurchase.items.map((it, j) => (
-                      <tr key={j} className="border-b border-slate-700/50">
-                        <td className="py-2 pr-3 text-slate-200">{it.product.name}</td>
-                        <td className="py-2 pr-3 text-right text-slate-300">{it.qty}</td>
-                        <td className="py-2 pr-3 text-right text-slate-300">${Number(it.unitCost).toFixed(0)}</td>
-                        <td className="py-2 text-slate-400">
+                      <tr key={j} className="border-b border-hair00/50">
+                        <td className="py-2 pr-3 text-fg">{it.product.name}</td>
+                        <td className="py-2 pr-3 text-right text-fg-muted font-mono tabular-nums">{it.qty}</td>
+                        <td className="py-2 pr-3 text-right text-fg-muted font-mono tabular-nums">${Number(it.unitCost).toFixed(0)}</td>
+                        <td className="py-2 text-fg-muted">
                           {it.expiresAt ? new Date(it.expiresAt).toLocaleDateString('es-AR') : '—'}
                         </td>
                       </tr>

@@ -508,30 +508,30 @@ export default function VentasPage() {
               <p className="font-mono text-3xl font-bold tabular-nums text-fg">{stats.saleCount}</p>
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Total cobrado</p>
+              <p className="text-fg-muted text-xs mb-1">Total cobrado</p>
               <p className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(stats.sumTotalFinal)}</p>
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Subtotal bruto</p>
+              <p className="text-fg-muted text-xs mb-1">Subtotal bruto</p>
               <p className="font-mono text-2xl font-bold tabular-nums text-fg">{formatMoneyArs(stats.sumSubtotal)}</p>
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Descuentos</p>
+              <p className="text-fg-muted text-xs mb-1">Descuentos</p>
               <p className="font-mono text-2xl font-bold tabular-nums text-warn">-{formatMoneyArs(stats.sumDiscount)}</p>
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Ticket promedio</p>
+              <p className="text-fg-muted text-xs mb-1">Ticket promedio</p>
               <p className="font-mono text-2xl font-bold tabular-nums text-ok">{formatMoneyArs(stats.averageTicket)}</p>
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Unidades vendidas</p>
+              <p className="text-fg-muted text-xs mb-1">Unidades vendidas</p>
               <p className="font-mono text-3xl font-bold tabular-nums text-fg">{stats.unitsSold}</p>
             </div>
           </div>
           {Object.keys(stats.byPaymentMethod).length > 0 && (
             <div className="rounded-xl border border-hair-soft bg-surface px-4 py-3">
-              <p className="text-slate-400 text-xs mb-2">Por forma de pago</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-300">
+              <p className="text-fg-muted text-xs mb-2">Por forma de pago</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-fg-muted">
                 {Object.entries(stats.byPaymentMethod)
                   .sort((a, b) => b[1].total - a[1].total)
                   .map(([method, v]) => (
@@ -562,7 +562,7 @@ export default function VentasPage() {
             type="button"
             disabled={cleaningDuplicates}
             onClick={() => void handleCleanDuplicates()}
-            className="px-4 py-2 rounded-lg bg-amber-600 text-white font-medium text-sm hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            className="px-4 py-2 rounded-lg bg-amber-600 text-fg font-medium text-sm hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
             {cleaningDuplicates ? 'Limpiando…' : 'Eliminar duplicados'}
           </button>
@@ -573,7 +573,7 @@ export default function VentasPage() {
         <div data-tour="ventas-filters" className="space-y-3 border-b border-hair-soft px-4 py-4 sm:px-5">
           <h2 className="text-lg font-medium text-fg">Filtros</h2>
           <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-xs text-slate-500 shrink-0">Período rápido:</span>
+            <span className="text-xs text-fg-faint shrink-0">Período rápido:</span>
             {VENTAS_DATE_PRESETS.map(({ id, label, title }) => (
               <button
                 key={id}
@@ -627,9 +627,9 @@ export default function VentasPage() {
               ))}
             </select>
             <div className="flex flex-col gap-1 min-w-[220px]">
-              <span className="text-xs text-slate-500">Producto</span>
+              <span className="text-xs text-fg-faint">Producto</span>
               {selectedProduct ? (
-                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800 border border-emerald-700/50 text-sm">
+                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-raised border border-emerald-700/50 text-sm">
                   <Link
                     href={`/productos/${selectedProduct.id}`}
                     className="text-emerald-400 hover:underline truncate flex-1 min-w-0"
@@ -639,7 +639,7 @@ export default function VentasPage() {
                   </Link>
                   <button
                     type="button"
-                    className="text-slate-500 hover:text-white shrink-0"
+                    className="text-fg-faint hover:text-fg shrink-0"
                     title="Quitar filtro de producto"
                     onClick={() => {
                       setSelectedProduct(null);
@@ -660,12 +660,12 @@ export default function VentasPage() {
                     autoComplete="off"
                   />
                   {productHits.length > 0 && (
-                    <ul className="absolute top-full left-0 right-0 mt-0.5 z-30 max-h-52 overflow-auto rounded-lg border border-slate-600 bg-slate-900 shadow-xl">
+                    <ul className="absolute top-full left-0 right-0 mt-0.5 z-30 max-h-52 overflow-auto rounded-lg border border-hair bg-surface shadow-xl">
                       {productHits.map((p) => (
                         <li key={p.id}>
                           <button
                             type="button"
-                            className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 border-b border-slate-800 last:border-0"
+                            className="w-full text-left px-3 py-2 text-sm text-fg hover:bg-raised border-b border-hair-soft last:border-0"
                             onClick={() => {
                               setSelectedProduct({ id: p.id, name: p.name });
                               setProductSearch('');
@@ -674,7 +674,7 @@ export default function VentasPage() {
                           >
                             <span className="block truncate">{p.name}</span>
                             {p.barcode && (
-                              <span className="text-xs text-slate-500">{p.barcode}</span>
+                              <span className="text-xs text-fg-faint">{p.barcode}</span>
                             )}
                           </button>
                         </li>
@@ -717,13 +717,13 @@ export default function VentasPage() {
             <tbody className="divide-y divide-hair-soft">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="p-6 text-slate-500 text-center">
+                  <td colSpan={10} className="p-6 text-fg-faint text-center">
                     Cargando...
                   </td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-6 text-slate-500 text-center">
+                  <td colSpan={10} className="p-6 text-fg-faint text-center">
                     No hay ventas en el período o con los filtros seleccionados
                     {selectedProduct ? ` (que incluyan "${selectedProduct.name}")` : ''}.
                   </td>
@@ -907,21 +907,21 @@ export default function VentasPage() {
                 <h3 className="text-sm font-medium text-fg">Editar venta</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="block">
-                    <span className="text-xs text-slate-500">Descuento global ($)</span>
+                    <span className="text-xs text-fg-faint">Descuento global ($)</span>
                     <input
                       type="text"
                       inputMode="decimal"
                       value={saleEditDiscount}
                       onChange={(e) => setSaleEditDiscount(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                      className="mt-1 w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-xs text-slate-500">Forma de pago</span>
+                    <span className="text-xs text-fg-faint">Forma de pago</span>
                     <select
                       value={saleEditPayment}
                       onChange={(e) => setSaleEditPayment(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                      className="mt-1 w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg"
                     >
                       <option value="">—</option>
                       {PAYMENT_OPTIONS.map(([id, label]) => (
@@ -930,11 +930,11 @@ export default function VentasPage() {
                     </select>
                   </label>
                   <label className="block sm:col-span-2">
-                    <span className="text-xs text-slate-500">Cliente (fiado / cuenta)</span>
+                    <span className="text-xs text-fg-faint">Cliente (fiado / cuenta)</span>
                     <select
                       value={saleEditCustomerId}
                       onChange={(e) => setSaleEditCustomerId(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                      className="mt-1 w-full px-3 py-2 rounded-lg bg-raised border border-hair text-fg"
                     >
                       <option value="">Sin cliente</option>
                       {customers.map((c) => (
@@ -979,18 +979,18 @@ export default function VentasPage() {
                     </button>
                   )}
                 </div>
-                <p className="text-slate-500 text-xs">
-                  El saldo de fiado se ajusta solo si la forma de pago es <strong className="text-slate-400">Fiado</strong> y hay cliente. Al editar ítems, el descuento no puede superar el subtotal (se recalcula solo).
+                <p className="text-fg-faint text-xs">
+                  El saldo de fiado se ajusta solo si la forma de pago es <strong className="text-fg-muted">Fiado</strong> y hay cliente. Al editar ítems, el descuento no puede superar el subtotal (se recalcula solo).
                 </p>
                 </div>
               )}
 
               <div>
-                <h3 className="text-slate-300 font-medium mb-2">Ítems</h3>
+                <h3 className="text-fg-muted font-medium mb-2">Ítems</h3>
                 <div className="overflow-x-auto rounded-xl border border-hair-soft">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="text-left text-slate-500 border-b border-slate-700 bg-slate-800/50">
+                      <tr className="text-left text-fg-faint border-b border-hair bg-raised">
                         <th className="p-2">Producto</th>
                         <th className="p-2 text-right">Cant.</th>
                         <th className="p-2 text-right">P. unit.</th>
@@ -998,12 +998,12 @@ export default function VentasPage() {
                         <th className="p-2 text-right w-40">Acciones</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-700/50">
+                    <tbody className="divide-y divide-[color:var(--hair-soft)]">
                       {(viewSale.items ?? []).map((it) => {
                         const isEditing = editingItemId === it.id;
                         return (
                           <tr key={it.id}>
-                            <td className="p-2 text-slate-200">
+                            <td className="p-2 text-fg">
                               {it.product?.name ?? it.productName ?? 'Producto manual'}
                             </td>
                             <td className="p-2 text-right">
@@ -1013,10 +1013,10 @@ export default function VentasPage() {
                                   inputMode="numeric"
                                   value={itemEditQty}
                                   onChange={(e) => setItemEditQty(e.target.value.replace(/\D/g, ''))}
-                                  className="w-16 px-2 py-1 rounded bg-slate-800 border border-slate-600 text-right text-slate-100"
+                                  className="w-16 px-2 py-1 rounded bg-raised border border-hair text-right text-fg"
                                 />
                               ) : (
-                                <span className="text-slate-300">{it.qty}</span>
+                                <span className="text-fg-muted">{it.qty}</span>
                               )}
                             </td>
                             <td className="p-2 text-right">
@@ -1026,18 +1026,18 @@ export default function VentasPage() {
                                   inputMode="decimal"
                                   value={itemEditPrice}
                                   onChange={(e) => setItemEditPrice(e.target.value)}
-                                  className="w-24 px-2 py-1 rounded bg-slate-800 border border-slate-600 text-right text-slate-100"
+                                  className="w-24 px-2 py-1 rounded bg-raised border border-hair text-right text-fg"
                                 />
                               ) : (
-                                <span className="text-slate-300">${Number(it.unitPrice ?? 0).toFixed(0)}</span>
+                                <span className="text-fg-muted">${Number(it.unitPrice ?? 0).toFixed(0)}</span>
                               )}
                             </td>
-                            <td className="p-2 text-right text-slate-200">
+                            <td className="p-2 text-right text-fg">
                               ${Number(it.subtotal ?? 0).toFixed(0)}
                             </td>
                             <td className="p-2 text-right whitespace-nowrap">
                               {viewSale.status === 'voided' ? (
-                                <span className="text-slate-600">—</span>
+                                <span className="text-fg-faint">—</span>
                               ) : isEditing ? (
                                 <>
                                   <button
@@ -1051,7 +1051,7 @@ export default function VentasPage() {
                                   <button
                                     type="button"
                                     onClick={cancelEditItem}
-                                    className="text-slate-500 hover:underline text-xs"
+                                    className="text-fg-faint hover:underline text-xs"
                                   >
                                     Cancelar
                                   </button>
@@ -1084,8 +1084,8 @@ export default function VentasPage() {
                 </div>
               </div>
 
-              <div className="border-t border-slate-700 pt-3 space-y-1 text-sm">
-                <div className="flex justify-between text-slate-400">
+              <div className="border-t border-hair pt-3 space-y-1 text-sm">
+                <div className="flex justify-between text-fg-muted">
                   <span>Subtotal ítems</span>
                   <span>${Number(viewSale.total ?? 0).toFixed(0)}</span>
                 </div>

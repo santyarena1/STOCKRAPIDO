@@ -49,13 +49,13 @@ export default function ProveedoresPage() {
       />
 
       {showForm && (
-        <form data-tour="proveedores-form" onSubmit={handleSubmit} className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+        <form data-tour="proveedores-form" onSubmit={handleSubmit} className="max-w-md space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
           <input
             type="text"
             placeholder="Nombre *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             required
           />
           <input
@@ -63,46 +63,46 @@ export default function ProveedoresPage() {
             placeholder="Teléfono"
             value={form.phone}
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
           <input
             type="email"
             placeholder="Email"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
           <input
             type="text"
             placeholder="Dirección"
             value={form.address}
             onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
           <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Guardar</button>
         </form>
       )}
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
-        <div data-tour="proveedores-list" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="proveedores-list" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
                 <th className="text-left p-3">Teléfono</th>
                 <th className="text-left p-3">Email</th>
-                <th className="text-right p-3">Compras</th>
+                <th className="text-right p-3 font-mono tabular-nums">Compras</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft00">
               {suppliers.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-800/50">
-                  <td className="p-3 text-slate-200">{s.name}</td>
-                  <td className="p-3 text-slate-400">{s.phone || '-'}</td>
-                  <td className="p-3 text-slate-400">{s.email || '-'}</td>
-                  <td className="p-3 text-right text-slate-400">{s._count?.purchases ?? 0}</td>
+                <tr key={s.id} className="hover:bg-raised">
+                  <td className="p-3 text-fg">{s.name}</td>
+                  <td className="p-3 text-fg-muted">{s.phone || '-'}</td>
+                  <td className="p-3 text-fg-muted">{s.email || '-'}</td>
+                  <td className="p-3 text-right text-fg-muted font-mono tabular-nums">{s._count?.purchases ?? 0}</td>
                 </tr>
               ))}
             </tbody>

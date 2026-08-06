@@ -10,6 +10,7 @@ import {
   Package,
   Receipt,
   Settings,
+  SlidersHorizontal,
   ShoppingCart,
   Moon,
   Sun,
@@ -24,6 +25,7 @@ import { cn } from '@/lib/cn';
 type Branding = {
   accentColor?: string;
   logoUrl?: string;
+  faviconUrl?: string;
   appTitle?: string;
   linkColor?: string;
   primaryButtonColor?: string;
@@ -82,10 +84,22 @@ const GROUPS = [
     items: [{ href: '/reportes', label: 'Reportes' }],
   },
   {
+    title: 'Configuración',
+    icon: SlidersHorizontal,
+    items: [
+      { href: '/config/negocio', label: 'Negocio' },
+      { href: '/config/apariencia', label: 'Apariencia' },
+      { href: '/config/proveedores', label: 'Proveedores' },
+      { href: '/config/pantalla', label: 'Pantalla cliente' },
+      { href: '/config/compras-ia', label: 'Compras IA' },
+      { href: '/config/categorias', label: 'Categorías' },
+      { href: '/config/fiscal', label: 'Fiscal' },
+    ],
+  },
+  {
     title: 'Administración',
     icon: Settings,
     items: [
-      { href: '/config', label: 'Configuración' },
       { href: '/usuarios', label: 'Usuarios' },
       { href: '/billing', label: 'Plan & Facturación' },
     ],
@@ -98,7 +112,8 @@ function isActivePath(pathname: string, href: string) {
   return (
     pathname === href ||
     (href === '/compras' && pathname.startsWith('/compras')) ||
-    (href === '/figuritas' && pathname.startsWith('/figuritas'))
+    (href === '/figuritas' && pathname.startsWith('/figuritas')) ||
+    (href.startsWith('/config/') && pathname.startsWith(href))
   );
 }
 
@@ -143,7 +158,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setSidebarTitle(br?.appTitle?.trim() || b.name || 'StockRápido');
         applyCssBrandVars(br);
         document.title = `${br?.appTitle?.trim() || b.name || 'StockRápido'}`;
-        const href = br?.logoUrl?.trim();
+        const href = br?.faviconUrl?.trim() || br?.logoUrl?.trim();
         const existingIcon = document.querySelector("link[data-stockrapido-icon='1']") as HTMLLinkElement | null;
         if (href && (href.startsWith('data:') || href.startsWith('http://') || href.startsWith('https://'))) {
           let link = existingIcon;

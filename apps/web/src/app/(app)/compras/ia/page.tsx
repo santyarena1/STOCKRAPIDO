@@ -314,19 +314,19 @@ export default function ComprasIaPage() {
     }
   };
 
-  if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
+  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
 
   return (
     <Container className="max-w-6xl space-y-6">
       <PageHeader
         title="Compras con IA"
         subtitle="Procesá facturas y revisá los datos detectados antes de confirmar."
-        actions={<Link href="/compras" className="text-slate-400 hover:text-white text-sm">
+        actions={<Link href="/compras" className="text-fg-muted hover:text-fg text-sm">
           ← Compras
         </Link>}
       />
 
-      <p className="text-slate-400 text-sm mb-6 max-w-3xl">
+      <p className="text-fg-muted text-sm mb-6 max-w-3xl">
         Subí una factura de compra (PDF o imagen). La API la envía a tu flujo en N8N; cuando N8N devuelve los
         datos al webhook de callback, se completan los campos igual que en una carga manual. Revisá y
         confirmá antes de guardar.
@@ -341,17 +341,17 @@ export default function ComprasIaPage() {
             setSendOnlyOk(null);
           }}
           disabled={uploading || !!jobId}
-          className="mt-1 rounded border-slate-600"
+          className="mt-1 rounded border-hair00"
         />
-        <span className="text-sm text-slate-300">
-          <strong className="text-violet-300">Solo enviar a N8N (probar conexión)</strong> — envía la misma
-          información (incluido <code className="text-slate-400">fileBase64</code>) al webhook. No pide el
+        <span className="text-sm text-fg-muted">
+          <strong className="text-fg">Solo enviar a N8N (probar conexión)</strong> — envía la misma
+          información (incluido <code className="text-fg-muted">fileBase64</code>) al webhook. No pide el
           secreto del callback ni espera respuesta: sirve para comprobar que N8N recibe la factura contra tu API en producción.
         </span>
       </label>
 
-      <div className="rounded-lg border border-violet-700/40 bg-violet-950/20 p-6 mb-8">
-        <h2 className="text-lg font-medium text-violet-200 mb-3">1. Factura</h2>
+      <div className="rounded-lg border border-hair bg-raised p-6 mb-8">
+        <h2 className="text-lg font-medium text-fg mb-3">1. Factura</h2>
         <label
           htmlFor="compras-ia-file"
           onDragOver={(e) => {
@@ -373,8 +373,8 @@ export default function ComprasIaPage() {
           }}
           className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-10 cursor-pointer transition-colors ${
             dragOver
-              ? 'border-violet-400 bg-violet-900/30'
-              : 'border-slate-600 hover:border-violet-500/60'
+              ? 'border-hair bg-raised'
+              : 'border-hair00 hover:border-hair'
           } ${uploading || (jobId && !sendOnlyMode) ? 'opacity-80 cursor-not-allowed' : ''}`}
         >
           <input
@@ -389,7 +389,7 @@ export default function ComprasIaPage() {
               e.target.value = '';
             }}
           />
-          <span className="text-slate-200 text-center font-medium">
+          <span className="text-fg text-center font-medium">
             {pickedFile && uploading
               ? `Enviando: ${pickedFile.name}`
               : uploading
@@ -398,21 +398,21 @@ export default function ComprasIaPage() {
                   ? 'Esperando respuesta de N8N…'
                   : 'Elegí un archivo o soltalo acá'}
           </span>
-          <span className="text-slate-400 text-sm text-center mt-2 max-w-md">
+          <span className="text-fg-muted text-sm text-center mt-2 max-w-md">
             {pickedFile && uploading
               ? `${formatSize(pickedFile.size)}`
               : jobId && uploadConfirmed && !sendOnlyMode
                 ? `Factura: ${uploadConfirmed.name} · trabajo ${uploadConfirmed.jobId.slice(0, 8)}…`
                 : 'PDF, JPG, PNG, WebP (máx. 15 MB)'}
           </span>
-          <span className="text-xs text-slate-500 mt-2">Tocá para abrir el selector de archivos</span>
+          <span className="text-xs text-fg-faint mt-2">Tocá para abrir el selector de archivos</span>
         </label>
 
         {sendOnlyOk && (
-          <div className="mt-4 rounded-lg border border-emerald-700/50 bg-emerald-950/30 p-4 text-sm text-emerald-200">
-            <p className="font-medium text-emerald-300">Prueba de envío OK (HTTP {sendOnlyOk.n8nHttpStatus})</p>
-            <p className="mt-1 text-emerald-100/90">{sendOnlyOk.message}</p>
-            <p className="mt-2 text-xs text-emerald-400/80">
+          <div className="mt-4 rounded-lg border border-ok/30 bg-[var(--ok-soft)] p-4 text-sm text-ok">
+            <p className="font-medium text-ok">Prueba de envío OK (HTTP {sendOnlyOk.n8nHttpStatus})</p>
+            <p className="mt-1 text-ok">{sendOnlyOk.message}</p>
+            <p className="mt-2 text-xs text-ok">
               Revisá la ejecución en N8N. Cuando tengas callback público, desactivá esta opción para completar la
               compra automáticamente.
             </p>
@@ -420,43 +420,43 @@ export default function ComprasIaPage() {
         )}
 
         {(pickedFile || uploadConfirmed || uploadError || pollError) && (
-          <div className="mt-4 space-y-2 rounded-lg border border-slate-600 bg-slate-900/50 p-4 text-sm" aria-live="polite">
-            <p className="text-slate-500 text-xs uppercase tracking-wide">Estado del archivo</p>
+          <div className="mt-4 space-y-2 rounded-lg border border-hair00 bg-surface p-4 text-sm" aria-live="polite">
+            <p className="text-fg-faint text-xs uppercase tracking-wide">Estado del archivo</p>
             {pickedFile && uploading && (
-              <p className="text-amber-300 text-sm">
-                Subiendo <strong className="text-white">{pickedFile.name}</strong> ({formatSize(pickedFile.size)})…
+              <p className="text-warn text-sm">
+                Subiendo <strong className="text-fg">{pickedFile.name}</strong> ({formatSize(pickedFile.size)})…
               </p>
             )}
             {!uploading && uploadConfirmed && jobId && !sendOnlyMode && (
-              <p className="text-emerald-400 text-sm">
-                <strong className="text-emerald-300">✓ Archivo recibido por el servidor.</strong> {uploadConfirmed.name} — esperando
+              <p className="text-ok text-sm">
+                <strong className="text-ok">✓ Archivo recibido por el servidor.</strong> {uploadConfirmed.name} — esperando
                 que N8N devuelva los datos (trabajo{' '}
-                <code className="text-slate-300 bg-slate-800 px-1 rounded">{uploadConfirmed.jobId}</code>).
+                <code className="text-fg-muted bg-raised px-1 rounded">{uploadConfirmed.jobId}</code>).
               </p>
             )}
             {!uploading && uploadError && (
-              <p className="text-red-400 text-sm" role="alert">
+              <p className="text-crit text-sm" role="alert">
                 No se pudo enviar el archivo: {uploadError}
               </p>
             )}
             {!uploading && !jobId && pollError && (
-              <p className="text-red-400 text-sm" role="alert">
+              <p className="text-crit text-sm" role="alert">
                 {pollError}
               </p>
             )}
           </div>
         )}
         {aiFilled && (
-          <p className="mt-4 text-emerald-400 text-sm">
+          <p className="mt-4 text-ok text-sm">
             Datos recibidos desde N8N. Revisá la compra abajo y confirmá.
           </p>
         )}
       </div>
 
-      <form data-tour="compras-ia-form" onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-        <h2 className="text-lg font-medium text-slate-200">2. Revisar y confirmar compra</h2>
+      <form data-tour="compras-ia-form" onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+        <h2 className="text-lg font-medium text-fg">2. Revisar y confirmar compra</h2>
         <div>
-          <label className="block text-sm text-slate-400 mb-1">Proveedor *</label>
+          <label className="block text-sm text-fg-muted mb-1">Proveedor *</label>
           <SupplierSelector
             value={form.supplierId}
             onChange={(id) => setForm((f) => ({ ...f, supplierId: id }))}
@@ -468,12 +468,12 @@ export default function ComprasIaPage() {
 
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="text-sm text-slate-400">Ítems de la compra</label>
+            <label className="text-sm text-fg-muted">Ítems de la compra</label>
             <button type="button" onClick={addItem} className="text-brand text-sm hover:underline">
               + Agregar ítem
             </button>
           </div>
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="text-xs text-fg-faint mb-3">
             Misma lógica que en Compras manual: buscá producto o cargá nombre/código para crear uno nuevo.
           </p>
 
@@ -481,15 +481,15 @@ export default function ComprasIaPage() {
             {form.items.map((item, i) => (
               <div
                 key={i}
-                className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4"
+                className="space-y-3 rounded-xl border border-hair-soft bg-app p-4"
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 text-sm">Ítem {i + 1}</span>
+                  <span className="text-fg-muted text-sm">Ítem {i + 1}</span>
                   {form.items.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeItem(i)}
-                      className="text-red-400 text-sm hover:underline"
+                      className="text-crit text-sm hover:underline"
                     >
                       Quitar
                     </button>
@@ -497,7 +497,7 @@ export default function ComprasIaPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="lg:col-span-2">
-                    <label className="block text-xs text-slate-500 mb-0.5">Producto (buscar o escribir nombre) *</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Producto (buscar o escribir nombre) *</label>
                     <input
                       type="text"
                       value={item.productId ? item.productName : searchTerm[i] ?? item.productName}
@@ -514,10 +514,10 @@ export default function ComprasIaPage() {
                       }}
                       onKeyDown={(e) => handleProductInputKeyDown(i, e)}
                       placeholder="Nombre o buscar..."
-                      className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
                     />
                     {!item.productId && (searchResults[i]?.length ?? 0) > 0 && (
-                      <ul className="mt-1 border border-slate-600 rounded bg-slate-800 max-h-32 overflow-auto" role="listbox">
+                      <ul className="mt-1 border border-hair00 rounded bg-raised max-h-32 overflow-auto" role="listbox">
                         {searchResults[i].map((p, idx) => {
                           const highlighted = Math.min(highlightedResultIndex[i] ?? 0, searchResults[i].length - 1);
                           return (
@@ -525,11 +525,11 @@ export default function ComprasIaPage() {
                               key={p.id}
                               role="option"
                               aria-selected={idx === highlighted}
-                              className={`px-2 py-1.5 text-sm text-slate-200 cursor-pointer flex justify-between ${idx === highlighted ? 'bg-brand-highlight' : 'hover:bg-slate-700'}`}
+                              className={`px-2 py-1.5 text-sm text-fg cursor-pointer flex justify-between ${idx === highlighted ? 'bg-brand-highlight' : 'hover:bg-raised2'}`}
                               onClick={() => selectProduct(i, p)}
                             >
                               <span>{p.name}</span>
-                              {p.barcode && <span className="text-slate-500 text-xs">{p.barcode}</span>}
+                              {p.barcode && <span className="text-fg-faint text-xs">{p.barcode}</span>}
                             </li>
                           );
                         })}
@@ -537,17 +537,17 @@ export default function ComprasIaPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-0.5">Código de barras</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Código de barras</label>
                     <input
                       type="text"
                       value={item.barcode}
                       onChange={(e) => setItem(i, { barcode: e.target.value })}
                       placeholder="Opcional"
-                      className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-0.5">Categoría (producto nuevo)</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Categoría (producto nuevo)</label>
                     <CategorySelector
                       value={item.categoryId}
                       onChange={(id) => setItem(i, { categoryId: id })}
@@ -560,28 +560,28 @@ export default function ComprasIaPage() {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-0.5">Cantidad *</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Cantidad *</label>
                     <input
                       type="number"
                       min="1"
                       value={item.qty}
                       onChange={(e) => setItem(i, { qty: e.target.value })}
-                      className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-0.5">Costo unitario *</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Costo unitario *</label>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
                       value={item.unitCost}
                       onChange={(e) => setItem(i, { unitCost: e.target.value })}
-                      className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-0.5">Precio venta</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Precio venta</label>
                     <input
                       type="number"
                       step="0.01"
@@ -589,16 +589,16 @@ export default function ComprasIaPage() {
                       value={item.price}
                       onChange={(e) => setItem(i, { price: e.target.value })}
                       placeholder="Opcional"
-                      className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-0.5">Vencimiento (lote)</label>
+                    <label className="block text-xs text-fg-faint mb-0.5">Vencimiento (lote)</label>
                     <input
                       type="date"
                       value={item.expiresAt}
                       onChange={(e) => setItem(i, { expiresAt: e.target.value })}
-                      className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-slate-100"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
                     />
                   </div>
                 </div>

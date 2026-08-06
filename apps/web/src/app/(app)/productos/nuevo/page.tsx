@@ -62,31 +62,31 @@ export default function NuevoProductoPage() {
 
   return (
     <Container className="max-w-3xl space-y-6">
-      <PageHeader title="Nuevo producto" actions={<Link href="/productos" className="text-slate-400 hover:text-white">← Productos</Link>} />
+      <PageHeader title="Nuevo producto" actions={<Link href="/productos" className="text-fg-muted hover:text-fg">← Productos</Link>} />
 
-      <form data-tour="nuevo-producto-form" onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+      <form data-tour="nuevo-producto-form" onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
         <div data-tour="nuevo-producto-nombre">
-          <label className="block text-sm text-slate-400 mb-1">Nombre *</label>
+          <label className="block text-sm text-fg-muted mb-1">Nombre *</label>
           <input
             type="text"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             required
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div data-tour="nuevo-producto-barcode">
-            <label className="block text-sm text-slate-400 mb-1">Código de barras</label>
+            <label className="block text-sm text-fg-muted mb-1">Código de barras</label>
             <input
               type="text"
               value={form.barcode}
               onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
           <div data-tour="nuevo-producto-categoria">
-            <label className="block text-sm text-slate-400 mb-1">Categoría</label>
+            <label className="block text-sm text-fg-muted mb-1">Categoría</label>
             <CategorySelector
               value={form.categoryId}
               onChange={(id) => setForm((f) => ({ ...f, categoryId: id }))}
@@ -98,67 +98,67 @@ export default function NuevoProductoPage() {
         </div>
         <div data-tour="nuevo-producto-costo-precio" className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Costo</label>
+            <label className="block text-sm text-fg-muted mb-1">Costo</label>
             <input
               type="number"
               step="0.01"
               value={form.cost}
               onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Precio venta *</label>
+            <label className="block text-sm text-fg-muted mb-1">Precio venta *</label>
             <input
               type="number"
               step="0.01"
               value={form.price}
               onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               required
             />
           </div>
         </div>
         <div data-tour="nuevo-producto-stock" className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Stock inicial</label>
+            <label className="block text-sm text-fg-muted mb-1">Stock inicial</label>
             <input
               type="number"
               value={form.stock}
               onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Stock mínimo</label>
+            <label className="block text-sm text-fg-muted mb-1">Stock mínimo</label>
             <input
               type="number"
               value={form.minStock}
               onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
         </div>
         <div data-tour="nuevo-producto-vencimiento">
-          <label className="block text-sm text-slate-400 mb-1">Vencimiento (opcional)</label>
+          <label className="block text-sm text-fg-muted mb-1">Vencimiento (opcional)</label>
           <input
             type="date"
             value={form.expiresAt}
             onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
-          <p className="text-slate-500 text-xs mt-1">Para lácteos, snacks y productos con fecha de vencimiento</p>
+          <p className="text-fg-faint text-xs mt-1">Para lácteos, snacks y productos con fecha de vencimiento</p>
         </div>
         <div>
-          <label className="block text-sm text-slate-400 mb-1">Marca</label>
+          <label className="block text-sm text-fg-muted mb-1">Marca</label>
           <input
             type="text"
             value={form.brand}
             onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           />
         </div>
-        <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
+        <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
           <input
             type="checkbox"
             checked={form.stockControl}
@@ -170,7 +170,7 @@ export default function NuevoProductoPage() {
           <button type="submit" disabled={loading} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {loading ? 'Guardando...' : 'Guardar'}
           </button>
-          <Link href="/productos" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300">
+          <Link href="/productos" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted">
             Cancelar
           </Link>
         </div>

@@ -56,13 +56,13 @@ export default function UsuariosPage() {
       />
 
       {showForm && (
-        <form data-tour="usuarios-form" onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+        <form data-tour="usuarios-form" onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
           <input
             type="email"
             placeholder="Email *"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             required
           />
           <input
@@ -70,7 +70,7 @@ export default function UsuariosPage() {
             placeholder="Nombre *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             required
           />
           <input
@@ -78,13 +78,13 @@ export default function UsuariosPage() {
             placeholder="Contraseña *"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             required
           />
           <select
             value={form.role}
             onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           >
             <option value="CAJERO">Cajero</option>
             <option value="ADMIN">Admin</option>
@@ -96,11 +96,11 @@ export default function UsuariosPage() {
       )}
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
-        <div data-tour="usuarios-list" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="usuarios-list" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
                 <th className="text-left p-3">Email</th>
@@ -109,14 +109,14 @@ export default function UsuariosPage() {
                 <th className="p-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft00">
               {users.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-800/50">
-                  <td className="p-3 text-slate-200">{u.name}</td>
-                  <td className="p-3 text-slate-400">{u.email}</td>
-                  <td className="p-3 text-slate-400">{u.role}</td>
+                <tr key={u.id} className="hover:bg-raised">
+                  <td className="p-3 text-fg">{u.name}</td>
+                  <td className="p-3 text-fg-muted">{u.email}</td>
+                  <td className="p-3 text-fg-muted">{u.role}</td>
                   <td className="p-3">
-                    <span className={u.isActive ? 'text-green-400' : 'text-red-400'}>{u.isActive ? 'Activo' : 'Inactivo'}</span>
+                    <span className={u.isActive ? 'text-ok' : 'text-crit'}>{u.isActive ? 'Activo' : 'Inactivo'}</span>
                   </td>
                   <td className="p-3">
                     {u.role !== 'OWNER' && (

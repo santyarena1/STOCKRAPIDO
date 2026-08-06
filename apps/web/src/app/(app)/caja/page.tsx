@@ -176,60 +176,60 @@ export default function CajaPage() {
 
   const preview = open?.preview;
 
-  if (loading) return <div className="p-6 text-slate-400">Cargando...</div>;
+  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
 
   return (
     <Container className="max-w-4xl space-y-6">
       <PageHeader title="Caja" subtitle="Administrá la apertura, movimientos y cierre de caja." />
 
       {!open ? (
-        <form data-tour="caja-open" onSubmit={handleOpen} className="max-w-md rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-          <h2 className="text-lg font-medium text-slate-200 mb-4">Abrir caja</h2>
+        <form data-tour="caja-open" onSubmit={handleOpen} className="max-w-md rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+          <h2 className="text-lg font-medium text-fg mb-4">Abrir caja</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Efectivo inicial (en caja)</label>
+              <label className="block text-sm text-fg-muted mb-1">Efectivo inicial (en caja)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={openingCash}
                 onChange={(e) => setOpeningCash(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Posición banco / electrónica inicial (opcional)</label>
+              <label className="block text-sm text-fg-muted mb-1">Posición banco / electrónica inicial (opcional)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={openingBank}
                 onChange={(e) => setOpeningBank(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               />
-              <p className="text-xs text-slate-500 mt-1">Ventas con tarjeta, transferencia o MP suman acá; el efectivo del POS suma al de caja.</p>
+              <p className="text-xs text-fg-faint mt-1">Ventas con tarjeta, transferencia o MP suman acá; el efectivo del POS suma al de caja.</p>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Notas (opcional)</label>
+              <label className="block text-sm text-fg-muted mb-1">Notas (opcional)</label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               />
             </div>
-            <button type="submit" className="w-full py-2.5 rounded-lg bg-green-600 text-white font-medium">
+            <button type="submit" className="w-full py-2.5 rounded-lg bg-[var(--ok-soft)] text-fg font-medium">
               Abrir caja
             </button>
           </div>
         </form>
       ) : (
         <div className="space-y-6">
-          <div className="flex flex-wrap justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+          <div className="flex flex-wrap justify-between gap-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
             <div>
-              <p className="text-slate-400 text-sm">Caja abierta desde {new Date(open.openedAt).toLocaleString()}</p>
-              <p className="text-xl font-bold text-white">
+              <p className="text-fg-muted text-sm">Caja abierta desde {new Date(open.openedAt).toLocaleString()}</p>
+              <p className="text-xl font-bold text-fg">
                 Efectivo inicial: ${Number(open.openingCash).toFixed(0)}
                 {' · '}
                 Banco inicial: ${Number(open.openingBank ?? 0).toFixed(0)}
@@ -238,21 +238,21 @@ export default function CajaPage() {
           </div>
 
           {preview && (
-            <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 text-sm">
-              <h3 className="font-medium text-slate-200 mb-2">Resumen del turno (esperado)</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
+            <div className="rounded-lg border border-hair00 bg-surface p-4 text-sm">
+              <h3 className="font-medium text-fg mb-2">Resumen del turno (esperado)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-fg-muted">
                 <div>
-                  <p className="text-slate-500 text-xs">Efectivo esperado</p>
-                  <p className="text-lg font-semibold text-emerald-300">${preview.expectedEfectivo.toFixed(0)}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-fg-faint text-xs">Efectivo esperado</p>
+                  <p className="text-lg font-semibold text-ok">${preview.expectedEfectivo.toFixed(0)}</p>
+                  <p className="text-xs text-fg-faint mt-1">
                     Ventas efectivo ${preview.salesEfectivo.toFixed(0)} · mov. {preview.movEfectivoIncome - preview.movEfectivoExpense >= 0 ? '+' : ''}
                     {(preview.movEfectivoIncome - preview.movEfectivoExpense).toFixed(0)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-500 text-xs">Banco / electrónico esperado</p>
+                  <p className="text-fg-faint text-xs">Banco / electrónico esperado</p>
                   <p className="text-lg font-semibold text-brand">${preview.expectedBanco.toFixed(0)}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-fg-faint mt-1">
                     Ventas (tarjeta/transf./MP) ${preview.salesBanco.toFixed(0)} · mov.{' '}
                     {(preview.movBancoIncome - preview.movBancoExpense).toFixed(0)}
                   </p>
@@ -261,13 +261,13 @@ export default function CajaPage() {
             </div>
           )}
 
-          <form data-tour="caja-movements" onSubmit={handleMovement} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-            <h3 className="font-medium text-slate-200 mb-3">Ingreso / Egreso</h3>
+          <form data-tour="caja-movements" onSubmit={handleMovement} className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+            <h3 className="font-medium text-fg mb-3">Ingreso / Egreso</h3>
             <div className="flex flex-wrap gap-2 items-end">
               <select
                 value={movType}
                 onChange={(e) => setMovType(e.target.value as 'income' | 'expense')}
-                className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               >
                 <option value="income">Ingreso</option>
                 <option value="expense">Egreso</option>
@@ -275,7 +275,7 @@ export default function CajaPage() {
               <select
                 value={movChannel}
                 onChange={(e) => setMovChannel(e.target.value as 'efectivo' | 'banco')}
-                className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                 title="Dónde impacta el movimiento"
               >
                 <option value="efectivo">Caja (efectivo)</option>
@@ -287,14 +287,14 @@ export default function CajaPage() {
                 placeholder="Monto"
                 value={movAmount}
                 onChange={(e) => setMovAmount(e.target.value)}
-                className="w-28 px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-28 px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               />
               <input
                 type="text"
                 placeholder="Nota"
                 value={movNote}
                 onChange={(e) => setMovNote(e.target.value)}
-                className="flex-1 min-w-[120px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="flex-1 min-w-[120px] px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               />
               <button type="submit" className="px-4 py-2 rounded-lg btn-brand">
                 Agregar
@@ -303,35 +303,35 @@ export default function CajaPage() {
           </form>
 
           {open.movements && open.movements.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-slate-800">
-              <h3 className="px-4 py-2 bg-slate-800 text-slate-200 font-medium">Movimientos</h3>
-              <ul className="divide-y divide-slate-700">
+            <div className="overflow-hidden rounded-xl border border-hair-soft">
+              <h3 className="px-4 py-2 bg-raised text-fg font-medium">Movimientos</h3>
+              <ul className="divide-y divide-hair-soft00">
                 {open.movements.map((m) => (
                   <li key={m.id} className="px-4 py-2 flex flex-wrap justify-between gap-2 text-sm">
-                    <span className={m.type === 'income' ? 'text-green-400' : 'text-red-400'}>
+                    <span className={m.type === 'income' ? 'text-ok' : 'text-crit'}>
                       {m.type === 'income' ? '+' : '-'}${Math.abs(Number(m.amount)).toFixed(0)}
                     </span>
-                    <span className="text-slate-400">
+                    <span className="text-fg-muted">
                       {m.category === 'banco' ? 'Banco' : 'Efectivo'}
                     </span>
-                    <span className="text-slate-500">{m.note || new Date(m.createdAt).toLocaleString()}</span>
+                    <span className="text-fg-faint">{m.note || new Date(m.createdAt).toLocaleString()}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          <form data-tour="caja-close" onSubmit={handleClose} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-            <h3 className="font-medium text-slate-200 mb-2">Cerrar caja</h3>
-            <p className="text-slate-400 text-sm mb-4">
+          <form data-tour="caja-close" onSubmit={handleClose} className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+            <h3 className="font-medium text-fg mb-2">Cerrar caja</h3>
+            <p className="text-fg-muted text-sm mb-4">
               Contá por separado el efectivo físico y lo que corresponde a banco/tarjetas (según tu criterio de cierre).
             </p>
             <div className="space-y-4 mb-4">
               <div>
-                <label className="block text-sm text-slate-400 mb-1">
+                <label className="block text-sm text-fg-muted mb-1">
                   Efectivo contado
                   {preview != null && (
-                    <span className="text-slate-500"> · Esperado ${preview.expectedEfectivo.toFixed(0)}</span>
+                    <span className="text-fg-faint"> · Esperado ${preview.expectedEfectivo.toFixed(0)}</span>
                   )}
                 </label>
                 <input
@@ -339,16 +339,16 @@ export default function CajaPage() {
                   step="0.01"
                   value={closeActualEfectivo}
                   onChange={(e) => setCloseActualEfectivo(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                   placeholder="0"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">
+                <label className="block text-sm text-fg-muted mb-1">
                   Banco / electrónicos contados
                   {preview != null && (
-                    <span className="text-slate-500"> · Esperado ${preview.expectedBanco.toFixed(0)}</span>
+                    <span className="text-fg-faint"> · Esperado ${preview.expectedBanco.toFixed(0)}</span>
                   )}
                 </label>
                 <input
@@ -356,7 +356,7 @@ export default function CajaPage() {
                   step="0.01"
                   value={closeActualBanco}
                   onChange={(e) => setCloseActualBanco(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                   placeholder="0"
                   required
                 />
@@ -365,7 +365,7 @@ export default function CajaPage() {
             <button
               type="submit"
               disabled={closing}
-              className="w-full py-2.5 rounded-lg bg-amber-600 text-white font-medium disabled:opacity-50"
+              className="w-full py-2.5 rounded-lg bg-[var(--warn-soft)] text-fg font-medium disabled:opacity-50"
             >
               {closing ? 'Cerrando...' : 'Cerrar caja'}
             </button>
@@ -373,28 +373,28 @@ export default function CajaPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-        <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-lg font-medium text-slate-200">Historial de aperturas y cierres</h2>
+      <div className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div className="px-4 py-3 border-b border-hair00 flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-lg font-medium text-fg">Historial de aperturas y cierres</h2>
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={historyFrom}
               onChange={(e) => setHistoryFrom(e.target.value)}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
             />
-            <span className="text-slate-500">a</span>
+            <span className="text-fg-faint">a</span>
             <input
               type="date"
               value={historyTo}
               onChange={(e) => setHistoryTo(e.target.value)}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
             />
             <button
               type="button"
               onClick={fetchHistory}
               disabled={historyLoading}
-              className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg bg-raised2 text-fg-muted text-sm hover:bg-raised2 disabled:opacity-50"
             >
               {historyLoading ? 'Cargando...' : 'Actualizar'}
             </button>
@@ -403,53 +403,53 @@ export default function CajaPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500 bg-slate-800/80 border-b border-slate-700">
+              <tr className="text-left text-fg-faint bg-raised border-b border-hair00">
                 <th className="px-4 py-3">Apertura</th>
                 <th className="px-4 py-3">Cierre</th>
-                <th className="px-4 py-3 text-right">Inicial E/B</th>
-                <th className="px-4 py-3 text-right">Cierre E/B</th>
+                <th className="px-4 py-3 text-right font-mono tabular-nums">Inicial E/B</th>
+                <th className="px-4 py-3 text-right font-mono tabular-nums">Cierre E/B</th>
                 <th className="px-4 py-3 text-center">Estado</th>
-                <th className="px-4 py-3 text-right">Mov.</th>
+                <th className="px-4 py-3 text-right font-mono tabular-nums">Mov.</th>
               </tr>
             </thead>
             <tbody>
               {historyLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-slate-500 text-center">
+                  <td colSpan={6} className="px-4 py-6 text-fg-faint text-center">
                     Cargando historial...
                   </td>
                 </tr>
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-slate-500 text-center">
+                  <td colSpan={6} className="px-4 py-6 text-fg-faint text-center">
                     No hay registros en el período seleccionado
                   </td>
                 </tr>
               ) : (
                 history.map((reg) => (
-                  <tr key={reg.id} className="border-b border-slate-700/50 hover:bg-slate-800/30">
-                    <td className="px-4 py-2 text-slate-300">
+                  <tr key={reg.id} className="border-b border-hair00/50 hover:bg-raised">
+                    <td className="px-4 py-2 text-fg-muted">
                       {new Date(reg.openedAt).toLocaleString('es-AR')}
                     </td>
-                    <td className="px-4 py-2 text-slate-400">
+                    <td className="px-4 py-2 text-fg-muted">
                       {reg.closedAt ? new Date(reg.closedAt).toLocaleString('es-AR') : '—'}
                     </td>
-                    <td className="px-4 py-2 text-right text-slate-200 text-xs">
+                    <td className="px-4 py-2 text-right text-fg text-xs font-mono tabular-nums">
                       E ${Number(reg.openingCash).toFixed(0)} / B ${Number(reg.openingBank ?? 0).toFixed(0)}
                     </td>
-                    <td className="px-4 py-2 text-right text-slate-200 text-xs">
+                    <td className="px-4 py-2 text-right text-fg text-xs font-mono tabular-nums">
                       {reg.closedAt
                         ? `E $${Number(reg.closingCash ?? 0).toFixed(0)} / B $${Number(reg.closingBank ?? 0).toFixed(0)}`
                         : '—'}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {reg.closedAt ? (
-                        <span className="text-slate-400">Cerrada</span>
+                        <span className="text-fg-muted">Cerrada</span>
                       ) : (
-                        <span className="text-green-400 font-medium">Abierta</span>
+                        <span className="text-ok font-medium">Abierta</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-right text-slate-400">
+                    <td className="px-4 py-2 text-right text-fg-muted font-mono tabular-nums">
                       {reg.movements?.length ?? 0}
                     </td>
                   </tr>

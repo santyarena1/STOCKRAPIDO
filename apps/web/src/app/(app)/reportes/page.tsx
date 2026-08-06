@@ -57,7 +57,7 @@ export default function ReportesPage() {
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value as 'today' | 'week' | 'month')}
-            className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+            className="px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
           >
             <option value="today">Hoy</option>
             <option value="week">Semana</option>
@@ -70,38 +70,38 @@ export default function ReportesPage() {
       />
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
         <div className="space-y-6">
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <h3 className="text-slate-400 text-sm">Ventas totales</h3>
-              <p className="text-2xl font-bold text-white">${sales?.total?.toFixed(0) ?? 0}</p>
-              <p className="text-slate-500 text-sm">{sales?.count ?? 0} ventas</p>
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+              <h3 className="text-fg-muted text-sm">Ventas totales</h3>
+              <p className="text-2xl font-bold text-fg">${sales?.total?.toFixed(0) ?? 0}</p>
+              <p className="text-fg-faint text-sm">{sales?.count ?? 0} ventas</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <h3 className="text-slate-400 text-sm">Margen estimado</h3>
-              <p className="text-2xl font-bold text-white">${margin?.margin?.toFixed(0) ?? 0}</p>
-              <p className="text-slate-500 text-sm">Ingresos: ${margin?.revenue?.toFixed(0) ?? 0} - Costo: ${margin?.cost?.toFixed(0) ?? 0}</p>
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+              <h3 className="text-fg-muted text-sm">Margen estimado</h3>
+              <p className="text-2xl font-bold text-fg">${margin?.margin?.toFixed(0) ?? 0}</p>
+              <p className="text-fg-faint text-sm">Ingresos: ${margin?.revenue?.toFixed(0) ?? 0} - Costo: ${margin?.cost?.toFixed(0) ?? 0}</p>
             </div>
-            <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-4">
-              <h3 className="text-amber-400 text-sm">Stock bajo</h3>
-              <p className="text-2xl font-bold text-white">{Array.isArray(lowStock) ? lowStock.length : 0}</p>
-              <p className="text-slate-500 text-sm">productos</p>
+            <div className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] p-4">
+              <h3 className="text-warn text-sm">Stock bajo</h3>
+              <p className="text-2xl font-bold text-fg">{Array.isArray(lowStock) ? lowStock.length : 0}</p>
+              <p className="text-fg-faint text-sm">productos</p>
             </div>
             <div className="rounded-lg border border-orange-700/50 bg-orange-900/20 p-4">
               <h3 className="text-orange-400 text-sm">Por vencer</h3>
-              <p className="text-2xl font-bold text-white">{Array.isArray(expiring) ? expiring.length : 0}</p>
-              <p className="text-slate-500 text-sm">próximos 30 días</p>
+              <p className="text-2xl font-bold text-fg">{Array.isArray(expiring) ? expiring.length : 0}</p>
+              <p className="text-fg-faint text-sm">próximos 30 días</p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-            <h3 className="font-medium text-slate-200 mb-4">Top productos</h3>
+          <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+            <h3 className="font-medium text-fg mb-4">Top productos</h3>
             <ul className="space-y-2">
               {(Array.isArray(topProducts) ? topProducts : []).slice(0, 10).map((p, i) => (
                 <li key={i} className="flex justify-between text-sm">
-                  <span className="text-slate-300">{p?.name ?? '-'}</span>
+                  <span className="text-fg-muted">{p?.name ?? '-'}</span>
                   <span className="text-brand">{p?.qty ?? 0} und · ${Number(p?.total ?? 0).toFixed(0)}</span>
                 </li>
               ))}
@@ -109,13 +109,13 @@ export default function ReportesPage() {
           </div>
 
           {(Array.isArray(lowStock) ? lowStock : []).length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <h3 className="font-medium text-amber-400 mb-4">Productos con stock bajo</h3>
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+              <h3 className="font-medium text-warn mb-4">Productos con stock bajo</h3>
               <ul className="space-y-2 text-sm">
                 {(Array.isArray(lowStock) ? lowStock : []).map((p, i) => (
                   <li key={i} className="flex justify-between">
-                    <span className="text-slate-300">{p?.name ?? '-'}</span>
-                    <span className="text-amber-400">Stock: {p?.stock ?? 0} (mín: {p?.minStock ?? 0})</span>
+                    <span className="text-fg-muted">{p?.name ?? '-'}</span>
+                    <span className="text-warn">Stock: {p?.stock ?? 0} (mín: {p?.minStock ?? 0})</span>
                   </li>
                 ))}
               </ul>
@@ -123,12 +123,12 @@ export default function ReportesPage() {
           )}
 
           {(Array.isArray(expiring) ? expiring : []).length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <h3 className="font-medium text-orange-400 mb-4">Productos por vencer (próximos 30 días)</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-slate-500 border-b border-slate-700">
+                    <tr className="text-left text-fg-faint border-b border-hair00">
                       <th className="py-2 pr-4">Producto</th>
                       <th className="py-2 pr-4">Cant.</th>
                       <th className="py-2">Vence</th>
@@ -139,10 +139,10 @@ export default function ReportesPage() {
                       const d = p?.expiresAt ? new Date(p.expiresAt) : new Date();
                       const dias = Math.ceil((d.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
                       return (
-                        <tr key={i} className="border-b border-slate-700/50">
-                          <td className="py-2 pr-4 text-slate-300">{p?.name ?? '-'}</td>
-                          <td className="py-2 pr-4 text-slate-400">{p?.qtyExpiring ?? 0} un.</td>
-                          <td className={`py-2 ${dias < 0 ? 'text-red-400' : dias <= 7 ? 'text-amber-400' : 'text-slate-400'}`}>
+                        <tr key={i} className="border-b border-hair00/50">
+                          <td className="py-2 pr-4 text-fg-muted">{p?.name ?? '-'}</td>
+                          <td className="py-2 pr-4 text-fg-muted">{p?.qtyExpiring ?? 0} un.</td>
+                          <td className={`py-2 ${dias < 0 ? 'text-crit' : dias <= 7 ? 'text-warn' : 'text-fg-muted'}`}>
                             {d.toLocaleDateString('es-AR')}
                             {dias >= 0 && <span className="ml-1 text-xs">({dias} días)</span>}
                             {dias < 0 && <span className="ml-1 text-xs">(vencido)</span>}

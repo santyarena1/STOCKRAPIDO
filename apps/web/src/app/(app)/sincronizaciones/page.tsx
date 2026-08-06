@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { formatMoneyArs } from '@/lib/units';
 import { Container } from '@/components/ui/Container';
@@ -45,12 +46,6 @@ type Synced = {
   linkedProductId?: string | null;
 };
 
-type MappingInfo = {
-  mapping: Record<string, string>;
-  productFields: string[];
-  syncedFields: string[];
-};
-
 const PROVIDERS: Record<
   string,
   { label: string; description: string; accent: string; runnerNote: string }
@@ -64,29 +59,6 @@ const PROVIDERS: Record<
   },
 };
 
-const FIELD_LABELS: Record<string, string> = {
-  name: 'Nombre',
-  barcode: 'Código de barras',
-  brand: 'Marca',
-  imageUrl: 'Imagen',
-  unitsPerBox: 'Unidades por bulto',
-  weight: 'Peso',
-  format: 'Formato',
-  flavor: 'Sabor',
-  presentation: 'Presentación',
-  subcategory: 'Subcategoría',
-  supplierSku: 'SKU proveedor',
-  externalId: 'ID externo',
-  category: 'Categoría',
-  cost: 'Costo',
-  ean: 'EAN',
-  listPrice: 'Precio lista',
-  available: 'Disponible',
-  stock: 'Stock',
-  sku: 'SKU',
-  link: 'Link',
-};
-
 export default function SincronizacionesPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -96,16 +68,13 @@ export default function SincronizacionesPage() {
   const [items, setItems] = useState<Synced[]>([]);
   const [q, setQ] = useState('');
   const [onlyWithCost, setOnlyWithCost] = useState(false);
-  const [markup, setMarkup] = useState('40');
-  const [mapInfo, setMapInfo] = useState<MappingInfo | null>(null);
-  const [showMap, setShowMap] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
 
   const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
   const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
     label: conn?.name ?? 'Proveedor',
     description: 'Sincronización de catálogo',
-    accent: 'border-slate-600 bg-slate-800/40',
+    accent: 'border-hair bg-raised',
     runnerNote: '',
   };
   const apiBase = useMemo(() => {
@@ -136,17 +105,6 @@ export default function SincronizacionesPage() {
     }
   }, []);
 
-  const loadConnDetails = useCallback(async () => {
-    if (!conn) return;
-    setMarkup(String(conn.priceMarkup ?? 40));
-    try {
-      const mi = await api<MappingInfo>(`/sync/connections/${conn.id}/mapping`);
-      setMapInfo(mi);
-    } catch (e) {
-      setMsg({ type: 'err', text: (e as Error).message });
-    }
-  }, [conn]);
-
   const loadItems = useCallback(async () => {
     if (!conn) return;
     try {
@@ -164,16 +122,12 @@ export default function SincronizacionesPage() {
   }, [loadConnections]);
 
   useEffect(() => {
-    loadConnDetails();
-  }, [loadConnDetails]);
-
-  useEffect(() => {
     loadItems();
   }, [loadItems]);
 
   const withCost = items.filter((i) => i.costUnit != null).length;
   const linked = items.filter((i) => i.linkedProductId).length;
-  const mk = Number(markup) || 0;
+  const mk = Number(conn?.priceMarkup) || 0;
 
   const run = async (kind: 'run' | 'import') => {
     if (!conn) return;
@@ -202,57 +156,6 @@ export default function SincronizacionesPage() {
     }
   };
 
-  const saveMarkup = async () => {
-    if (!conn) return;
-    setBusy('markup');
-    try {
-      await api(`/sync/connections/${conn.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ priceMarkup: Number(markup) }),
-      });
-      setMsg({ type: 'ok', text: `Markup guardado: ${markup}%` });
-      await loadConnections();
-      await loadItems();
-    } catch (e) {
-      setMsg({ type: 'err', text: (e as Error).message });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const toggleAutoSync = async () => {
-    if (!conn) return;
-    setBusy('autosync');
-    try {
-      await api(`/sync/connections/${conn.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ autoSync: !conn.autoSync }),
-      });
-      await loadConnections();
-      setMsg({ type: 'ok', text: conn.autoSync ? 'Auto-sync desactivado' : 'Auto-sync activado (catálogo diario en servidor)' });
-    } catch (e) {
-      setMsg({ type: 'err', text: (e as Error).message });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const saveMapping = async () => {
-    if (!conn || !mapInfo) return;
-    setBusy('mapping');
-    try {
-      await api(`/sync/connections/${conn.id}/mapping`, {
-        method: 'PATCH',
-        body: JSON.stringify({ mapping: mapInfo.mapping }),
-      });
-      setMsg({ type: 'ok', text: 'Mapeo guardado. La próxima importación usará estas columnas.' });
-    } catch (e) {
-      setMsg({ type: 'err', text: (e as Error).message });
-    } finally {
-      setBusy(null);
-    }
-  };
-
   if (loading) {
     return <div className="p-6 text-fg-muted">Cargando sincronizaciones…</div>;
   }
@@ -262,15 +165,7 @@ export default function SincronizacionesPage() {
       <PageHeader
         title="Sincronizaciones"
         subtitle="Catálogo de proveedores → productos con precios unitarios en POS y listado. Los valores por bulto quedan como referencia interna."
-        actions={<div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setShowMap((v) => !v)}
-            className="rounded-lg border border-hair px-4 py-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg"
-          >
-            {showMap ? 'Ocultar mapeo' : 'Mapear columnas'}
-          </button>
-        </div>}
+        actions={<Link href="/config/proveedores" className="rounded-lg border border-hair px-4 py-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg">Configurar credenciales, mapeo y frecuencia →</Link>}
       />
 
       {msg && (
@@ -322,16 +217,7 @@ export default function SincronizacionesPage() {
                   </p>
                 )}
               </div>
-              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={conn.autoSync}
-                  onChange={toggleAutoSync}
-                  disabled={busy === 'autosync'}
-                  className="rounded border-hair"
-                />
-                Auto-sync catálogo diario (servidor)
-              </label>
+              <span className={`shrink-0 rounded-md border px-2.5 py-1 text-xs ${conn.autoSync ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-hair bg-raised text-fg-faint'}`}>Auto-sync {conn.autoSync ? 'activo' : 'inactivo'}</span>
             </div>
           </div>
 
@@ -367,66 +253,7 @@ export default function SincronizacionesPage() {
             </p>
           </div>
 
-          {showMap && mapInfo && (
-            <div className="space-y-3 rounded-xl border border-hair-soft bg-surface p-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <h2 className="font-semibold text-fg">Mapeo de columnas → producto</h2>
-                <button
-                  type="button"
-                  onClick={saveMapping}
-                  disabled={!!busy}
-                  className="px-3 py-1.5 rounded-lg btn-brand text-sm"
-                >
-                  Guardar mapeo
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {mapInfo.productFields.map((pf) => (
-                  <div key={pf} className="flex items-center gap-2">
-                    <span className="w-36 shrink-0 truncate text-sm font-medium text-fg-muted" title={FIELD_LABELS[pf] || pf}>
-                      {FIELD_LABELS[pf] || pf}
-                    </span>
-                    <span className="text-fg-faint">←</span>
-                    <select
-                      value={mapInfo.mapping[pf] || ''}
-                      onChange={(e) =>
-                        setMapInfo({ ...mapInfo, mapping: { ...mapInfo.mapping, [pf]: e.target.value } })
-                      }
-                      className="flex-1 rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
-                    >
-                      <option value="">— (no completar)</option>
-                      {mapInfo.syncedFields.map((sf) => (
-                        <option key={sf} value={sf}>
-                          {FIELD_LABELS[sf] || sf}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label className="mb-1 block text-xs text-fg-faint">Markup de venta (%)</label>
-              <div className="flex gap-2">
-                <input
-                  value={markup}
-                  onChange={(e) => setMarkup(e.target.value)}
-                  className="w-24 rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm tabular-nums text-fg"
-                  type="number"
-                />
-                <button
-                  type="button"
-                  onClick={saveMarkup}
-                  disabled={!!busy}
-                  className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised hover:text-fg"
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
             <div className="flex-1 min-w-[200px]">
               <label className="mb-1 block text-xs text-fg-faint">Buscar</label>
               <input
@@ -460,6 +287,7 @@ export default function SincronizacionesPage() {
                     {showInternal && <th className="p-3 text-right text-fg-faint">Costo bulto</th>}
                     <th className="p-3 text-center">U/bulto</th>
                     <th className="p-3">EAN</th>
+                    <th className="p-3">Estado</th>
                     <th className="p-3 w-8" />
                   </tr>
                 </thead>
@@ -493,10 +321,19 @@ export default function SincronizacionesPage() {
                           {p.costBulk != null ? formatMoneyArs(p.costBulk) : '—'}
                         </td>
                       )}
-                      <td className="p-3 text-center text-violet-400/80 text-xs">
+                      <td className="p-3 text-center text-fg-muted text-xs">
                         {p.unitsPerBoxNum ?? p.unitsPerBox ?? '—'}
                       </td>
-                      <td className="p-3 text-slate-500 text-xs font-mono">{p.ean ?? '—'}</td>
+                      <td className="p-3 text-fg-faint text-xs font-mono">{p.ean ?? '—'}</td>
+                      <td className="p-3">
+                        {p.linkedProductId ? (
+                          <span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Importado</span>
+                        ) : p.costUnit == null ? (
+                          <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Falta precio</span>
+                        ) : (
+                          <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin importar</span>
+                        )}
+                      </td>
                       <td className="p-3">
                         {p.link ? (
                           <a href={p.link} target="_blank" rel="noreferrer" className="text-brand text-xs hover:underline">
@@ -508,7 +345,7 @@ export default function SincronizacionesPage() {
                   ))}
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={showInternal ? 10 : 9} className="p-8 text-center text-slate-500">
+                      <td colSpan={showInternal ? 11 : 10} className="p-8 text-center text-fg-faint">
                         Sin productos. Sincronizá el catálogo o ejecutá el runner con precios B2B.
                       </td>
                     </tr>

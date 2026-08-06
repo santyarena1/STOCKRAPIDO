@@ -32,15 +32,15 @@ type Category = { id: string; name: string };
 function ProductSearchRow({ product, onAdd }: { product: Product; onAdd: (qty: number) => void }) {
   const [qty, setQty] = useState(1);
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5 px-2 rounded hover:bg-slate-700/50">
-      <span className="text-slate-200 text-sm flex-1 min-w-0 truncate">{product.name}</span>
+    <div className="flex items-center justify-between gap-2 py-1.5 px-2 rounded hover:bg-raised2">
+      <span className="text-fg text-sm flex-1 min-w-0 truncate">{product.name}</span>
       <div className="flex items-center gap-2 shrink-0">
         <input
           type="number"
           min={1}
           value={qty}
           onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          className="w-14 px-2 py-1 rounded bg-slate-700 border border-slate-600 text-slate-100 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-14 px-2 py-1 rounded bg-raised2 border border-hair00 text-fg text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
         <button
           type="button"
@@ -276,7 +276,7 @@ export default function PromocionesPage() {
         title="Promociones y ofertas"
         subtitle="Creá reglas comerciales y controlá su vigencia."
         actions={<div className="flex gap-2">
-          <label className="flex items-center gap-2 text-slate-400 text-sm cursor-pointer">
+          <label className="flex items-center gap-2 text-fg-muted text-sm cursor-pointer">
             <input
               type="checkbox"
               checked={filterActive}
@@ -300,38 +300,38 @@ export default function PromocionesPage() {
       />
 
       {showForm && (
-        <form data-tour="promos-form" onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-          <h2 className="text-lg font-bold text-white">{editingId ? 'Editar promoción' : 'Nueva promoción'}</h2>
+        <form data-tour="promos-form" onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+          <h2 className="text-lg font-bold text-fg">{editingId ? 'Editar promoción' : 'Nueva promoción'}</h2>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Nombre *</label>
+            <label className="block text-sm text-fg-muted mb-1">Nombre *</label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="Ej: 2x1 en gaseosas"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Descripción</label>
+            <label className="block text-sm text-fg-muted mb-1">Descripción</label>
             <textarea
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               placeholder="Opcional"
               rows={2}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Tipo de oferta *</label>
+            <label className="block text-sm text-fg-muted mb-1">Tipo de oferta *</label>
             <select
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'percent' | 'fixed' | 'bogo' | 'precio_fijo' }))}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             >
               {PROMO_TYPES.map((t) => (
                 <option key={t.id} value={t.id}>{t.label}</option>
@@ -342,29 +342,29 @@ export default function PromocionesPage() {
           {form.type === 'bogo' ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Comprar (cantidad)</label>
+                <label className="block text-sm text-fg-muted mb-1">Comprar (cantidad)</label>
                 <input
                   type="number"
                   min={1}
                   value={form.buyQty}
                   onChange={(e) => setForm((f) => ({ ...f, buyQty: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                 />
               </div>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Llevar gratis (cantidad)</label>
+                <label className="block text-sm text-fg-muted mb-1">Llevar gratis (cantidad)</label>
                 <input
                   type="number"
                   min={0}
                   value={form.getQtyFree}
                   onChange={(e) => setForm((f) => ({ ...f, getQtyFree: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                 />
               </div>
             </div>
           ) : (
             <div>
-              <label className="block text-sm text-slate-400 mb-1">
+              <label className="block text-sm text-fg-muted mb-1">
                 {form.type === 'precio_fijo'
                   ? 'Precio total del combo ($)'
                   : form.type === 'percent'
@@ -378,14 +378,14 @@ export default function PromocionesPage() {
                 value={form.value}
                 onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
                 placeholder={form.type === 'precio_fijo' ? '1500' : form.type === 'percent' ? '15' : '500'}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                 required
               />
             </div>
           )}
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Compra mínima ($)</label>
+            <label className="block text-sm text-fg-muted mb-1">Compra mínima ($)</label>
             <input
               type="number"
               min={0}
@@ -393,44 +393,44 @@ export default function PromocionesPage() {
               value={form.minPurchase}
               onChange={(e) => setForm((f) => ({ ...f, minPurchase: e.target.value }))}
               placeholder="0 = sin mínimo"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Código de promoción (opcional)</label>
+            <label className="block text-sm text-fg-muted mb-1">Código de promoción (opcional)</label>
             <input
               type="text"
               value={form.promoCode}
               onChange={(e) => setForm((f) => ({ ...f, promoCode: e.target.value }))}
               placeholder="Ej: VERANO20"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Válida desde</label>
+              <label className="block text-sm text-fg-muted mb-1">Válida desde</label>
               <input
                 type="date"
                 value={form.validFrom}
                 onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Válida hasta</label>
+              <label className="block text-sm text-fg-muted mb-1">Válida hasta</label>
               <input
                 type="date"
                 value={form.validTo}
                 onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">
+            <label className="block text-sm text-fg-muted mb-1">
               {form.type === 'precio_fijo' ? 'Productos del combo (requerido)' : 'Productos del combo (vacío = todos)'}
             </label>
             <div className="space-y-2">
@@ -440,15 +440,15 @@ export default function PromocionesPage() {
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   placeholder="Buscar producto por nombre o código..."
-                  className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="flex-1 px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
                 />
               </div>
               {productSearch && (
-                <div className="rounded-lg border border-slate-600 bg-slate-800/50 p-2 max-h-40 overflow-auto">
+                <div className="rounded-lg border border-hair00 bg-raised p-2 max-h-40 overflow-auto">
                   {searching ? (
-                    <p className="text-slate-500 text-sm">Buscando...</p>
+                    <p className="text-fg-faint text-sm">Buscando...</p>
                   ) : searchResults.length === 0 ? (
-                    <p className="text-slate-500 text-sm">Sin resultados</p>
+                    <p className="text-fg-faint text-sm">Sin resultados</p>
                   ) : (
                     <div className="space-y-1">
                       {searchResults.map((p) => (
@@ -463,11 +463,11 @@ export default function PromocionesPage() {
                 </div>
               )}
               {form.productItems.length > 0 && (
-                <div className="rounded-lg border border-slate-600 bg-slate-800/50 p-2 space-y-2">
-                  <p className="text-slate-400 text-xs">Productos en el combo:</p>
+                <div className="rounded-lg border border-hair00 bg-raised p-2 space-y-2">
+                  <p className="text-fg-muted text-xs">Productos en el combo:</p>
                   {form.productItems.map((item) => (
-                    <div key={item.productId} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-slate-700/50">
-                      <span className="text-slate-200 text-sm">{getProductName(item.productId)}</span>
+                    <div key={item.productId} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-raised2">
+                      <span className="text-fg text-sm">{getProductName(item.productId)}</span>
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
@@ -475,12 +475,12 @@ export default function PromocionesPage() {
                           value={item.qty}
                           onChange={(e) => updateProductItemQty(item.productId, e.target.valueAsNumber)}
                           onBlur={(e) => updateProductItemQty(item.productId, e.target.valueAsNumber)}
-                          className="w-14 px-2 py-1 rounded bg-slate-700 border border-slate-600 text-slate-100 text-sm text-center"
+                          className="w-14 px-2 py-1 rounded bg-raised2 border border-hair00 text-fg text-sm text-center"
                         />
                         <button
                           type="button"
                           onClick={() => removeProductItem(item.productId)}
-                          className="text-red-400 hover:text-red-300 text-sm"
+                          className="text-crit hover:text-crit text-sm"
                         >
                           ×
                         </button>
@@ -493,10 +493,10 @@ export default function PromocionesPage() {
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Categorías (vacío = todas)</label>
+            <label className="block text-sm text-fg-muted mb-1">Categorías (vacío = todas)</label>
             <div className="flex flex-wrap gap-2">
               {categories.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-sm cursor-pointer hover:bg-slate-600">
+                <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-raised2 text-fg text-sm cursor-pointer hover:bg-raised2">
                   <input
                     type="checkbox"
                     checked={form.categoryIds.includes(c.id)}
@@ -506,11 +506,11 @@ export default function PromocionesPage() {
                   {c.name}
                 </label>
               ))}
-              {categories.length === 0 && <span className="text-slate-500 text-sm">Sin categorías</span>}
+              {categories.length === 0 && <span className="text-fg-faint text-sm">Sin categorías</span>}
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+          <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
             <input
               type="checkbox"
               checked={form.isActive}
@@ -527,7 +527,7 @@ export default function PromocionesPage() {
             <button
               type="button"
               onClick={() => { setShowForm(false); resetForm(); }}
-              className="px-4 py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800"
+              className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised"
             >
               Cancelar
             </button>
@@ -536,11 +536,11 @@ export default function PromocionesPage() {
       )}
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
-        <div data-tour="promos-list" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="promos-list" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
                 <th className="text-left p-3">Tipo</th>
@@ -548,36 +548,36 @@ export default function PromocionesPage() {
                 <th className="text-left p-3">Código</th>
                 <th className="text-left p-3">Vigencia</th>
                 <th className="text-left p-3">Estado</th>
-                <th className="text-right p-3">Acciones</th>
+                <th className="text-right p-3 font-mono tabular-nums">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft00">
               {promos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-6 text-slate-500 text-center">
+                  <td colSpan={7} className="p-6 text-fg-faint text-center">
                     No hay promociones. Creá una para empezar.
                   </td>
                 </tr>
               ) : (
                 promos.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-800/50">
-                    <td className="p-3 text-slate-200">{p.name}</td>
-                    <td className="p-3 text-slate-400 capitalize">{p.type}</td>
+                  <tr key={p.id} className="hover:bg-raised">
+                    <td className="p-3 text-fg">{p.name}</td>
+                    <td className="p-3 text-fg-muted capitalize">{p.type}</td>
                     <td className="p-3 text-brand font-medium">{formatPromoValue(p)}</td>
-                    <td className="p-3 text-slate-400 font-mono">{p.promoCode || '—'}</td>
-                    <td className="p-3 text-slate-400 text-xs">
+                    <td className="p-3 text-fg-muted font-mono">{p.promoCode || '—'}</td>
+                    <td className="p-3 text-fg-muted text-xs">
                       {p.validFrom || p.validTo
                         ? `${p.validFrom ? new Date(p.validFrom).toLocaleDateString('es-AR') : '—'} a ${p.validTo ? new Date(p.validTo).toLocaleDateString('es-AR') : '—'}`
                         : 'Sin límite'}
                     </td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-xs ${p.isActive ? 'bg-green-600/30 text-green-400' : 'bg-slate-600 text-slate-400'}`}>
+                      <span className={`px-2 py-0.5 rounded text-xs ${p.isActive ? 'bg-[var(--ok-soft)] text-ok' : 'bg-raised2 text-fg-muted'}`}>
                         {p.isActive ? 'Activa' : 'Inactiva'}
                       </span>
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="p-3 text-right font-mono tabular-nums">
                       <button type="button" onClick={() => handleEdit(p)} className="text-brand hover:underline mr-2">Editar</button>
-                      <button type="button" onClick={() => handleDelete(p.id)} className="text-red-400 hover:underline">Eliminar</button>
+                      <button type="button" onClick={() => handleDelete(p.id)} className="text-crit hover:underline">Eliminar</button>
                     </td>
                   </tr>
                 ))
