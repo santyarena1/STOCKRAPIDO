@@ -125,6 +125,8 @@ model Product {
   subcategory String?
   supplierSku String?
   externalId  String?
+  sourceConnectionId String?
+  sourceProvider String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -413,6 +415,10 @@ model SyncConnection {
   priceMarkup     Decimal   @default(0)  // % de markup sobre el costo del proveedor -> precio de venta
   defaultMinStock Int       @default(0)
   autoSync        Boolean   @default(false)
+  credentialsEncrypted String?
+  syncFrequency   String    @default("manual")
+  syncHourLocal   Int?
+  columnsConfig   Json?
   lastSyncAt      DateTime?
   lastStatus      String?   // success | error | running
   createdAt       DateTime  @default(now())

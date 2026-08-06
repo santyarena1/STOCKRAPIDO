@@ -5,6 +5,31 @@ import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
 
+export type ProductCatalogQuery = {
+  q?: string;
+  categoryId?: string;
+  brand?: string;
+  provider?: string;
+  type?: string;
+  subcategory?: string;
+  presentation?: string;
+  stockControl?: boolean;
+  status: 'active' | 'inactive' | 'all';
+  hasStock?: boolean;
+  sort: 'name' | 'price' | 'cost' | 'stock' | 'updatedAt' | 'brand' | 'category';
+  dir: 'asc' | 'desc';
+  page: number;
+  pageSize: number;
+};
+
+export type ProductBulkInput = {
+  ids: string[];
+  action: 'setPrice' | 'applyMarkup' | 'setCategory' | 'setStockControl' | 'setActive' | 'delete';
+  value?: unknown;
+};
+
+type ProviderFacetGroup = { sourceProvider: string | null; _count: { _all: number } };
+
 @Injectable()
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
@@ -94,6 +119,250 @@ export class ProductsService {
     if (lowStock)
       list = list.filter((p: { stockControl: boolean; stock: number; minStock: number }) => p.stockControl && p.stock <= p.minStock);
     return list.map(decorateProductUnits);
+  }
+
+  async catalog(businessId: string, query: ProductCatalogQuery) {
+    const where = this.catalogWhere(businessId, query);
+    const skip = (query.page - 1) * query.pageSize;
+    const orderBy =
+      query.sort === 'category'
+        ? { category: { name: query.dir } }
+        : { [query.sort]: query.dir };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        include: { category: true },
+        orderBy: orderBy as any,
+        skip,
+        take: query.pageSize,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return {
+      items: items.map(decorateProductUnits),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      totalPages: Math.ceil(total / query.pageSize),
+    };
+  }
+
+  async facets(businessId: string) {
+    const where = { businessId, isActive: true };
+    const [providerGroups, brandGroups, categoryGroups, typeGroups] = await Promise.all([
+      (this.prisma.product as any).groupBy({
+        by: ['sourceProvider'],
+        where,
+        _count: { _all: true },
+      }) as Promise<ProviderFacetGroup[]>,
+      this.prisma.product.groupBy({ by: ['brand'], where, _count: { _all: true } }),
+      this.prisma.product.groupBy({ by: ['categoryId'], where, _count: { _all: true } }),
+      this.prisma.product.groupBy({ by: ['format'], where, _count: { _all: true } }),
+    ]);
+    const categoryIds = categoryGroups.flatMap((row) => (row.categoryId ? [row.categoryId] : []));
+    const categories = await this.prisma.category.findMany({
+      where: { businessId, id: { in: categoryIds } },
+      select: { id: true, name: true },
+    });
+    const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+    const byCount = <T extends { count: number }>(rows: T[]) => rows.sort((a, b) => b.count - a.count);
+    return {
+      providers: byCount(
+        providerGroups
+          .filter((row) => row.sourceProvider?.trim())
+          .map((row) => ({ value: row.sourceProvider!, label: row.sourceProvider!, count: row._count._all })),
+      ),
+      brands: byCount(
+        brandGroups
+          .filter((row) => row.brand?.trim())
+          .map((row) => ({ value: row.brand!, count: row._count._all })),
+      ).slice(0, 200),
+      categories: byCount(
+        categoryGroups.flatMap((row) => {
+          const name = row.categoryId ? categoryNames.get(row.categoryId) : undefined;
+          return row.categoryId && name ? [{ id: row.categoryId, name, count: row._count._all }] : [];
+        }),
+      ),
+      types: byCount(
+        typeGroups
+          .filter((row) => row.format?.trim())
+          .map((row) => ({ value: row.format!, count: row._count._all })),
+      ),
+    };
+  }
+
+  async bulk(businessId: string, input: ProductBulkInput) {
+    if (!Array.isArray(input?.ids) || input.ids.length === 0) {
+      throw new BadRequestException('Indicá al menos un producto.');
+    }
+    const actions: ProductBulkInput['action'][] = [
+      'setPrice',
+      'applyMarkup',
+      'setCategory',
+      'setStockControl',
+      'setActive',
+      'delete',
+    ];
+    if (!actions.includes(input.action)) throw new BadRequestException('Acción masiva inválida.');
+
+    const ids = [...new Set(input.ids.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    const products = await this.prisma.product.findMany({
+      where: { businessId, id: { in: ids } },
+      select: { id: true, cost: true },
+    });
+    const allowedIds = products.map((product) => product.id);
+    const foundIds = new Set(allowedIds);
+    const skipped = ids
+      .filter((id) => !foundIds.has(id))
+      .map((id) => ({ id, reason: 'Producto no encontrado en el negocio.' }));
+
+    if (input.action === 'applyMarkup') {
+      const markup = this.numericBulkValue(input.value, 'El porcentaje de markup');
+      let updated = 0;
+      for (const product of products) {
+        if (product.cost == null) {
+          skipped.push({ id: product.id, reason: 'El producto no tiene costo.' });
+          continue;
+        }
+        const price = Math.round(Number(product.cost) * (1 + markup / 100) * 100) / 100;
+        await this.prisma.product.updateMany({
+          where: { id: product.id, businessId },
+          data: { price: new Decimal(price) },
+        });
+        updated++;
+      }
+      return { updated, skipped };
+    }
+
+    if (input.action === 'delete') {
+      let updated = 0;
+      for (const id of allowedIds) {
+        try {
+          const result = await this.prisma.product.deleteMany({ where: { id, businessId } });
+          updated += result.count;
+        } catch {
+          skipped.push({ id, reason: 'No se pudo eliminar porque el producto tiene datos relacionados.' });
+        }
+      }
+      return { updated, skipped };
+    }
+
+    let data: Record<string, unknown>;
+    if (input.action === 'setPrice') {
+      const price = this.numericBulkValue(input.value, 'El precio');
+      if (price < 0) throw new BadRequestException('El precio no puede ser negativo.');
+      data = { price: new Decimal(price) };
+    } else if (input.action === 'setCategory') {
+      if (typeof input.value !== 'string' || !input.value) {
+        throw new BadRequestException('La categoría es inválida.');
+      }
+      const category = await this.prisma.category.findFirst({
+        where: { id: input.value, businessId },
+        select: { id: true },
+      });
+      if (!category) throw new BadRequestException('La categoría no pertenece al negocio.');
+      data = { categoryId: category.id };
+    } else {
+      if (typeof input.value !== 'boolean') throw new BadRequestException('El valor debe ser booleano.');
+      data = input.action === 'setStockControl' ? { stockControl: input.value } : { isActive: input.value };
+    }
+    const result = await this.prisma.product.updateMany({
+      where: { businessId, id: { in: allowedIds } },
+      data,
+    });
+    return { updated: result.count, skipped };
+  }
+
+  async duplicates(businessId: string) {
+    const barcodeGroups = await this.prisma.product.groupBy({
+      by: ['barcode'],
+      where: { businessId, isActive: true, barcode: { not: null } },
+      _count: { _all: true },
+    });
+    const duplicateGroups = barcodeGroups
+      .filter((group) => !!group.barcode?.trim() && group._count._all >= 2)
+      .sort((a, b) => b._count._all - a._count._all);
+    const barcodes = duplicateGroups.map((group) => group.barcode!);
+    const products = await this.prisma.product.findMany({
+      where: { businessId, isActive: true, barcode: { in: barcodes } },
+      select: { id: true, name: true, barcode: true, brand: true, cost: true, price: true, sourceProvider: true, stock: true },
+      orderBy: { name: 'asc' },
+    });
+    const byBarcode = new Map<string, typeof products>();
+    for (const product of products) {
+      if (!product.barcode) continue;
+      const list = byBarcode.get(product.barcode) ?? [];
+      list.push(product);
+      byBarcode.set(product.barcode, list);
+    }
+    return duplicateGroups.map((group) => ({
+      barcode: group.barcode!,
+      count: group._count._all,
+      products: (byBarcode.get(group.barcode!) ?? []).map(({ barcode: _barcode, ...product }) => product),
+    }));
+  }
+
+  async mergeDuplicates(businessId: string, keepId: string, mergeIds: string[]) {
+    if (typeof keepId !== 'string' || !Array.isArray(mergeIds) || mergeIds.length === 0) {
+      throw new BadRequestException('Indicá el producto a conservar y los productos a fusionar.');
+    }
+    const ids = [keepId, ...new Set(mergeIds.filter((id) => id !== keepId))];
+    if (ids.length < 2) throw new BadRequestException('No hay productos distintos para fusionar.');
+    const products = await this.prisma.product.findMany({
+      where: { businessId, id: { in: ids } },
+      select: { id: true, barcode: true },
+    });
+    if (products.length !== ids.length) throw new BadRequestException('Algún producto no pertenece al negocio.');
+    const barcode = products[0]?.barcode;
+    if (!barcode?.trim() || products.some((product) => product.barcode !== barcode)) {
+      throw new BadRequestException('Los productos deben compartir el mismo código de barras.');
+    }
+    const idsToMerge = ids.filter((id) => id !== keepId);
+    const result = await this.prisma.product.updateMany({
+      where: { businessId, id: { in: idsToMerge } },
+      data: { isActive: false },
+    });
+    return { keptId: keepId, merged: result.count };
+  }
+
+  private numericBulkValue(value: unknown, label: string): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new BadRequestException(`${label} debe ser un número válido.`);
+    }
+    return value;
+  }
+
+  private catalogWhere(businessId: string, query: ProductCatalogQuery): Record<string, unknown> {
+    const tokens = query.q?.trim().split(/\s+/).filter(Boolean) ?? [];
+    const where: Record<string, unknown> = {
+      businessId,
+      ...(query.status !== 'all' && { isActive: query.status === 'active' }),
+      ...(query.categoryId && { categoryId: query.categoryId }),
+      ...(query.brand && { brand: { equals: query.brand, mode: 'insensitive' } }),
+      ...(query.provider && {
+        OR: [
+          { sourceProvider: { equals: query.provider, mode: 'insensitive' } },
+          { sourceConnectionId: query.provider },
+        ],
+      }),
+      ...(query.type && { format: { equals: query.type, mode: 'insensitive' } }),
+      ...(query.subcategory && { subcategory: { equals: query.subcategory, mode: 'insensitive' } }),
+      ...(query.presentation && { presentation: { equals: query.presentation, mode: 'insensitive' } }),
+      ...(query.stockControl !== undefined && { stockControl: query.stockControl }),
+      ...(query.hasStock && { stock: { gt: 0 } }),
+      ...(tokens.length && {
+        AND: tokens.map((token) => ({
+          OR: [
+            { name: { contains: token, mode: 'insensitive' } },
+            { barcode: { contains: token } },
+            { brand: { contains: token, mode: 'insensitive' } },
+            { supplierSku: { contains: token, mode: 'insensitive' } },
+            { externalId: { contains: token, mode: 'insensitive' } },
+          ],
+        })),
+      }),
+    };
+    return where;
   }
 
   async create(businessId: string, data: {

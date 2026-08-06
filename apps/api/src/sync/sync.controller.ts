@@ -29,6 +29,12 @@ export class SyncController {
     return this.sync.listConnections(u.businessId);
   }
 
+  @Get('connections/:id')
+  @UseGuards(JwtAuthGuard)
+  detail(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.getConnection(id, u.businessId);
+  }
+
   @Post('connections')
   @UseGuards(JwtAuthGuard)
   create(@CurrentUser() u: User, @Body() body: any) {
@@ -39,6 +45,16 @@ export class SyncController {
   @UseGuards(JwtAuthGuard)
   update(@CurrentUser() u: User, @Param('id') id: string, @Body() body: any) {
     return this.sync.updateConnection(id, u.businessId, body);
+  }
+
+  @Patch('connections/:id/credentials')
+  @UseGuards(JwtAuthGuard)
+  updateCredentials(
+    @CurrentUser() u: User,
+    @Param('id') id: string,
+    @Body() body: { credentials: Record<string, string> },
+  ) {
+    return this.sync.updateCredentials(id, u.businessId, body?.credentials);
   }
 
   @Delete('connections/:id')
@@ -99,6 +115,12 @@ export class SyncController {
     @Body() body: { onlyWithCost?: boolean; onlyAvailable?: boolean },
   ) {
     return this.sync.importToProducts(id, u.businessId, body || {});
+  }
+
+  @Post('connections/:id/reprice')
+  @UseGuards(JwtAuthGuard)
+  reprice(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.repriceConnection(id, u.businessId);
   }
 
   // ----- Push desde el RUNNER autenticado (precios reales + todos los campos) -----

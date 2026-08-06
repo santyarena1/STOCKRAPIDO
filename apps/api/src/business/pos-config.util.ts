@@ -9,6 +9,7 @@ export type AiInvoicePosConfig = {
 export type BrandingPosConfig = {
   accentColor?: string;
   logoUrl?: string;
+  faviconUrl?: string;
   appTitle?: string;
   /** Textos/enlaces y montos destacados */
   linkColor?: string;
@@ -82,6 +83,27 @@ type PosConfigPatchBody = {
 
 const MAX_LOGO_DATA_URL_CHARS = 350_000;
 
+function mergeBrandImageUrl(
+  next: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+  key: 'logoUrl' | 'faviconUrl',
+) {
+  if (!(key in incoming)) return;
+  const value = incoming[key];
+  if (typeof value !== 'string' || value.trim() === '') {
+    delete next[key];
+    return;
+  }
+  const url = value.trim();
+  if (!url.startsWith('data:') && !url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error('La imagen debe usar una URL data:, http:// o https://.');
+  }
+  if (url.length > MAX_LOGO_DATA_URL_CHARS) {
+    throw new Error('El icono es demasiado grande (máx. ~350 KB en base64). Probá una imagen más chica.');
+  }
+  next[key] = url;
+}
+
 export function mergePosConfigUpdate(
   existing: unknown,
   patch: PosConfigPatchBody,
@@ -135,18 +157,8 @@ export function mergePosConfigUpdate(
         else delete next[key];
       }
     }
-    if ('logoUrl' in inc) {
-      const v = inc.logoUrl;
-      if (typeof v === 'string' && v.trim() !== '') {
-        const s = v.trim();
-        if (s.length > MAX_LOGO_DATA_URL_CHARS) {
-          throw new Error('El icono es demasiado grande (máx. ~350 KB en base64). Probá una imagen más chica.');
-        }
-        next.logoUrl = s;
-      } else {
-        delete next.logoUrl;
-      }
-    }
+    mergeBrandImageUrl(next, inc, 'logoUrl');
+    mergeBrandImageUrl(next, inc, 'faviconUrl');
     if ('appTitle' in inc) {
       const v = inc.appTitle;
       if (typeof v === 'string' && v.trim() !== '') next.appTitle = v.trim().slice(0, 80);

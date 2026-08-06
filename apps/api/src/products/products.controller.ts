@@ -2,9 +2,28 @@ import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, 
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ProductsService } from './products.service';
+import { ProductBulkInput, ProductCatalogQuery, ProductsService } from './products.service';
 
 type User = { businessId: string };
+
+const CATALOG_SORTS = ['name', 'price', 'cost', 'stock', 'updatedAt', 'brand', 'category'] as const;
+const CATALOG_STATUSES = ['active', 'inactive', 'all'] as const;
+
+function optionalBoolean(value: string | undefined, field: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new BadRequestException(`${field} debe ser 'true' o 'false'.`);
+}
+
+function positiveInteger(value: string | undefined, fallback: number, field: string, max?: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || (max !== undefined && parsed > max)) {
+    throw new BadRequestException(`${field} debe ser un entero entre 1 y ${max ?? 'infinito'}.`);
+  }
+  return parsed;
+}
 
 @Controller('products')
 @UseGuards(JwtAuthGuard)
@@ -24,6 +43,77 @@ export class ProductsController {
       limit ? parseInt(limit, 10) : 20,
       excludeCombos === '1' || excludeCombos === 'true',
     );
+  }
+
+  @Get('catalog')
+  catalog(
+    @CurrentUser() user: User,
+    @Query('q') q?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('brand') brand?: string,
+    @Query('provider') provider?: string,
+    @Query('type') type?: string,
+    @Query('subcategory') subcategory?: string,
+    @Query('presentation') presentation?: string,
+    @Query('stockControl') stockControl?: string,
+    @Query('status') status?: string,
+    @Query('hasStock') hasStock?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const parsedStatus = status ?? 'active';
+    if (!CATALOG_STATUSES.includes(parsedStatus as (typeof CATALOG_STATUSES)[number])) {
+      throw new BadRequestException('status debe ser active, inactive o all.');
+    }
+    const parsedSort = sort ?? 'name';
+    if (!CATALOG_SORTS.includes(parsedSort as (typeof CATALOG_SORTS)[number])) {
+      throw new BadRequestException('Orden de catálogo inválido.');
+    }
+    if (dir !== undefined && dir !== 'asc' && dir !== 'desc') {
+      throw new BadRequestException("dir debe ser 'asc' o 'desc'.");
+    }
+    const query: ProductCatalogQuery = {
+      q,
+      categoryId,
+      brand,
+      provider,
+      type,
+      subcategory,
+      presentation,
+      stockControl: optionalBoolean(stockControl, 'stockControl'),
+      status: parsedStatus as ProductCatalogQuery['status'],
+      hasStock: optionalBoolean(hasStock, 'hasStock'),
+      sort: parsedSort as ProductCatalogQuery['sort'],
+      dir: (dir ?? 'asc') as ProductCatalogQuery['dir'],
+      page: positiveInteger(page, 1, 'page'),
+      pageSize: positiveInteger(pageSize, 50, 'pageSize', 200),
+    };
+    return this.products.catalog(user.businessId, query);
+  }
+
+  @Get('facets')
+  facets(@CurrentUser() user: User) {
+    return this.products.facets(user.businessId);
+  }
+
+  @Post('bulk')
+  bulk(@CurrentUser() user: User, @Body() body: ProductBulkInput) {
+    return this.products.bulk(user.businessId, body);
+  }
+
+  @Get('duplicates')
+  duplicates(@CurrentUser() user: User) {
+    return this.products.duplicates(user.businessId);
+  }
+
+  @Post('duplicates/merge')
+  mergeDuplicates(
+    @CurrentUser() user: User,
+    @Body() body: { keepId: string; mergeIds: string[] },
+  ) {
+    return this.products.mergeDuplicates(user.businessId, body?.keepId, body?.mergeIds);
   }
 
   @Get()

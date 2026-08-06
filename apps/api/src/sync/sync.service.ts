@@ -1,8 +1,13 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MondelezProvider, NormalizedItem } from './mondelez.provider';
 import { bulkCostToUnit, decorateSyncedProductUnits } from '../common/units';
+import { encryptSecret } from '../fiscal/fiscal-crypto';
+
+const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
+type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
 
 type ConnInput = {
   provider?: string;
@@ -12,6 +17,9 @@ type ConnInput = {
   priceMarkup?: number;
   defaultMinStock?: number;
   autoSync?: boolean;
+  syncFrequency?: SyncFrequency;
+  syncHourLocal?: number | null;
+  columnsConfig?: Record<string, unknown> | null;
 };
 
 @Injectable()
@@ -23,22 +31,29 @@ export class SyncService {
   ) {}
 
   // ---------- Conexiones ----------
-  listConnections(businessId: string) {
-    return this.prisma.syncConnection.findMany({
+  private sanitizeConnection<T extends Record<string, any>>(connection: T) {
+    const { credentialsEncrypted, ...safe } = connection;
+    return { ...safe, hasCredentials: !!credentialsEncrypted };
+  }
+
+  async listConnections(businessId: string) {
+    const connections = await this.prisma.syncConnection.findMany({
       where: { businessId },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { items: true } } },
     });
+    return connections.map((connection) => this.sanitizeConnection(connection));
   }
 
   async getConnection(id: string, businessId: string) {
     const c = await this.prisma.syncConnection.findFirst({ where: { id, businessId } });
     if (!c) throw new NotFoundException('Conexión no encontrada');
-    return c;
+    return this.sanitizeConnection(c);
   }
 
-  createConnection(businessId: string, data: ConnInput) {
-    return this.prisma.syncConnection.create({
+  async createConnection(businessId: string, data: ConnInput) {
+    this.validateSchedule(data);
+    const connection = await this.prisma.syncConnection.create({
       data: {
         businessId,
         provider: data.provider || 'mondelez',
@@ -48,15 +63,60 @@ export class SyncService {
         priceMarkup: new Decimal(data.priceMarkup ?? 0),
         defaultMinStock: data.defaultMinStock ?? 0,
         autoSync: data.autoSync ?? false,
+        syncFrequency: data.syncFrequency ?? 'manual',
+        syncHourLocal: data.syncHourLocal ?? null,
+        columnsConfig: (data.columnsConfig ?? Prisma.JsonNull) as Prisma.InputJsonValue,
       },
     });
+    return this.sanitizeConnection(connection);
   }
 
   async updateConnection(id: string, businessId: string, data: ConnInput) {
     await this.getConnection(id, businessId);
-    const patch: any = { ...data };
+    this.validateSchedule(data);
+    const patch: any = {};
+    if (data.provider !== undefined) patch.provider = data.provider;
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.enabled !== undefined) patch.enabled = data.enabled;
+    if (data.config !== undefined) patch.config = data.config;
     if (data.priceMarkup != null) patch.priceMarkup = new Decimal(data.priceMarkup);
-    return this.prisma.syncConnection.update({ where: { id }, data: patch });
+    if (data.defaultMinStock !== undefined) patch.defaultMinStock = data.defaultMinStock;
+    if (data.autoSync !== undefined) patch.autoSync = data.autoSync;
+    if (data.syncFrequency !== undefined) patch.syncFrequency = data.syncFrequency;
+    if (data.syncHourLocal !== undefined) patch.syncHourLocal = data.syncHourLocal;
+    if (data.columnsConfig !== undefined) patch.columnsConfig = data.columnsConfig;
+    const connection = await this.prisma.syncConnection.update({ where: { id }, data: patch });
+    return this.sanitizeConnection(connection);
+  }
+
+  async updateCredentials(id: string, businessId: string, credentials?: Record<string, string>) {
+    await this.getConnection(id, businessId);
+    if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)) {
+      throw new BadRequestException('Credenciales inválidas.');
+    }
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(credentials)) {
+      if (typeof value !== 'string') throw new BadRequestException('Credenciales inválidas.');
+      normalized[key] = value;
+    }
+    const connection = await this.prisma.syncConnection.update({
+      where: { id },
+      data: { credentialsEncrypted: encryptSecret(JSON.stringify(normalized)) },
+    });
+    return this.sanitizeConnection(connection);
+  }
+
+  private validateSchedule(data: ConnInput) {
+    if (data.syncFrequency !== undefined && !SYNC_FREQUENCIES.includes(data.syncFrequency)) {
+      throw new BadRequestException('Frecuencia de sincronización inválida.');
+    }
+    if (
+      data.syncHourLocal !== undefined &&
+      data.syncHourLocal !== null &&
+      (!Number.isInteger(data.syncHourLocal) || data.syncHourLocal < 0 || data.syncHourLocal > 23)
+    ) {
+      throw new BadRequestException('La hora local debe estar entre 0 y 23.');
+    }
   }
 
   async deleteConnection(id: string, businessId: string) {
@@ -337,6 +397,8 @@ export class SyncService {
             categoryId: categoryId ?? existing.categoryId,
             cost: cost != null ? new Decimal(cost) : existing.cost,
             price: price != null ? new Decimal(price) : existing.price,
+            sourceConnectionId: conn.id,
+            sourceProvider: conn.provider,
           },
         });
         await this.prisma.syncedProduct.update({ where: { id: s.id }, data: { linkedProductId: existing.id } });
@@ -352,6 +414,8 @@ export class SyncService {
             price: new Decimal(price),
             minStock,
             stockControl: true,
+            sourceConnectionId: conn.id,
+            sourceProvider: conn.provider,
           },
         });
         await this.prisma.syncedProduct.update({ where: { id: s.id }, data: { linkedProductId: prod.id } });
@@ -359,6 +423,25 @@ export class SyncService {
       }
     }
     return { created, updated, skipped, total: synced.length };
+  }
+
+  async repriceConnection(id: string, businessId: string) {
+    const conn = await this.getConnection(id, businessId);
+    const markup = Number(conn.priceMarkup) || 0;
+    const products = await this.prisma.product.findMany({
+      where: { businessId, sourceConnectionId: id, cost: { not: null } },
+      select: { id: true, cost: true },
+    });
+    let updated = 0;
+    for (const product of products) {
+      const price = Math.round(Number(product.cost) * (1 + markup / 100) * 100) / 100;
+      const result = await this.prisma.product.updateMany({
+        where: { id: product.id, businessId, sourceConnectionId: id },
+        data: { price: new Decimal(price) },
+      });
+      updated += result.count;
+    }
+    return { updated };
   }
 
   // ---------- Cron: sync automático de catálogo ----------
