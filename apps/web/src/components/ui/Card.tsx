@@ -10,7 +10,7 @@ type CardProps = {
 export function Card({ as: Component = 'div', className, children }: CardProps) {
   return (
     <Component
-      className={cn('rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5', className)}
+      className={cn('rounded-xl border border-hair-soft bg-surface p-4 sm:p-5', className)}
     >
       {children}
     </Component>

@@ -6,14 +6,52 @@
   --background: #0f172a;
   --foreground: #f1f5f9;
   /* Marca: el layout asigna --brand-* al cargar /business/me */
-  --accent: #0ea5e9;
-  --brand-accent: #0ea5e9;
+  --accent: #DC2626;
+  --brand-accent: #DC2626;
+}
+
+:root,
+:root[data-theme='dark'] {
+  --bg: #151519;
+  --surface: #1a1a20;
+  --raised: #212128;
+  --raised-2: #282832;
+  --hair: #31313c;
+  --hair-soft: #26262e;
+  --tx: #ececef;
+  --tx-2: #a6a6b0;
+  --tx-3: #71717c;
+  --ok: #37b27b;
+  --ok-soft: rgba(55, 178, 123, 0.14);
+  --warn: #c79328;
+  --warn-soft: rgba(199, 147, 40, 0.15);
+  --crit: #cf5442;
+  --crit-soft: rgba(207, 84, 66, 0.15);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --bg: #f6f5f1;
+  --surface: #fbfaf8;
+  --raised: #ffffff;
+  --raised-2: #f1efe9;
+  --hair: #e3e0d8;
+  --hair-soft: #eae7df;
+  --tx: #1c1c21;
+  --tx-2: #5c5c66;
+  --tx-3: #8a8a93;
+  --ok: #2f9e6b;
+  --ok-soft: rgba(47, 158, 107, 0.13);
+  --warn: #b3811f;
+  --warn-soft: rgba(179, 129, 31, 0.14);
+  --crit: #bf4a3b;
+  --crit-soft: rgba(191, 74, 59, 0.13);
+  color-scheme: light;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: system-ui, sans-serif;
+  color: var(--tx);
+  background: var(--bg);
 }
 
 /* Dashboard grid: items fill cell and content can flex/resize */
@@ -50,41 +88,41 @@ body {
 @layer components {
   .btn-brand {
     @apply text-white font-medium transition disabled:opacity-50;
-    background-color: var(--brand-primary-btn, var(--brand-accent, #0ea5e9));
+    background-color: var(--brand-primary-btn, var(--brand-accent, #DC2626));
   }
   .btn-brand:not(:disabled):hover {
     filter: brightness(1.09);
   }
   .text-brand {
-    color: var(--brand-link, var(--brand-accent, #0ea5e9));
+    color: var(--brand-link, var(--brand-accent, #DC2626));
   }
   .focus-brand {
     @apply focus:outline-none focus:ring-2 focus:ring-offset-0;
-    --tw-ring-color: var(--brand-focus, var(--brand-accent, #0ea5e9));
+    --tw-ring-color: var(--brand-focus, var(--brand-accent, #DC2626));
   }
   .bg-brand-highlight {
-    background-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 28%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 42%, transparent);
+    background-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #DC2626)) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-selection, var(--brand-accent, #DC2626)) 42%, transparent);
   }
   .bg-brand-highlight-soft {
-    background-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 18%, transparent);
+    background-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #DC2626)) 18%, transparent);
   }
   .tour-spotlight {
     border-width: 2px;
     border-style: solid;
-    border-color: var(--brand-selection, var(--brand-accent, #0ea5e9));
+    border-color: var(--brand-selection, var(--brand-accent, #DC2626));
     box-shadow:
-      0 10px 15px -3px color-mix(in srgb, var(--brand-shadow, var(--brand-accent, #0ea5e9)) 32%, transparent),
-      0 4px 6px -4px color-mix(in srgb, var(--brand-shadow, var(--brand-accent, #0ea5e9)) 22%, transparent);
+      0 10px 15px -3px color-mix(in srgb, var(--brand-shadow, var(--brand-accent, #DC2626)) 32%, transparent),
+      0 4px 6px -4px color-mix(in srgb, var(--brand-shadow, var(--brand-accent, #DC2626)) 22%, transparent);
   }
   .bg-brand-dot {
-    background-color: var(--brand-link, var(--brand-accent, #0ea5e9));
+    background-color: var(--brand-link, var(--brand-accent, #DC2626));
   }
   .border-brand-card-hover:hover {
-    border-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #0ea5e9)) 55%, transparent);
+    border-color: color-mix(in srgb, var(--brand-selection, var(--brand-accent, #DC2626)) 55%, transparent);
   }
   .hover-brand-primary:hover {
-    background-color: var(--brand-primary-btn, var(--brand-accent, #0ea5e9)) !important;
+    background-color: var(--brand-primary-btn, var(--brand-accent, #DC2626)) !important;
     color: #fff !important;
   }
 }

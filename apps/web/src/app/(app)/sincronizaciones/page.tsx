@@ -254,9 +254,7 @@ export default function SincronizacionesPage() {
   };
 
   if (loading) {
-    return (
-      <div className="p-6 text-slate-400">Cargando sincronizaciones…</div>
-    );
+    return <div className="p-6 text-fg-muted">Cargando sincronizaciones…</div>;
   }
 
   return (
@@ -268,25 +266,9 @@ export default function SincronizacionesPage() {
           <button
             type="button"
             onClick={() => setShowMap((v) => !v)}
-            className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm font-medium hover:bg-slate-800"
+            className="rounded-lg border border-hair px-4 py-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg"
           >
             {showMap ? 'Ocultar mapeo' : 'Mapear columnas'}
-          </button>
-          <button
-            type="button"
-            onClick={() => run('run')}
-            disabled={!!busy || !conn}
-            className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-medium hover:bg-slate-600 disabled:opacity-50"
-          >
-            {busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
-          </button>
-          <button
-            type="button"
-            onClick={() => run('import')}
-            disabled={!!busy || !conn}
-            className="px-4 py-2 rounded-lg btn-brand text-sm font-medium disabled:opacity-50"
-          >
-            {busy === 'import' ? 'Importando…' : 'Importar a productos'}
           </button>
         </div>}
       />
@@ -295,8 +277,8 @@ export default function SincronizacionesPage() {
         <div
           className={`rounded-lg border text-sm px-4 py-3 ${
             msg.type === 'ok'
-              ? 'bg-emerald-900/20 border-emerald-700/50 text-emerald-300'
-              : 'bg-red-900/20 border-red-700/50 text-red-300'
+              ? 'border-ok/30 bg-[var(--ok-soft)] text-ok'
+              : 'border-crit/30 bg-[var(--crit-soft)] text-crit'
           }`}
         >
           {msg.text}
@@ -306,7 +288,7 @@ export default function SincronizacionesPage() {
       {/* Selector de proveedor (extensible) */}
       <div className="flex flex-wrap gap-2">
         {connections.map((c) => {
-          const meta = PROVIDERS[c.provider] ?? { label: c.name, accent: 'border-slate-600' };
+          const meta = PROVIDERS[c.provider] ?? { label: c.name, accent: 'border-hair' };
           const active = c.id === conn?.id;
           return (
             <button
@@ -315,8 +297,8 @@ export default function SincronizacionesPage() {
               onClick={() => setActiveId(c.id)}
               className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
                 active
-                  ? `${meta.accent ?? 'border-brand/50 bg-brand/10'} text-white border-brand/40`
-                  : 'border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                  ? `${meta.accent ?? 'border-[color:var(--brand-accent)]'} bg-brand-highlight-soft text-fg`
+                  : 'border-hair text-fg-muted hover:bg-raised hover:text-fg'
               }`}
             >
               {meta.label ?? c.name}
@@ -331,61 +313,64 @@ export default function SincronizacionesPage() {
           <div className={`rounded-xl border p-4 md:p-5 ${providerMeta.accent}`}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-white">{providerMeta.label}</h2>
-                <p className="text-sm text-slate-400">{providerMeta.description}</p>
+                <h2 className="text-lg font-semibold text-fg">{providerMeta.label}</h2>
+                <p className="text-sm text-fg-muted">{providerMeta.description}</p>
                 {conn.lastSyncAt && (
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="mt-1 font-mono text-xs tabular-nums text-fg-faint">
                     Última sync: {new Date(conn.lastSyncAt).toLocaleString('es-AR')}
                     {conn.lastStatus ? ` · ${conn.lastStatus}` : ''}
                   </p>
                 )}
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer shrink-0">
+              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-fg-muted">
                 <input
                   type="checkbox"
                   checked={conn.autoSync}
                   onChange={toggleAutoSync}
                   disabled={busy === 'autosync'}
-                  className="rounded border-slate-600"
+                  className="rounded border-hair"
                 />
                 Auto-sync catálogo diario (servidor)
               </label>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-500 text-xs">En catálogo</p>
-              <p className="text-2xl font-bold text-white">{conn._count?.items ?? items.length}</p>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-xl border border-hair-soft bg-surface p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-raised2 font-mono text-sm text-fg-muted">1</span>
+                <div><h3 className="font-semibold text-fg">Sincronizar catálogo</h3><p className="text-sm text-fg-faint">{conn._count?.items ?? items.length} ítems en catálogo</p></div>
+              </div>
+              <button type="button" onClick={() => run('run')} disabled={!!busy || !conn} className="w-full rounded-lg border border-hair bg-raised px-4 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50">
+                {busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
+              </button>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-500 text-xs">Con precio B2B</p>
-              <p className="text-2xl font-bold text-emerald-400">{withCost}</p>
+            <div className="rounded-xl border border-hair-soft bg-surface p-5">
+              <div className="mb-4 flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-raised2 font-mono text-sm text-fg-muted">2</span><div><h3 className="font-semibold text-fg">Traer precio B2B</h3><p className="text-sm text-fg-faint">Precio disponible en <span className="font-mono tabular-nums text-ok">{withCost}</span> de <span className="font-mono tabular-nums">{conn._count?.items ?? items.length}</span></p></div></div>
+              <p className="text-sm text-fg-muted">El runner local actualiza los costos reales del proveedor.</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-500 text-xs">Vinculados a productos</p>
-              <p className="text-2xl font-bold text-brand">{linked}</p>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-500 text-xs">Markup venta</p>
-              <p className="text-2xl font-bold text-white">{mk}%</p>
+            <div className="rounded-xl border border-hair-soft bg-surface p-5">
+              <div className="mb-4 flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-raised2 font-mono text-sm text-fg-muted">3</span><div><h3 className="font-semibold text-fg">Importar a productos</h3><p className="text-sm text-fg-faint"><span className="font-mono tabular-nums text-brand">{linked}</span> vinculados · markup <span className="font-mono tabular-nums">{mk}%</span></p></div></div>
+              <button type="button" onClick={() => run('import')} disabled={!!busy || !conn} className="btn-brand w-full rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">
+                {busy === 'import' ? 'Importando…' : 'Importar a productos'}
+              </button>
             </div>
           </div>
 
-          <div className="rounded-xl border border-violet-800/40 bg-violet-950/20 p-4 text-sm text-violet-200/90 space-y-2">
-            <p className="font-medium text-violet-300">Precio real B2B (runner local)</p>
+          <div className="space-y-2 rounded-xl border border-hair-soft border-l-4 bg-surface p-4 text-sm text-fg-muted">
+            <p className="font-medium text-fg">Precio real B2B (runner local)</p>
             <p>{providerMeta.runnerNote}</p>
-            <p className="text-slate-400 text-xs">
-              En <code className="text-slate-300">sync-runner/.env</code> configurá{' '}
-              <code className="text-slate-300">SR_API={apiBase || 'https://stockrapido-api.vercel.app'}</code> (proyecto API en Vercel — ver DEPLOY.md).
-              Ejecutá <code className="text-slate-300">python mondelez_sync_runner.py</code> en tu PC o agendalo con Task Scheduler.
+            <p className="text-xs text-fg-faint">
+              En <code className="text-fg-muted">sync-runner/.env</code> configurá{' '}
+              <code className="text-fg-muted">SR_API={apiBase || 'https://stockrapido-api.vercel.app'}</code> (proyecto API en Vercel — ver DEPLOY.md).
+              Ejecutá <code className="text-fg-muted">python mondelez_sync_runner.py</code> en tu PC o agendalo con Task Scheduler.
             </p>
           </div>
 
           {showMap && mapInfo && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4 space-y-3">
+            <div className="space-y-3 rounded-xl border border-hair-soft bg-surface p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <h2 className="font-semibold text-white">Mapeo de columnas → producto</h2>
+                <h2 className="font-semibold text-fg">Mapeo de columnas → producto</h2>
                 <button
                   type="button"
                   onClick={saveMapping}
@@ -398,16 +383,16 @@ export default function SincronizacionesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {mapInfo.productFields.map((pf) => (
                   <div key={pf} className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-300 w-36 shrink-0 truncate" title={FIELD_LABELS[pf] || pf}>
+                    <span className="w-36 shrink-0 truncate text-sm font-medium text-fg-muted" title={FIELD_LABELS[pf] || pf}>
                       {FIELD_LABELS[pf] || pf}
                     </span>
-                    <span className="text-slate-600">←</span>
+                    <span className="text-fg-faint">←</span>
                     <select
                       value={mapInfo.mapping[pf] || ''}
                       onChange={(e) =>
                         setMapInfo({ ...mapInfo, mapping: { ...mapInfo.mapping, [pf]: e.target.value } })
                       }
-                      className="flex-1 border border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-slate-900 text-slate-200"
+                      className="flex-1 rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
                     >
                       <option value="">— (no completar)</option>
                       {mapInfo.syncedFields.map((sf) => (
@@ -424,47 +409,47 @@ export default function SincronizacionesPage() {
 
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Markup de venta (%)</label>
+              <label className="mb-1 block text-xs text-fg-faint">Markup de venta (%)</label>
               <div className="flex gap-2">
                 <input
                   value={markup}
                   onChange={(e) => setMarkup(e.target.value)}
-                  className="w-24 border border-slate-600 rounded-lg px-3 py-2 text-sm bg-slate-900 text-slate-100"
+                  className="w-24 rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm tabular-nums text-fg"
                   type="number"
                 />
                 <button
                   type="button"
                   onClick={saveMarkup}
                   disabled={!!busy}
-                  className="px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200 hover:bg-slate-800"
+                  className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised hover:text-fg"
                 >
                   Guardar
                 </button>
               </div>
             </div>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs text-slate-500 mb-1">Buscar</label>
+              <label className="mb-1 block text-xs text-fg-faint">Buscar</label>
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Nombre, EAN o marca…"
-                className="w-full border border-slate-600 rounded-lg px-3 py-2 text-sm bg-slate-900 text-slate-100 placeholder-slate-500"
+                className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg placeholder:text-fg-faint"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-400 pb-2 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-fg-muted">
               <input type="checkbox" checked={onlyWithCost} onChange={(e) => setOnlyWithCost(e.target.checked)} />
               Solo con precio B2B ({withCost})
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-500 pb-2 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-fg-faint">
               <input type="checkbox" checked={showInternal} onChange={(e) => setShowInternal(e.target.checked)} />
               Ver costos por bulto (interno)
             </label>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+          <div className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-800/90 text-slate-400 text-left">
+                <thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint">
                   <tr>
                     <th className="p-3 w-12" />
                     <th className="p-3">Producto</th>
@@ -472,39 +457,39 @@ export default function SincronizacionesPage() {
                     <th className="p-3">Categoría</th>
                     <th className="p-3 text-right">Costo c/u</th>
                     <th className="p-3 text-right">Venta c/u (+{mk}%)</th>
-                    {showInternal && <th className="p-3 text-right text-slate-600">Costo bulto</th>}
+                    {showInternal && <th className="p-3 text-right text-fg-faint">Costo bulto</th>}
                     <th className="p-3 text-center">U/bulto</th>
                     <th className="p-3">EAN</th>
                     <th className="p-3 w-8" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700/80">
+                <tbody className="divide-y divide-hair-soft">
                   {items.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-800/40">
+                    <tr key={p.id} className="hover:bg-raised/70">
                       <td className="p-2">
                         {p.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5" />
                         ) : (
-                          <div className="w-9 h-9 rounded bg-slate-800" />
+                          <div className="h-9 w-9 rounded bg-raised2" />
                         )}
                       </td>
                       <td className="p-3">
-                        <span className="text-slate-200 font-medium">{p.name ?? '—'}</span>
+                        <span className="font-medium text-fg">{p.name ?? '—'}</span>
                         {p.linkedProductId && (
-                          <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-500/90">importado</span>
+                          <span className="ml-2 rounded-md border border-ok/30 bg-[var(--ok-soft)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ok">importado</span>
                         )}
                       </td>
-                      <td className="p-3 text-slate-400">{p.brand ?? '—'}</td>
-                      <td className="p-3 text-slate-500 text-xs">{p.category ?? '—'}</td>
-                      <td className="p-3 text-right text-slate-300">
+                      <td className="p-3 text-fg-muted">{p.brand ?? '—'}</td>
+                      <td className="p-3 text-xs text-fg-faint">{p.category ?? '—'}</td>
+                      <td className="p-3 text-right font-mono tabular-nums text-fg-muted">
                         {p.costUnit != null ? formatMoneyArs(p.costUnit) : '—'}
                       </td>
-                      <td className="p-3 text-right font-medium text-brand">
+                      <td className="p-3 text-right font-mono font-medium tabular-nums text-brand">
                         {p.saleUnit != null ? formatMoneyArs(p.saleUnit) : '—'}
                       </td>
                       {showInternal && (
-                        <td className="p-3 text-right text-slate-600 text-xs">
+                        <td className="p-3 text-right font-mono text-xs tabular-nums text-fg-faint">
                           {p.costBulk != null ? formatMoneyArs(p.costBulk) : '—'}
                         </td>
                       )}

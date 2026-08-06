@@ -39,7 +39,7 @@ type Business = {
   };
 };
 
-const DEFAULT_ACCENT = '#0ea5e9';
+const DEFAULT_ACCENT = '#DC2626';
 
 const OPTIONAL_BRAND_FIELDS = [
   {

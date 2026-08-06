@@ -7,6 +7,7 @@ import { api, getApiBaseUrl } from '@/lib/api';
 import { UnitPriceDisplay } from '@/components/UnitPriceDisplay';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Search } from 'lucide-react';
 
 type Product = {
   id: string;
@@ -332,19 +333,19 @@ export default function ProductosPage() {
         </div>}
       />
 
-      <p className="mb-2 text-slate-500 text-sm">
+      <p className="mb-2 text-sm text-fg-faint">
         <strong>Exportar stock (Excel)</strong> descarga el catálogo completo para editar e importar.{' '}
         <strong>Exportar lista (CSV)</strong> usa los filtros actuales de la tabla e incluye id, código, precio, costo,
-        categoría, marca y más (separador <code className="text-slate-400">;</code> para Excel en español). Para importar:
+        categoría, marca y más (separador <code className="text-fg-muted">;</code> para Excel en español). Para importar:
         editá solo <strong>Stock actual</strong> y/o <strong>Stock mínimo</strong> en el Excel de exportación masiva, guardá y subilo. No borres las columnas id ni codigo_barras.
       </p>
 
       {importResult && (
-        <div className="mb-4 p-3 rounded-lg bg-slate-800 border border-slate-600 text-sm">
-          <p className="text-slate-200">
+        <div className="rounded-lg border border-hair bg-raised p-3 text-sm">
+          <p className="text-fg">
             Importación: <strong>{importResult.updated}</strong> producto(s) actualizado(s).
             {importResult.errors.length > 0 && (
-              <span className="text-amber-400"> Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((e) => `Fila ${e.row}: ${e.message}`).join('; ')}
+              <span className="text-warn"> Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((e) => `Fila ${e.row}: ${e.message}`).join('; ')}
                 {importResult.errors.length > 5 ? '…' : ''}</span>
             )}
           </p>
@@ -354,50 +355,50 @@ export default function ProductosPage() {
       {!loading && stockSummary && (
         <div data-tour="productos-stock-summary" className="mb-8 space-y-6">
           <div>
-            <h2 className="text-lg font-semibold text-white mb-1">Valorización y estadísticas de stock</h2>
-            <p className="text-slate-500 text-sm">
+            <h2 className="mb-1 text-lg font-semibold text-fg">Valorización y estadísticas de stock</h2>
+            <p className="text-sm text-fg-faint">
               Productos activos. Costo según precio de compra cargado en el producto; si usás lotes, también mostramos valorización por lotes.
             </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Productos en catálogo</p>
-              <p className="text-2xl font-bold text-white">{stockSummary.productCount}</p>
-              <p className="text-slate-500 text-xs mt-1">Con stock: {stockSummary.productsWithStock} · Sin stock: {stockSummary.productsNoStock}</p>
+            <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-surface p-4 sm:p-5">
+              <p className="mb-1 text-xs text-fg-muted">Productos en catálogo</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-fg">{stockSummary.productCount}</p>
+              <p className="mt-1 font-mono text-xs tabular-nums text-fg-faint">Con stock: {stockSummary.productsWithStock} · Sin stock: {stockSummary.productsNoStock}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Unidades totales</p>
-              <p className="text-2xl font-bold text-brand">{stockSummary.totalUnits}</p>
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+              <p className="mb-1 text-xs text-fg-muted">Unidades totales</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-brand">{stockSummary.totalUnits}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Valor stock (costo producto)</p>
-              <p className="text-xl font-bold text-white">{formatMoneyArs(stockSummary.valueAtCostProduct)}</p>
+              <p className="font-mono text-xl font-bold tabular-nums text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</p>
               {stockSummary.productsWithoutCostWithStock > 0 && (
-                <p className="text-amber-400/90 text-xs mt-1">{stockSummary.productsWithoutCostWithStock} con stock sin costo cargado</p>
+                <p className="mt-1 text-xs text-warn">{stockSummary.productsWithoutCostWithStock} con stock sin costo cargado</p>
               )}
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Valor stock (costo lotes)</p>
-              <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stockSummary.valueAtCostBatches)}</p>
+              <p className="font-mono text-xl font-bold tabular-nums text-ok">{formatMoneyArs(stockSummary.valueAtCostBatches)}</p>
               <p className="text-slate-500 text-xs mt-1">Suma de cantidad × costo unitario por lote</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Valor stock (precio venta)</p>
-              <p className="text-xl font-bold text-white">{formatMoneyArs(stockSummary.valueAtSale)}</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-fg">{formatMoneyArs(stockSummary.valueAtSale)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Margen potencial</p>
-              <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stockSummary.potentialMargin)}</p>
+              <p className="font-mono text-xl font-bold tabular-nums text-ok">{formatMoneyArs(stockSummary.potentialMargin)}</p>
               <p className="text-slate-500 text-xs mt-1">Venta − costo (campo producto)</p>
             </div>
-            <div className="rounded-xl border border-amber-700/40 bg-amber-900/15 p-4">
-              <p className="text-amber-400/90 text-xs mb-1">Stock bajo / mínimo</p>
-              <p className="text-2xl font-bold text-amber-400">{stockSummary.lowStockCount}</p>
+            <div className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4">
+              <p className="mb-1 text-xs text-warn">Stock bajo / mínimo</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-warn">{stockSummary.lowStockCount}</p>
             </div>
-            <div className="rounded-xl border border-rose-700/40 bg-rose-900/15 p-4">
-              <p className="text-rose-400 text-xs mb-1">Por vencer ({stockSummary.expiringDaysWindow} días)</p>
-              <p className="text-2xl font-bold text-rose-300">{stockSummary.expiringUnitsInWindow}</p>
+            <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4">
+              <p className="mb-1 text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-crit">{stockSummary.expiringUnitsInWindow}</p>
               <p className="text-slate-500 text-xs mt-1">{stockSummary.expiringProductsCount} productos con lotes en ventana</p>
             </div>
           </div>
@@ -478,7 +479,9 @@ export default function ProductosPage() {
         </div>
       )}
 
-      <div data-tour="productos-filters" className="flex flex-wrap gap-2 mb-4">
+      <div data-tour="productos-filters" className="flex flex-wrap items-center gap-2 rounded-xl border border-hair-soft bg-surface p-3 sm:p-4">
+        <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
         <input
           type="text"
           placeholder="Buscar..."
@@ -488,12 +491,13 @@ export default function ProductosPage() {
             setHighlightedIndex(0);
           }}
           onKeyDown={handleListKeyDown}
-          className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 w-64"
+          className="w-64 rounded-lg border border-hair bg-raised py-2 pl-9 pr-3 text-fg placeholder:text-fg-faint"
         />
+        </div>
         <select
           value={categoryId}
           onChange={(e) => { setCategoryId(e.target.value); setHighlightedIndex(0); }}
-          className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+          className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"
         >
           <option value="">Todas las categorías</option>
           {(Array.isArray(categories) ? categories : []).map((c) => (
@@ -502,31 +506,31 @@ export default function ProductosPage() {
             </option>
           ))}
         </select>
-        <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
+        <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${lowStock ? 'border-warn/40 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised text-fg-muted'}`}>
           <input type="checkbox" checked={lowStock} onChange={(e) => { setLowStock(e.target.checked); setHighlightedIndex(0); }} />
           Stock bajo
         </label>
-        <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
+        <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${expiringSoon ? 'border-crit/40 bg-[var(--crit-soft)] text-crit' : 'border-hair bg-raised text-fg-muted'}`}>
           <input type="checkbox" checked={expiringSoon} onChange={(e) => { setExpiringSoon(e.target.checked); setHighlightedIndex(0); }} />
           Por vencer (30 días)
         </label>
-        <label className="flex items-center gap-2 text-slate-500 cursor-pointer" title="Costo y venta por bulto — solo referencia interna">
+        <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${showBulkInternal ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-brand' : 'border-hair bg-raised text-fg-faint'}`} title="Costo y venta por bulto — solo referencia interna">
           <input type="checkbox" checked={showBulkInternal} onChange={(e) => setShowBulkInternal(e.target.checked)} />
           Ver bulto (interno)
         </label>
       </div>
 
-      <p className="text-slate-500 text-xs mb-3">
-        Costo y precio de venta se muestran <strong className="text-slate-400">por unidad (c/u)</strong> — así los usa el POS.
+      <p className="text-xs text-fg-faint">
+        Costo y precio de venta se muestran <strong className="text-fg-muted">por unidad (c/u)</strong> — así los usa el POS.
         Los productos importados por bulto se convierten automáticamente al importar desde Sincronizaciones.
       </p>
 
       {loading ? (
-        <p className="text-slate-500">Cargando...</p>
+        <p className="text-fg-faint">Cargando...</p>
       ) : (
-        <div data-tour="productos-table" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div data-tour="productos-table" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-slate-300">
+            <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint">
               <tr>
                 <th className="p-3 w-12"></th>
                 <th className="text-left p-3">Producto</th>
@@ -540,33 +544,33 @@ export default function ProductosPage() {
                 <th className="p-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft">
               {(Array.isArray(filtered) ? filtered : []).map((p, idx) => (
                 <tr
                   key={p?.id ?? ''}
-                  className={`hover:bg-slate-800/50 ${idx === safeHighlighted ? 'bg-brand-highlight' : ''}`}
+                  className={`hover:bg-raised/70 ${idx === safeHighlighted ? 'bg-brand-highlight' : ''}`}
                 >
                   <td className="p-2">
                     {p?.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5" />
+                      <img src={p.imageUrl} alt="" className="h-10 w-10 rounded-lg bg-raised2 object-contain" />
                     ) : (
-                      <div className="w-9 h-9 rounded bg-slate-800" />
+                      <div className="h-10 w-10 rounded-lg bg-raised2" />
                     )}
                   </td>
                   <td className="p-3">
-                    <Link href={`/productos/${p?.id ?? ''}`} className="text-brand hover:underline">
+                    <Link href={`/productos/${p?.id ?? ''}`} className="font-semibold text-fg hover:text-brand hover:underline">
                       {p?.name ?? '-'}
                     </Link>
                     {(p?.barcode || p?.weight || p?.unitsPerBox) && (
-                      <span className="text-slate-500 text-xs block">
+                      <span className="block font-mono text-xs tabular-nums text-fg-faint">
                         {[p?.barcode, p?.weight ? `${p.weight}g` : null, p?.unitsPerBox ? `x${p.unitsPerBox}` : null].filter(Boolean).join(' · ')}
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-slate-400">{p?.category?.name || '-'}</td>
-                  <td className="p-3 text-slate-400">{p?.brand || '-'}</td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-fg-muted">{p?.category?.name || '-'}</td>
+                  <td className="p-3 text-fg-muted">{p?.brand || '-'}</td>
+                  <td className="p-3 text-right font-mono tabular-nums">
                     {p?.cost != null ? (
                       <UnitPriceDisplay
                         cost={p.cost}
@@ -578,10 +582,10 @@ export default function ProductosPage() {
                         showBulkInternal={showBulkInternal}
                       />
                     ) : (
-                      <span className="text-slate-600">—</span>
+                      <span className="text-fg-faint">—</span>
                     )}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-right font-mono tabular-nums">
                     <UnitPriceDisplay
                       price={p?.price}
                       unitsPerBox={p?.unitsPerBox}
@@ -590,19 +594,19 @@ export default function ProductosPage() {
                       showBulkInternal={showBulkInternal}
                     />
                   </td>
-                  <td className={`p-3 text-right ${(p?.stock ?? 0) <= (p?.minStock ?? 0) ? 'text-amber-400' : ''}`}>{p?.stock ?? 0}</td>
-                  <td className="p-3 text-right text-slate-500">{p?.minStock ?? 0}</td>
+                  <td className="p-3 text-right"><span className={`rounded-md border px-2 py-1 font-mono text-xs tabular-nums ${(p?.stock ?? 0) <= (p?.minStock ?? 0) ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{p?.stock ?? 0}</span></td>
+                  <td className="p-3 text-right font-mono tabular-nums text-fg-faint">{p?.minStock ?? 0}</td>
                   <td className="p-3">
                     {p?.expiresAt ? (
                       (() => {
                         const dias = diasHastaVencimiento(p?.expiresAt);
                         if (dias === null) return '-';
-                        if (dias < 0) return <span className="text-red-400">Vencido</span>;
-                        if (dias <= 7) return <span className="text-amber-400">{dias} días</span>;
-                        return <span className="text-slate-400">{new Date(p.expiresAt).toLocaleDateString('es-AR')}</span>;
+                        if (dias < 0) return <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-crit">Vencido</span>;
+                        if (dias <= 7) return <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 font-mono tabular-nums text-warn">{dias} días</span>;
+                        return <span className="font-mono tabular-nums text-fg-muted">{new Date(p.expiresAt).toLocaleDateString('es-AR')}</span>;
                       })()
                     ) : (
-                      <span className="text-slate-600">-</span>
+                      <span className="text-fg-faint">-</span>
                     )}
                   </td>
                   <td className="p-3">

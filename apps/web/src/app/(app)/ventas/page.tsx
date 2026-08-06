@@ -488,13 +488,13 @@ export default function VentasPage() {
       {!loading && stats && (
         <div data-tour="ventas-stats" className="mb-6 space-y-4">
           <div>
-            <h2 className="text-lg font-semibold text-white mb-1">Estadísticas del período</h2>
-            <p className="text-slate-500 text-sm">
+            <h2 className="mb-1 text-lg font-semibold text-fg">Estadísticas del período</h2>
+            <p className="text-sm text-fg-faint">
               Totales según fecha, cliente
               {selectedProduct ? (
                 <>
                   {' '}
-                  y producto <strong className="text-slate-400">{selectedProduct.name}</strong>
+                y producto <strong className="text-fg-muted">{selectedProduct.name}</strong>
                 </>
               ) : (
                 ''
@@ -503,33 +503,33 @@ export default function VentasPage() {
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-              <p className="text-slate-400 text-xs mb-1">Ventas</p>
-              <p className="text-2xl font-bold text-white">{stats.saleCount}</p>
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+              <p className="mb-1 text-xs text-fg-muted">Ventas</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-fg">{stats.saleCount}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Total cobrado</p>
-              <p className="text-xl font-bold text-brand">{formatMoneyArs(stats.sumTotalFinal)}</p>
+              <p className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(stats.sumTotalFinal)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Subtotal bruto</p>
-              <p className="text-xl font-bold text-white">{formatMoneyArs(stats.sumSubtotal)}</p>
+              <p className="font-mono text-2xl font-bold tabular-nums text-fg">{formatMoneyArs(stats.sumSubtotal)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Descuentos</p>
-              <p className="text-xl font-bold text-amber-400">-{formatMoneyArs(stats.sumDiscount)}</p>
+              <p className="font-mono text-2xl font-bold tabular-nums text-warn">-{formatMoneyArs(stats.sumDiscount)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Ticket promedio</p>
-              <p className="text-xl font-bold text-emerald-400">{formatMoneyArs(stats.averageTicket)}</p>
+              <p className="font-mono text-2xl font-bold tabular-nums text-ok">{formatMoneyArs(stats.averageTicket)}</p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
               <p className="text-slate-400 text-xs mb-1">Unidades vendidas</p>
-              <p className="text-2xl font-bold text-slate-100">{stats.unitsSold}</p>
+              <p className="font-mono text-3xl font-bold tabular-nums text-fg">{stats.unitsSold}</p>
             </div>
           </div>
           {Object.keys(stats.byPaymentMethod).length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+            <div className="rounded-xl border border-hair-soft bg-surface px-4 py-3">
               <p className="text-slate-400 text-xs mb-2">Por forma de pago</p>
               <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-300">
                 {Object.entries(stats.byPaymentMethod)
@@ -569,9 +569,9 @@ export default function VentasPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-        <div data-tour="ventas-filters" className="space-y-3 border-b border-slate-800 px-4 py-4 sm:px-5">
-          <h2 className="text-lg font-medium text-slate-200">Filtros</h2>
+      <div className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div data-tour="ventas-filters" className="space-y-3 border-b border-hair-soft px-4 py-4 sm:px-5">
+          <h2 className="text-lg font-medium text-fg">Filtros</h2>
           <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs text-slate-500 shrink-0">Período rápido:</span>
             {VENTAS_DATE_PRESETS.map(({ id, label, title }) => (
@@ -583,7 +583,7 @@ export default function VentasPage() {
                 className={`px-2.5 py-1 rounded-md text-xs font-medium border transition ${
                   activeDatePreset === id
                     ? 'bg-emerald-900/50 border-emerald-600 text-emerald-200'
-                    : 'border-slate-600 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    : 'border-hair bg-raised text-fg-muted hover:bg-raised2 hover:text-fg'
                 }`}
               >
                 {label}
@@ -591,7 +591,7 @@ export default function VentasPage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-slate-400">
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
               Desde
               <input
                 type="date"
@@ -600,10 +600,10 @@ export default function VentasPage() {
                   setFilters((f) => ({ ...f, from: e.target.value }));
                   setActiveDatePreset(null);
                 }}
-                className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                className="rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm tabular-nums text-fg"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-400">
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
               Hasta
               <input
                 type="date"
@@ -612,13 +612,13 @@ export default function VentasPage() {
                   setFilters((f) => ({ ...f, to: e.target.value }));
                   setActiveDatePreset(null);
                 }}
-                className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+                className="rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm tabular-nums text-fg"
               />
             </label>
             <select
               value={filters.customerId}
               onChange={(e) => setFilters((f) => ({ ...f, customerId: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm min-w-[180px]"
+              className="min-w-[180px] rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
               title="Filtrar por cliente (ventas al fiado)"
             >
               <option value="">Todos los clientes</option>
@@ -656,7 +656,7 @@ export default function VentasPage() {
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Buscar por nombre o código…"
-                    className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm w-full"
+                  className="w-full rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg placeholder:text-fg-faint"
                     autoComplete="off"
                   />
                   {productHits.length > 0 && (
@@ -687,7 +687,7 @@ export default function VentasPage() {
             <select
               value={filters.limit}
               onChange={(e) => setFilters((f) => ({ ...f, limit: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm"
+              className="rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
               title="Cantidad máxima de ventas"
             >
               <option value="50">Últimas 50</option>
@@ -700,7 +700,7 @@ export default function VentasPage() {
 
         <div data-tour="ventas-table" className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-950/70 text-xs uppercase tracking-wide text-slate-400">
+            <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint">
               <tr>
                 <th className="text-left p-3">Fecha y hora</th>
                 <th className="text-left p-3">Comprobante</th>
@@ -714,7 +714,7 @@ export default function VentasPage() {
                 <th className="text-right p-3">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-hair-soft">
               {loading ? (
                 <tr>
                   <td colSpan={10} className="p-6 text-slate-500 text-center">
@@ -738,57 +738,57 @@ export default function VentasPage() {
                     s.fiscalDocument?.kind === 'FACTURA_C' &&
                     s.fiscalDocument.status === 'AUTHORIZED';
                   return (
-                    <tr key={s.id} className={isDuplicate ? 'bg-amber-950/20 border-l-2 border-amber-500/60 hover:bg-amber-950/30' : 'hover:bg-slate-800/50'}>
-                      <td className="p-3 text-slate-400 whitespace-nowrap">
+                    <tr key={s.id} className={isDuplicate ? 'border-l-2 border-warn/60 bg-[var(--warn-soft)]' : 'hover:bg-raised/70'}>
+                      <td className="whitespace-nowrap p-3 font-mono text-xs tabular-nums text-fg-muted">
                         {new Date(s.createdAt).toLocaleString('es-AR')}
                       </td>
                       <td className="p-3 text-xs whitespace-nowrap">
                         {isVoided ? (
                           <div className="flex flex-col items-start gap-1">
-                            <span className="rounded border border-red-500/30 bg-red-500/15 px-2 py-1 font-medium text-red-300">Anulada</span>
+                            <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 font-medium text-crit">Anulada</span>
                             {s.fiscalDocument?.creditNoteNumber != null && (
-                              <span className="font-mono text-[10px] text-red-300/70">
+                              <span className="font-mono text-[10px] tabular-nums text-crit">
                                 NC {String(s.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(s.fiscalDocument.creditNoteNumber).padStart(8, '0')}
                               </span>
                             )}
                           </div>
                         ) : isAuthorizedFactura ? (
                           <div className="flex flex-col items-start gap-1">
-                            <span className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2 py-1 font-medium text-emerald-300">Factura C</span>
+                            <span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 font-medium text-ok">Factura C</span>
                             {s.fiscalDocument?.pointOfSale != null && s.fiscalDocument.receiptNumber != null && (
-                              <span className="font-mono text-[10px] text-slate-500">
+                              <span className="font-mono text-[10px] tabular-nums text-fg-faint">
                                 {String(s.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(s.fiscalDocument.receiptNumber).padStart(8, '0')}
                               </span>
                             )}
                           </div>
                         ) : s.fiscalDocument?.kind === 'FACTURA_C' ? (
-                          <span className="rounded border border-red-500/30 bg-red-500/15 px-2 py-1 font-medium text-red-300">
+                          <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 font-medium text-crit">
                             {s.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}
                           </span>
                         ) : s.fiscalDocument?.kind === 'INTERNAL' ? (
-                          <span className="rounded border border-amber-500/30 bg-amber-500/15 px-2 py-1 font-medium text-amber-300">Comprobante interno</span>
+                          <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 font-medium text-warn">Comprobante interno</span>
                         ) : (
-                          <span className="rounded border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-slate-400">Sin comprobante</span>
+                          <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-fg-muted">Sin comprobante</span>
                         )}
                         {isDuplicate && <span className="ml-1.5 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded px-1 py-0.5">dup</span>}
                       </td>
-                      <td className="p-3 text-slate-200">
+                      <td className="p-3 text-fg">
                         {s.customer?.name ?? '—'}
                       </td>
-                      <td className="p-3 text-slate-400 text-xs">
+                      <td className="p-3 text-xs text-fg-muted">
                         {s.paymentMethod ? (PAYMENT_LABELS[s.paymentMethod] ?? s.paymentMethod) : '—'}
                       </td>
-                      <td className="p-3 text-right text-slate-300">{itemCount}</td>
-                      <td className="p-3 text-right text-slate-300">
+                      <td className="p-3 text-right font-mono tabular-nums text-fg-muted">{itemCount}</td>
+                      <td className="p-3 text-right font-mono tabular-nums text-fg-muted">
                         ${subtotalNum.toFixed(0)}
                       </td>
-                      <td className="p-3 text-right text-amber-400">
+                      <td className="p-3 text-right font-mono tabular-nums text-warn">
                         {Number(s.discount ?? 0) > 0 ? `-$${Number(s.discount).toFixed(0)}` : '—'}
                       </td>
-                      <td className="p-3 text-right text-brand font-medium">
+                      <td className="p-3 text-right font-mono font-medium tabular-nums text-brand">
                         ${Number(s.totalFinal ?? 0).toFixed(0)}
                       </td>
-                      <td className="p-3 text-slate-400 text-xs">
+                      <td className="p-3 text-xs text-fg-muted">
                         {(s as Sale & { user?: { name: string } }).user?.name ?? '—'}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap space-x-2">
@@ -796,7 +796,7 @@ export default function VentasPage() {
                           <button
                             type="button"
                             onClick={(e) => void handleFacturar(s.id, e)}
-                            className="text-emerald-400 hover:underline text-sm"
+                            className="text-sm text-ok hover:underline"
                           >
                             Facturar
                           </button>
@@ -805,7 +805,7 @@ export default function VentasPage() {
                           <button
                             type="button"
                             onClick={(e) => void handleAnular(s.id, e)}
-                            className="text-orange-400 hover:underline text-sm"
+                            className="text-sm text-warn hover:underline"
                           >
                             Anular (NC)
                           </button>
@@ -813,7 +813,7 @@ export default function VentasPage() {
                         <button
                           type="button"
                           onClick={(e) => void handleReprint(s.id, e)}
-                          className="text-cyan-400 hover:underline text-sm"
+                          className="text-sm text-brand hover:underline"
                           title="No vuelve a facturar en ARCA"
                         >
                           Reimprimir
@@ -832,7 +832,7 @@ export default function VentasPage() {
                               e.stopPropagation();
                               setViewSale(s);
                             }}
-                            className="text-emerald-400 hover:underline text-sm"
+                            className="text-sm text-ok hover:underline"
                           >
                             Editar
                           </button>
@@ -841,7 +841,7 @@ export default function VentasPage() {
                           <button
                             type="button"
                             onClick={(e) => void handleDeleteSaleFromRow(s, e)}
-                            className="text-red-400 hover:underline text-sm"
+                            className="text-sm text-crit hover:underline"
                           >
                             Eliminar
                           </button>
@@ -856,7 +856,7 @@ export default function VentasPage() {
         </div>
 
         {!loading && sales.length > 0 && (
-          <div className="px-4 py-2 border-t border-slate-700 flex flex-wrap justify-between gap-2 text-sm text-slate-400">
+          <div className="flex flex-wrap justify-between gap-2 border-t border-hair-soft px-4 py-2 font-mono text-sm tabular-nums text-fg-muted">
             <span>
               {stats && stats.saleCount > sales.length
                 ? `Mostrando ${sales.length} de ${stats.saleCount} venta(s)`
@@ -886,25 +886,25 @@ export default function VentasPage() {
           onClick={() => setViewSale(null)}
         >
           <div
-            className="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-auto"
+            className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-xl border border-hair bg-surface"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-              <h2 className="text-lg font-bold text-white">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-hair-soft bg-surface p-4">
+              <h2 className="text-lg font-bold text-fg">
                 Venta {viewSale.id.slice(-8)} · {new Date(viewSale.createdAt).toLocaleString('es-AR')}
               </h2>
               <button
                 type="button"
                 onClick={() => setViewSale(null)}
-                className="text-slate-400 hover:text-white text-2xl leading-none"
+                className="text-2xl leading-none text-fg-muted hover:text-fg"
               >
                 ×
               </button>
             </div>
             <div className="p-4 space-y-6">
               {viewSale.status !== 'voided' && (
-                <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 space-y-3">
-                <h3 className="text-slate-200 font-medium text-sm">Editar venta</h3>
+                <div className="space-y-3 rounded-xl border border-hair-soft bg-raised p-4">
+                <h3 className="text-sm font-medium text-fg">Editar venta</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="block">
                     <span className="text-xs text-slate-500">Descuento global ($)</span>
@@ -987,7 +987,7 @@ export default function VentasPage() {
 
               <div>
                 <h3 className="text-slate-300 font-medium mb-2">Ítems</h3>
-                <div className="overflow-x-auto rounded-lg border border-slate-700">
+                <div className="overflow-x-auto rounded-xl border border-hair-soft">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-slate-500 border-b border-slate-700 bg-slate-800/50">

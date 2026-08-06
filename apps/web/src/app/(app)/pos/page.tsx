@@ -9,6 +9,7 @@ import {
   paymentNeedsCustomerConfirmStep,
 } from '@/lib/customer-display-sync';
 import { FiscalReceiptModal, printFiscalReceipt } from '@/components/FiscalCheckout';
+import { Search } from 'lucide-react';
 
 type CartItem = {
   productId: string;
@@ -624,11 +625,11 @@ export default function POSPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-slate-950/30">
-      <div className="shrink-0 px-4 py-2 border-b border-slate-800 bg-slate-950/60 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-slate-400 uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-slate-700 overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-amber-600 text-white':'bg-slate-900 text-slate-300')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-emerald-600 text-white':'bg-slate-900 text-slate-300')}>Factura C</button></div><div className="inline-flex rounded-lg border border-slate-700 overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-blue-600 text-white':'bg-slate-900 text-slate-300')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-slate-600 text-white':'bg-slate-900 text-slate-300')}>No imprimir</button></div><button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="ml-auto px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-200">En espera ({pausedList.length})</button></div>
-      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/40 px-4 py-2.5">
+    <div className="flex h-full flex-col bg-app">
+      <div className="shrink-0 px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-fg-muted uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="ml-auto px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div>
+      <div className="flex items-center justify-between border-b border-hair-soft bg-surface px-4 py-2.5">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold leading-tight text-white">POS</h1>
+          <h1 className="text-2xl font-bold leading-tight text-fg">POS</h1>
           {openCashRegisterId ? (
             <span className="text-xs text-emerald-400/90 border border-emerald-700/50 rounded px-2 py-0.5" title="Las ventas (excepto fiado) se suman al cierre de caja">
               Caja abierta
@@ -702,6 +703,8 @@ export default function POSPage() {
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-3">
         <div className="lg:col-span-2 flex flex-col min-h-0">
           <div className="mb-2 flex gap-2">
+            <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-fg-faint" />
             <input
               ref={searchRef}
               type="text"
@@ -709,28 +712,29 @@ export default function POSPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               data-tour="pos-search"
-              className="flex-1 px-4 py-3 text-lg rounded-lg bg-slate-800 border border-slate-600 text-slate-100 placeholder-slate-500 focus-brand"
+              className="w-full rounded-lg border border-hair bg-raised py-3 pl-12 pr-4 text-lg text-fg placeholder:text-fg-faint focus-brand"
               autoFocus
             />
+            </div>
             <button
               type="button"
               onClick={() => setShowManual(true)}
               data-tour="pos-manual"
-              className="px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 whitespace-nowrap"
+              className="whitespace-nowrap rounded-lg border border-hair bg-raised px-4 py-3 text-fg-muted hover:bg-raised2 hover:text-fg"
             >
               Producto manual
             </button>
           </div>
-          <div data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-slate-800 bg-slate-900/60">
-            {loading && <p className="p-2 text-slate-500">Buscando...</p>}
+          <div data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
+            {loading && <p className="p-2 text-fg-faint">Buscando...</p>}
             {!loading && results.length > 0 && (
-              <ul className="divide-y divide-slate-700">
+              <ul className="divide-y divide-hair-soft">
                 {results.map((p, idx) => (
                   <li key={p.id}>
                     <button
                       type="button"
                       onClick={() => addToCart(p)}
-                      className={`w-full text-left px-4 py-3 flex justify-between items-center gap-3 hover:bg-slate-700/50 ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
+                      className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-raised ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
                     >
                       <span className="flex items-center gap-3 min-w-0">
                         {p.imageUrl ? (
@@ -740,19 +744,19 @@ export default function POSPage() {
                           <span className="w-9 h-9 rounded bg-slate-700 shrink-0" />
                         )}
                         <span className="flex flex-col min-w-0">
-                          <span className="text-slate-200 truncate">{p.name}</span>
+                          <span className="truncate font-semibold text-fg">{p.name}</span>
                           {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && (
-                            <span className="text-xs text-violet-400/70">Bulto × {p.unitsPerBoxNum} u. · vendés por unidad</span>
+                            <span className="text-xs text-fg-faint">Bulto × {p.unitsPerBoxNum} u. · vendés por unidad</span>
                           )}
                         </span>
                       </span>
                       <span className="flex flex-col items-end shrink-0 gap-0.5">
                         {p.cost != null && Number(p.cost) > 0 && (
-                          <span className="text-slate-500 text-xs">
+                          <span className="font-mono text-xs tabular-nums text-fg-faint">
                             Costo {formatMoneyArs(Number(p.cost))} c/u
                           </span>
                         )}
-                        <span className="text-brand font-medium">{formatMoneyArs(parseFloat(p.price))} c/u</span>
+                        <span className="font-mono font-semibold tabular-nums text-brand">{formatMoneyArs(parseFloat(p.price))} c/u</span>
                       </span>
                     </button>
                   </li>
@@ -762,14 +766,14 @@ export default function POSPage() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60" data-pos-cart>
-          <div className="flex justify-between border-b border-slate-800 px-4 py-2.5 font-medium text-slate-300">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-hair-soft bg-surface" data-pos-cart>
+          <div className="flex justify-between border-b border-hair-soft px-4 py-2.5 font-medium text-fg-muted">
             <span>Carrito</span>
-            {discountTotal > 0 && <span className="text-amber-400">-${discountTotal.toFixed(0)}</span>}
+            {discountTotal > 0 && <span className="font-mono tabular-nums text-warn">-${discountTotal.toFixed(0)}</span>}
           </div>
           <div className="flex-1 overflow-auto p-2 min-h-[120px]">
             {cart.length === 0 ? (
-              <p className="text-slate-500 text-sm p-4">Agregá productos con la búsqueda, escaneando código o producto manual.</p>
+              <p className="p-4 text-sm text-fg-faint">Agregá productos con la búsqueda, escaneando código o producto manual.</p>
             ) : (
               <ul className="space-y-2">
                 {cart.map((i) => (
@@ -786,20 +790,20 @@ export default function POSPage() {
               </ul>
             )}
           </div>
-          <div className="space-y-2 border-t border-slate-800 p-4">
-            <div className="flex justify-between text-slate-300">
+          <div className="space-y-2 border-t border-hair-soft p-4">
+            <div className="flex justify-between text-fg-muted">
               <span>Subtotal</span>
-              <span>${subtotal.toFixed(0)}</span>
+              <span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span>
             </div>
             {discountTotal > 0 && (
-              <div className="flex justify-between text-amber-400">
+              <div className="flex justify-between text-warn">
                 <span>Descuento (F4)</span>
-                <span>-${discountTotal.toFixed(0)}</span>
+                <span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span>
               </div>
             )}
-            <div className="flex justify-between text-lg font-bold text-slate-100">
+            <div className="flex justify-between text-xl font-bold text-fg">
               <span>Total</span>
-              <span>${total.toFixed(0)}</span>
+              <span className="font-mono text-2xl tabular-nums">${total.toFixed(0)}</span>
             </div>
             {selectedCustomer && (
               <p className="text-amber-400 text-sm">Al fiado: {selectedCustomer.name}</p>
@@ -945,14 +949,14 @@ export default function POSPage() {
 
       {showPayment && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPayment(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-2">¿Cómo pagó el cliente?</h2>
-            <p className="text-slate-400 text-sm mb-4">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-hair bg-surface p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-2 text-lg font-bold text-fg">¿Cómo pagó el cliente?</h2>
+            <p className="mb-4 text-sm text-fg-muted">
               Total a cobrar: ${total.toFixed(0)} · Efectivo/Fiado cierra en un paso · Transferencia, MP o tarjeta: elegí método
               (el cliente ve datos en la pantalla) y después «Confirmar cobro» o Enter
             </p>
             {!openCashRegisterId && (
-              <div className="text-amber-400 text-sm mb-4 border border-amber-700/50 rounded-lg p-3 space-y-2">
+              <div className="mb-4 space-y-2 rounded-lg border border-warn/30 bg-[var(--warn-soft)] p-3 text-sm text-warn">
                 <p>No hay caja abierta. Abrí turno antes de cobrar.</p>
                 <button
                   type="button"
@@ -974,18 +978,18 @@ export default function POSPage() {
                   type="button"
                   disabled={!openCashRegisterId || cobrandoBusy}
                   onClick={() => pickPaymentMethod(pm.id)}
-                  className={`px-4 py-3 rounded-lg bg-slate-700 text-slate-200 hover-brand-primary font-medium text-left flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${
-                    paymentMethodPending === pm.id ? 'ring-2 ring-brand ring-offset-2 ring-offset-slate-900' : ''
+                  className={`flex items-center gap-2 rounded-lg border border-hair bg-raised px-4 py-3 text-left font-medium text-fg hover-brand-primary disabled:cursor-not-allowed disabled:opacity-40 ${
+                    paymentMethodPending === pm.id ? 'ring-2 ring-[color:var(--brand-accent)] ring-offset-2 ring-offset-[color:var(--surface)]' : ''
                   }`}
                 >
-                  <span className="w-6 h-6 rounded bg-slate-600 text-brand font-bold text-sm flex items-center justify-center shrink-0">{idx + 1}</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-raised2 font-mono text-sm font-bold text-brand">{idx + 1}</span>
                   {pm.label}
                 </button>
               ))}
             </div>
             {paymentMethodPending && paymentNeedsCustomerConfirmStep(paymentMethodPending) && (
-              <div className="space-y-2 mb-4 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-3">
-                <p className="text-emerald-300/90 text-sm">
+              <div className="mb-4 space-y-2 rounded-lg border border-ok/30 bg-[var(--ok-soft)] p-3">
+                <p className="text-sm text-ok">
                   Pantalla cliente mostrando datos de pago. Cuando el cliente haya pagado, confirmá acá.
                 </p>
                 <div className="flex gap-2">
@@ -1000,15 +1004,15 @@ export default function POSPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethodPending(null)}
-                    className="px-4 py-3 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 text-sm"
+                    className="rounded-lg border border-hair px-4 py-3 text-sm text-fg-muted hover:bg-raised hover:text-fg"
                   >
                     Cambiar método
                   </button>
                 </div>
-<button type="button" onClick={()=>void savePaused(paymentMethodPending,'awaiting_payment')} className="w-full py-3 rounded-lg border border-amber-600 text-amber-300 font-semibold">Dejar esperando y atender otro</button>
+<button type="button" onClick={()=>void savePaused(paymentMethodPending,'awaiting_payment')} className="w-full rounded-lg border border-warn/40 bg-[var(--warn-soft)] py-3 font-semibold text-warn">Dejar esperando y atender otro</button>
               </div>
             )}
-            <button type="button" onClick={() => setShowPayment(false)} className="w-full py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800">
+            <button type="button" onClick={() => setShowPayment(false)} className="w-full rounded-lg border border-hair py-2 text-fg-muted hover:bg-raised hover:text-fg">
               Cancelar
             </button>
           </div>

@@ -11,6 +11,8 @@ import {
   Receipt,
   Settings,
   ShoppingCart,
+  Moon,
+  Sun,
   Truck,
 } from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
@@ -111,7 +113,7 @@ function activeGroups(pathname: string) {
 
 function applyCssBrandVars(br: Branding | undefined) {
   const root = document.documentElement;
-  const base = br?.accentColor?.trim() || '#0ea5e9';
+  const base = br?.accentColor?.trim() || '#DC2626';
   root.style.setProperty('--brand-accent', base);
   root.style.setProperty('--accent', base);
   for (const { key, cssVar } of OPTIONAL_BRAND_CSS) {
@@ -131,6 +133,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarTitle, setSidebarTitle] = useState('StockRápido');
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => activeGroups(pathname));
   const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   const applyBranding = useCallback(() => {
     api<{ name: string; posConfig?: { branding?: Branding } }>('/business/me')
@@ -197,7 +200,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(openGroups));
   }, [groupsLoaded, openGroups]);
 
-  if (!ready) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando...</div>;
+  useEffect(() => {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'light' : 'dark');
+  }, []);
+
+  if (!ready) return <div className="flex min-h-screen items-center justify-center bg-app text-fg-muted">Cargando...</div>;
 
   const handleLogoutAll = async () => {
     const token = localStorage.getItem('accessToken');
@@ -210,11 +218,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('sr-theme', next);
+    setTheme(next);
+  };
+
   return (
-    <div className="flex h-screen min-h-0 overflow-hidden bg-slate-950 text-slate-200">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
-        <div className="shrink-0 border-b border-slate-800 p-4">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-white">
+    <div className="flex h-screen min-h-0 overflow-hidden bg-app text-fg">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-hair-soft bg-surface">
+        <div className="shrink-0 border-b border-hair-soft p-4">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-fg">
             {brand.logoUrl &&
             (brand.logoUrl.startsWith('data:') ||
               brand.logoUrl.startsWith('http://') ||
@@ -223,7 +238,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <img
                 src={brand.logoUrl}
                 alt=""
-                className="h-9 w-9 shrink-0 rounded-lg object-cover border border-slate-700"
+                className="h-9 w-9 shrink-0 rounded-lg border border-hair object-cover"
               />
             ) : null}
             <span className="truncate">{sidebarTitle}</span>
@@ -241,10 +256,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     'flex items-center gap-3 rounded-lg border-r-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
                     active
                       ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                      : 'text-fg-muted hover:bg-raised hover:text-fg',
                   )}
                 >
-                  <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-current' : 'text-slate-400')} />
+                  <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-current' : 'text-fg-muted')} />
                   <span>{label}</span>
                 </Link>
               );
@@ -262,20 +277,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     aria-expanded={open}
                     onClick={() => setOpenGroups((current) => ({ ...current, [title]: !open }))}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white',
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg',
                       groupActive
                         ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                        : 'text-slate-400',
+                        : 'text-fg-muted',
                     )}
                   >
-                    <Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-slate-400')} />
+                    <Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-fg-muted')} />
                     <span className="min-w-0 flex-1 truncate">{title}</span>
                     <ChevronDown
-                      className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform', open && 'rotate-180')}
+                      className={cn('h-4 w-4 shrink-0 text-fg-faint transition-transform', open && 'rotate-180')}
                     />
                   </button>
                   {open ? (
-                    <div className="ml-5 mt-0.5 space-y-0.5 border-l border-slate-800 pl-3">
+                    <div className="ml-5 mt-0.5 space-y-0.5 border-l border-hair-soft pl-3">
                       {items.map(({ href, label }) => {
                         const active = isActivePath(pathname, href);
                         return (
@@ -286,7 +301,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               'flex items-center rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors',
                               active
                                 ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                                : 'text-fg-muted hover:bg-raised hover:text-fg',
                             )}
                           >
                             {label}
@@ -300,18 +315,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </div>
         </nav>
-        <div className="shrink-0 border-t border-slate-800 p-2">
+        <div className="shrink-0 border-t border-hair-soft p-2">
           <button
             type="button"
             onClick={handleLogoutAll}
-            className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-slate-400 transition-colors hover:bg-red-950/30 hover:text-red-400"
+            className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-[var(--crit-soft)] hover:text-crit"
           >
             Cerrar sesión en todos los dispositivos
           </button>
         </div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 justify-end border-b border-slate-800/80 px-4 py-2">
+        <div className="flex shrink-0 justify-end gap-2 border-b border-hair-soft px-4 py-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Cambiar tema"
+            className="rounded-lg border border-hair px-2.5 py-1.5 text-fg-muted transition-colors hover:bg-raised hover:text-fg"
+          >
+            {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          </button>
           <button
             type="button"
             onClick={() => setShowTutorial(true)}
