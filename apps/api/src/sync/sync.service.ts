@@ -128,6 +128,16 @@ export class SyncService {
   // ---------- Sync de catálogo (público, server-side) ----------
   async runCatalogSync(id: string, businessId: string) {
     const conn = await this.getConnection(id, businessId);
+    if (conn.provider === 'juntosplus') {
+      throw new BadRequestException(
+        'Juntos+ se sincroniza con el runner local (no hay catálogo público en el servidor).',
+      );
+    }
+    if (conn.provider !== 'mondelez') {
+      throw new BadRequestException(
+        `El proveedor ${conn.provider} no ofrece sincronización pública en el servidor. Usá su runner local.`,
+      );
+    }
     const run = await this.prisma.syncRun.create({
       data: { connectionId: id, status: 'running' },
     });

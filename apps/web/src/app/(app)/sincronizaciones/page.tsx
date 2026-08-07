@@ -59,7 +59,19 @@ const PROVIDERS: Record<
     runnerNote:
       'El precio real lo trae el runner Python con tu login de Mi Tienda Mondelez. El catálogo público (botón de arriba) no incluye costos.',
   },
+  juntosplus: {
+    label: 'Juntos+',
+    description: 'Catálogo Coca-Cola FEMSA vía runner local',
+    accent: 'border-crit/40 bg-[var(--crit-soft)]',
+    runnerNote:
+      'Juntos+ requiere login interactivo con OTP. Ejecutá el runner local, iniciá sesión y entrá al catálogo para traer productos y precios B2B.',
+  },
 };
+
+const DEFAULT_CONNECTIONS = [
+  { provider: 'mondelez', name: 'Mondelez', priceMarkup: 40 },
+  { provider: 'juntosplus', name: 'Juntos+', priceMarkup: 40 },
+];
 
 export default function SincronizacionesPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -91,12 +103,14 @@ export default function SincronizacionesPage() {
     setLoading(true);
     try {
       let conns = await api<Connection[]>('/sync/connections');
-      if (!conns.some((x) => x.provider === 'mondelez')) {
-        const created = await api<Connection>('/sync/connections', {
-          method: 'POST',
-          body: JSON.stringify({ provider: 'mondelez', name: 'Mondelez', priceMarkup: 40 }),
-        });
-        conns = [created, ...conns];
+      for (const definition of DEFAULT_CONNECTIONS) {
+        if (!conns.some((item) => item.provider === definition.provider)) {
+          const created = await api<Connection>('/sync/connections', {
+            method: 'POST',
+            body: JSON.stringify(definition),
+          });
+          conns = [...conns, created];
+        }
       }
       setConnections(conns);
       setActiveId((prev) => prev && conns.some((c) => c.id === prev) ? prev : conns[0]?.id ?? null);
@@ -229,9 +243,10 @@ export default function SincronizacionesPage() {
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-raised2 font-mono text-sm text-fg-muted">1</span>
                 <div><h3 className="font-semibold text-fg">Sincronizar catálogo</h3><p className="text-sm text-fg-faint">{conn._count?.items ?? items.length} ítems en catálogo</p></div>
               </div>
-              <button type="button" onClick={() => run('run')} disabled={!!busy || !conn} className="w-full rounded-lg border border-hair bg-raised px-4 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50">
-                {busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
+              <button type="button" onClick={() => run('run')} disabled={!!busy || !conn || conn.provider !== 'mondelez'} className="w-full rounded-lg border border-hair bg-raised px-4 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50">
+                {conn.provider === 'juntosplus' ? 'Usá el runner local' : busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
               </button>
+              {conn.provider === 'juntosplus' && <p className="mt-2 text-xs text-fg-faint">Juntos+ no ofrece un catálogo público para sincronizar desde el servidor.</p>}
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-5">
               <div className="mb-4 flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-raised2 font-mono text-sm text-fg-muted">2</span><div><h3 className="font-semibold text-fg">Traer precio B2B</h3><p className="text-sm text-fg-faint">Precio disponible en <span className="font-mono tabular-nums text-ok">{withCost}</span> de <span className="font-mono tabular-nums">{conn._count?.items ?? items.length}</span></p></div></div>
@@ -251,7 +266,7 @@ export default function SincronizacionesPage() {
             <p className="text-xs text-fg-faint">
               En <code className="text-fg-muted">sync-runner/.env</code> configurá{' '}
               <code className="text-fg-muted">SR_API={apiBase || 'https://stockrapido-api.vercel.app'}</code> (proyecto API en Vercel — ver DEPLOY.md).
-              Ejecutá <code className="text-fg-muted">python mondelez_sync_runner.py</code> en tu PC o agendalo con Task Scheduler.
+              Ejecutá <code className="text-fg-muted">python {conn.provider === 'juntosplus' ? 'juntosplus_sync_runner.py' : 'mondelez_sync_runner.py'}</code> en tu PC o agendalo con Task Scheduler.
             </p>
           </div>
 

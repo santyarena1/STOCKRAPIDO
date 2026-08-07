@@ -38,6 +38,10 @@ const FREQUENCIES: { value: SyncFrequency; label: string }[] = [
   { value: 'every_6h', label: 'Cada 6 horas' },
   { value: 'every_12h', label: 'Cada 12 horas' },
 ];
+const DEFAULT_CONNECTIONS = [
+  { provider: 'mondelez', name: 'Mondelez', priceMarkup: 40 },
+  { provider: 'juntosplus', name: 'Juntos+', priceMarkup: 40 },
+];
 
 export default function ProveedoresConfigPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -54,7 +58,16 @@ export default function ProveedoresConfigPage() {
 
   const loadConnections = useCallback(async () => {
     try {
-      const data = await api<Connection[]>('/sync/connections');
+      let data = await api<Connection[]>('/sync/connections');
+      for (const definition of DEFAULT_CONNECTIONS) {
+        if (!data.some((item) => item.provider === definition.provider)) {
+          const created = await api<Connection>('/sync/connections', {
+            method: 'POST',
+            body: JSON.stringify(definition),
+          });
+          data = [...data, created];
+        }
+      }
       setConnections(data);
       setActiveId((current) => current && data.some((item) => item.id === current) ? current : data[0]?.id ?? null);
     } catch (error) {
