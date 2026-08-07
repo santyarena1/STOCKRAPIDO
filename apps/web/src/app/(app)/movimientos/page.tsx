@@ -77,7 +77,7 @@ export default function MovimientosPage() {
         <Loader />
       ) : (
         <div data-tour="movimientos-table" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-fg-faint bg-raised border-b border-hair-soft">
@@ -123,6 +123,19 @@ export default function MovimientosPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="space-y-3 p-3 md:hidden">
+            {moves.length === 0 ? (
+              <p className="py-6 text-center text-sm text-fg-faint">Sin movimientos registrados</p>
+            ) : moves.map((move) => (
+              <article key={move.id} className="rounded-xl border border-hair-soft bg-surface p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0"><Link href={`/productos/${move.productId}`} className="font-medium text-brand">{move.product?.name ?? '-'}</Link>{move.product?.barcode && <span className="block break-all font-mono text-xs text-fg-faint">{move.product.barcode}</span>}</div>
+                  <span className={`shrink-0 font-mono font-semibold tabular-nums ${move.qty > 0 ? 'text-ok' : move.qty < 0 ? 'text-crit' : 'text-fg-muted'}`}>{move.reason === 'alta_producto' && move.qty === 0 ? '—' : `${move.qty >= 0 ? '+' : ''}${move.qty}`}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Fecha y hora</span><span className="font-mono text-xs text-fg-muted">{new Date(move.createdAt).toLocaleString('es-AR')}</span></div><div><span className="block text-xs text-fg-faint">Motivo</span><span className="text-fg-muted">{reasonLabel(move.reason)}</span></div></div>
+              </article>
+            ))}
           </div>
         </div>
       )}

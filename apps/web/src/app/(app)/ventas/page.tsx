@@ -593,7 +593,7 @@ export default function VentasPage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-fg-muted">
+            <label className="flex w-full items-center justify-between gap-2 text-sm text-fg-muted sm:w-auto sm:justify-start">
               Desde
               <input
                 type="date"
@@ -605,7 +605,7 @@ export default function VentasPage() {
                 className="rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm tabular-nums text-fg"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-fg-muted">
+            <label className="flex w-full items-center justify-between gap-2 text-sm text-fg-muted sm:w-auto sm:justify-start">
               Hasta
               <input
                 type="date"
@@ -620,7 +620,7 @@ export default function VentasPage() {
             <select
               value={filters.customerId}
               onChange={(e) => setFilters((f) => ({ ...f, customerId: e.target.value }))}
-              className="min-w-[180px] rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
+              className="w-full rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg sm:w-auto sm:min-w-[180px]"
               title="Filtrar por cliente (ventas al fiado)"
             >
               <option value="">Todos los clientes</option>
@@ -628,7 +628,7 @@ export default function VentasPage() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            <div className="flex flex-col gap-1 min-w-[220px]">
+            <div className="flex w-full flex-col gap-1 sm:w-auto sm:min-w-[220px]">
               <span className="text-xs text-fg-faint">Producto</span>
               {selectedProduct ? (
                 <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-raised border border-emerald-700/50 text-sm">
@@ -689,7 +689,7 @@ export default function VentasPage() {
             <select
               value={filters.limit}
               onChange={(e) => setFilters((f) => ({ ...f, limit: e.target.value }))}
-              className="rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
+              className="w-full rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg sm:w-auto"
               title="Cantidad máxima de ventas"
             >
               <option value="50">Últimas 50</option>
@@ -700,7 +700,8 @@ export default function VentasPage() {
           </div>
         </div>
 
-        <div data-tour="ventas-table" className="overflow-x-auto">
+        <div data-tour="ventas-table">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint">
               <tr>
@@ -853,6 +854,20 @@ export default function VentasPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="space-y-3 p-3 md:hidden">
+          {loading ? <Loader size="sm" label="Ventas" /> : sales.length === 0 ? <p className="p-6 text-center text-sm text-fg-faint">No hay ventas en el período o con los filtros seleccionados{selectedProduct ? ` (que incluyan "${selectedProduct.name}")` : ''}.</p> : sales.map((sale) => {
+            const itemCount = sale.items?.reduce((sum, item) => sum + (item.qty ?? 0), 0) ?? 0;
+            const isDuplicate = duplicateIds.has(sale.id);
+            const isVoided = sale.status === 'voided';
+            const isAuthorizedFactura = sale.fiscalDocument?.kind === 'FACTURA_C' && sale.fiscalDocument.status === 'AUTHORIZED';
+            return <article key={sale.id} className={`rounded-xl border bg-surface p-3 ${isDuplicate ? 'border-warn/60 bg-[var(--warn-soft)]' : 'border-hair-soft'}`}>
+              <div className="flex items-start justify-between gap-3"><div><p className="font-mono text-xs tabular-nums text-fg-muted">{new Date(sale.createdAt).toLocaleString('es-AR')}</p><p className="mt-1 font-semibold text-fg">{sale.customer?.name ?? 'Sin cliente'}</p></div><div className="flex flex-col items-end gap-1">{isVoided ? <><span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs font-medium text-crit">Anulada</span>{sale.fiscalDocument?.creditNoteNumber != null && <span className="font-mono text-[10px] text-crit">NC {String(sale.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(sale.fiscalDocument.creditNoteNumber).padStart(8, '0')}</span>}</> : isAuthorizedFactura ? <><span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs font-medium text-ok">Factura C</span>{sale.fiscalDocument?.pointOfSale != null && sale.fiscalDocument.receiptNumber != null && <span className="font-mono text-[10px] text-fg-faint">{String(sale.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(sale.fiscalDocument.receiptNumber).padStart(8, '0')}</span>}</> : sale.fiscalDocument?.kind === 'FACTURA_C' ? <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs text-crit">{sale.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}</span> : sale.fiscalDocument?.kind === 'INTERNAL' ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Comprobante interno</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin comprobante</span>}{isDuplicate && <span className="rounded border border-warn/30 bg-[var(--warn-soft)] px-1 text-[10px] text-warn">dup</span>}</div></div>
+              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Forma de pago</span><span className="text-fg-muted">{sale.paymentMethod ? (PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Ítems</span><span className="font-mono text-fg-muted">{itemCount}</span></div><div><span className="block text-xs text-fg-faint">Subtotal</span><span className="font-mono text-fg-muted">${Number(sale.total ?? 0).toFixed(0)}</span></div><div><span className="block text-xs text-fg-faint">Descuento</span><span className="font-mono text-warn">{Number(sale.discount ?? 0) > 0 ? `-$${Number(sale.discount).toFixed(0)}` : '—'}</span></div><div><span className="block text-xs text-fg-faint">Vendedor</span><span className="text-fg-muted">{(sale as Sale & { user?: { name: string } }).user?.name ?? '—'}</span></div><div><span className="block text-xs text-fg-faint">Total</span><span className="font-mono text-lg font-semibold text-brand">${Number(sale.totalFinal ?? 0).toFixed(0)}</span></div></div>
+              <div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3">{!isVoided && (!sale.fiscalDocument || sale.fiscalDocument.kind === 'INTERNAL') && <button type="button" onClick={(event) => void handleFacturar(sale.id, event)} className="text-sm text-ok">Facturar</button>}{!isVoided && isAuthorizedFactura && <button type="button" onClick={(event) => void handleAnular(sale.id, event)} className="text-sm text-warn">Anular (NC)</button>}<button type="button" onClick={(event) => void handleReprint(sale.id, event)} className="text-sm text-brand">Reimprimir</button><button type="button" onClick={() => setViewSale(sale)} className="text-sm text-brand">Detalle</button>{!isVoided && <button type="button" onClick={(event) => { event.stopPropagation(); setViewSale(sale); }} className="text-sm text-ok">Editar</button>}{!isVoided && !isAuthorizedFactura && <button type="button" onClick={(event) => void handleDeleteSaleFromRow(sale, event)} className="text-sm text-crit">Eliminar</button>}</div>
+            </article>;
+          })}
+        </div>
         </div>
 
         {!loading && sales.length > 0 && (

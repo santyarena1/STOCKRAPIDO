@@ -316,8 +316,8 @@ export default function ClientesPage() {
       {loading ? (
         <Loader />
       ) : (
-        <div data-tour="clientes-cobrar" className="overflow-x-auto rounded-xl border border-hair-soft bg-surface">
-          <table className="w-full text-sm">
+        <div data-tour="clientes-cobrar">
+          <div className="hidden overflow-x-auto rounded-xl border border-hair-soft bg-surface md:block"><table className="w-full text-sm">
             <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
@@ -363,7 +363,8 @@ export default function ClientesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
+          <div className="space-y-3 md:hidden">{customers.map((customer) => <article key={customer.id} className="rounded-xl border border-hair-soft bg-surface p-3"><div className="flex items-start justify-between gap-3"><button type="button" onClick={() => openDetail(customer)} className="min-w-0 text-left font-semibold text-fg hover:underline">{customer.name}</button><span className={`shrink-0 font-mono font-semibold tabular-nums ${Number(customer.balance) > 0 ? 'text-warn' : 'text-fg-muted'}`}>${Number(customer.balance).toFixed(0)}</span></div><p className="mt-1 text-sm text-fg-muted">{customer.phone || 'Sin teléfono'}</p><div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3"><button type="button" onClick={() => openDetail(customer)} className="text-sm text-brand">Ver detalle</button>{Number(customer.balance) > 0 && <button type="button" onClick={() => setPaymentFor(customer.id)} className="text-sm text-ok">Registrar pago</button>}</div></article>)}</div>
         </div>
       )}
     </Container>

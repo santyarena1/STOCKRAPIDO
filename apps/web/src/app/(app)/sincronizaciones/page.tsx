@@ -256,7 +256,7 @@ export default function SincronizacionesPage() {
           </div>
 
           <div className="flex flex-wrap items-end gap-4">
-            <div className="flex-1 min-w-[200px]">
+            <div className="w-full sm:min-w-[200px] sm:flex-1">
               <label className="mb-1 block text-xs text-fg-faint">Buscar</label>
               <input
                 value={q}
@@ -276,7 +276,7 @@ export default function SincronizacionesPage() {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint">
                   <tr>
@@ -354,6 +354,16 @@ export default function SincronizacionesPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="space-y-3 p-3 md:hidden">
+              {items.map((product) => (
+                <article key={product.id} className="rounded-xl border border-hair-soft bg-surface p-3">
+                  <div className="flex items-start gap-3">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded bg-white/5 object-contain" /> : <div className="h-10 w-10 shrink-0 rounded bg-raised2" />}<div className="min-w-0 flex-1"><p className="font-medium text-fg">{product.name ?? '—'}</p><p className="text-xs text-fg-faint">{product.brand ?? 'Sin marca'} · {product.category ?? 'Sin categoría'}</p></div>{product.linkedProductId ? <span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Importado</span> : product.costUnit == null ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Falta precio</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin importar</span>}</div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Costo c/u</span><span className="font-mono tabular-nums text-fg-muted">{product.costUnit != null ? formatMoneyArs(product.costUnit) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Venta c/u (+{mk}%)</span><span className="font-mono font-medium tabular-nums text-brand">{product.saleUnit != null ? formatMoneyArs(product.saleUnit) : '—'}</span></div>{showInternal && <div><span className="block text-xs text-fg-faint">Costo bulto</span><span className="font-mono text-fg-muted">{product.costBulk != null ? formatMoneyArs(product.costBulk) : '—'}</span></div>}<div><span className="block text-xs text-fg-faint">U/bulto</span><span className="font-mono text-fg-muted">{product.unitsPerBoxNum ?? product.unitsPerBox ?? '—'}</span></div><div><span className="block text-xs text-fg-faint">EAN</span><span className="break-all font-mono text-fg-muted">{product.ean ?? '—'}</span></div></div>
+                  {product.link && <div className="mt-3 flex justify-end border-t border-hair-soft pt-3"><a href={product.link} target="_blank" rel="noreferrer" className="text-sm text-brand">Abrir producto ↗</a></div>}
+                </article>
+              ))}
+              {items.length === 0 && <p className="p-6 text-center text-sm text-fg-faint">Sin productos. Sincronizá el catálogo o ejecutá el runner con precios B2B.</p>}
             </div>
           </div>
         </>

@@ -104,8 +104,8 @@ export default function UsuariosPage() {
             <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
-                <th className="text-left p-3">Email</th>
-                <th className="text-left p-3">Rol</th>
+                <th className="hidden text-left p-3 sm:table-cell">Email</th>
+                <th className="hidden text-left p-3 sm:table-cell">Rol</th>
                 <th className="text-left p-3">Estado</th>
                 <th className="p-3"></th>
               </tr>
@@ -114,8 +114,8 @@ export default function UsuariosPage() {
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-raised">
                   <td className="p-3 text-fg">{u.name}</td>
-                  <td className="p-3 text-fg-muted">{u.email}</td>
-                  <td className="p-3 text-fg-muted">{u.role}</td>
+                  <td className="hidden p-3 text-fg-muted sm:table-cell">{u.email}</td>
+                  <td className="hidden p-3 text-fg-muted sm:table-cell">{u.role}</td>
                   <td className="p-3">
                     <span className={u.isActive ? 'text-ok' : 'text-crit'}>{u.isActive ? 'Activo' : 'Inactivo'}</span>
                   </td>

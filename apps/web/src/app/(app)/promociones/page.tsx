@@ -544,10 +544,10 @@ export default function PromocionesPage() {
             <thead className="bg-raised text-fg-muted">
               <tr>
                 <th className="text-left p-3">Nombre</th>
-                <th className="text-left p-3">Tipo</th>
+                <th className="hidden text-left p-3 sm:table-cell">Tipo</th>
                 <th className="text-left p-3">Descuento / Oferta</th>
-                <th className="text-left p-3">Código</th>
-                <th className="text-left p-3">Vigencia</th>
+                <th className="hidden text-left p-3 sm:table-cell">Código</th>
+                <th className="hidden text-left p-3 sm:table-cell">Vigencia</th>
                 <th className="text-left p-3">Estado</th>
                 <th className="text-right p-3 font-mono tabular-nums">Acciones</th>
               </tr>
@@ -563,10 +563,10 @@ export default function PromocionesPage() {
                 promos.map((p) => (
                   <tr key={p.id} className="hover:bg-raised">
                     <td className="p-3 text-fg">{p.name}</td>
-                    <td className="p-3 text-fg-muted capitalize">{p.type}</td>
+                    <td className="hidden p-3 text-fg-muted capitalize sm:table-cell">{p.type}</td>
                     <td className="p-3 text-brand font-medium">{formatPromoValue(p)}</td>
-                    <td className="p-3 text-fg-muted font-mono">{p.promoCode || '—'}</td>
-                    <td className="p-3 text-fg-muted text-xs">
+                    <td className="hidden p-3 text-fg-muted font-mono sm:table-cell">{p.promoCode || '—'}</td>
+                    <td className="hidden p-3 text-fg-muted text-xs sm:table-cell">
                       {p.validFrom || p.validTo
                         ? `${p.validFrom ? new Date(p.validFrom).toLocaleDateString('es-AR') : '—'} a ${p.validTo ? new Date(p.validTo).toLocaleDateString('es-AR') : '—'}`
                         : 'Sin límite'}

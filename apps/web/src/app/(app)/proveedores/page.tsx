@@ -93,7 +93,7 @@ export default function ProveedoresPage() {
               <tr>
                 <th className="text-left p-3">Nombre</th>
                 <th className="text-left p-3">Teléfono</th>
-                <th className="text-left p-3">Email</th>
+                <th className="hidden text-left p-3 sm:table-cell">Email</th>
                 <th className="text-right p-3 font-mono tabular-nums">Compras</th>
               </tr>
             </thead>
@@ -102,7 +102,7 @@ export default function ProveedoresPage() {
                 <tr key={s.id} className="hover:bg-raised">
                   <td className="p-3 text-fg">{s.name}</td>
                   <td className="p-3 text-fg-muted">{s.phone || '-'}</td>
-                  <td className="p-3 text-fg-muted">{s.email || '-'}</td>
+                  <td className="hidden p-3 text-fg-muted sm:table-cell">{s.email || '-'}</td>
                   <td className="p-3 text-right text-fg-muted font-mono tabular-nums">{s._count?.purchases ?? 0}</td>
                 </tr>
               ))}

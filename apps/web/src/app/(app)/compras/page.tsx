@@ -496,10 +496,10 @@ export default function ComprasPage() {
           <table className="w-full text-sm">
             <thead className="bg-raised text-fg-muted">
               <tr>
-                <th className="text-left p-3" title="Fecha y hora en que se registró la compra">Fecha</th>
+                <th className="hidden text-left p-3 sm:table-cell" title="Fecha y hora en que se registró la compra">Fecha</th>
                 <th className="text-left p-3" title="Proveedor del cual se compró">Proveedor</th>
                 <th className="text-right p-3 font-mono tabular-nums" title="Monto total de la compra">Total</th>
-                <th className="text-left p-3" title="Resumen de productos y cantidades">Detalle</th>
+                <th className="hidden text-left p-3 sm:table-cell" title="Resumen de productos y cantidades">Detalle</th>
                 <th className="text-right p-3 font-mono tabular-nums">Acciones</th>
               </tr>
             </thead>
@@ -513,14 +513,14 @@ export default function ComprasPage() {
               ) : (
                 purchases.map((p) => (
                   <tr key={p.id} className="hover:bg-raised">
-                    <td className="p-3 text-fg-muted" title="Fecha de la compra">
+                    <td className="hidden p-3 text-fg-muted sm:table-cell" title="Fecha de la compra">
                       {new Date(p.createdAt).toLocaleString('es-AR')}
                     </td>
                     <td className="p-3 text-fg">{p.supplier.name}</td>
                     <td className="p-3 text-right text-fg font-medium font-mono tabular-nums">
                       ${Number(p.total).toFixed(0)}
                     </td>
-                    <td className="p-3 text-fg-muted">
+                    <td className="hidden p-3 text-fg-muted sm:table-cell">
                       <ul className="space-y-0.5">
                         {p.items.map((it, j) => (
                           <li key={j}>
