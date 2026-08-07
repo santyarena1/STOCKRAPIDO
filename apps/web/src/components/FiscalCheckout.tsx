@@ -2,44 +2,104 @@
 import QRCode from 'qrcode';
 import { api } from '@/lib/api';
 
-export async function printFiscalReceipt(receipt:any, existingPopup?: Window | null) {
-  const popup = existingPopup || window.open('', '_blank', 'width=420,height=720');
+export async function printFiscalReceipt(receipt: any, existingPopup?: Window | null) {
+  const popup = existingPopup || window.open('', '_blank', 'width=380,height=720');
   if (!popup) { alert('El navegador bloqueó la ventana de impresión.'); return; }
+
   const doc = receipt.fiscalDocument;
-  const qr = doc?.qrPayload ? await QRCode.toDataURL(doc.qrPayload, { width: 220, margin: 1 }) : '';
-  const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
   const fiscal = doc?.kind === 'FACTURA_C' && doc?.status === 'AUTHORIZED';
-  const template = receipt.ticket?.template === 'moderno' ? 'moderno' : 'clasico';
-  const fantasyName = receipt.ticket?.fantasyName || receipt.business?.name || 'Comercio';
-  const legalName = receipt.ticket?.legalName || receipt.business?.name || fantasyName;
-  const logoUrl = receipt.ticket?.logoUrl;
-  const rows = receipt.items.map((item: any) => template === 'moderno'
-    ? `<tr><td class="qty">${esc(item.qty)}</td><td class="detail">${esc(item.name)}</td><td class="amount">$${Number(item.subtotal).toFixed(2)}</td></tr>`
-    : `<tr><td colspan="2">${esc(item.qty)} x ${esc(item.name)}</td><td class="amount">$${Number(item.subtotal).toFixed(2)}</td></tr>`
-  ).join('');
-  const logo = logoUrl ? `<img class="logo" src="${esc(logoUrl)}" alt=""/>` : '';
-  const legalDetails = [
-    legalName,
-    receipt.business?.cuit ? `CUIT ${receipt.business.cuit}` : '',
-    receipt.business?.address,
-    receipt.business?.grossIncomeNumber ? `IIBB ${receipt.business.grossIncomeNumber}` : '',
-    receipt.business?.activityStartDate
-      ? `Inicio de actividad ${new Date(receipt.business.activityStartDate).toLocaleDateString('es-AR')}`
-      : '',
-  ].filter(Boolean).map(esc).join('<br>');
-  const header = `<header class="ticket-header">${logo}<div class="fantasy">${esc(fantasyName)}</div><div class="legal">${legalDetails}</div></header>`;
-  const fiscalBlock = fiscal
-    ? `<h1>FACTURA C</h1><p>PV ${String(doc.pointOfSale).padStart(5, '0')} · Nº ${String(doc.receiptNumber).padStart(8, '0')}</p>`
-    : '<p class="internal">COMPROBANTE INTERNO<br>NO VÁLIDO COMO FACTURA</p>';
+  const qr = fiscal && doc?.qrPayload ? await QRCode.toDataURL(doc.qrPayload, { width: 200, margin: 0 }) : '';
+
+  const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
+  const money = (v: unknown) => '$' + Number(v ?? 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const t = receipt.ticket || {};
+  const template = t.template === 'moderno' ? 'moderno' : 'clasico';
+  const fantasy = t.fantasyName || receipt.business?.name || 'Comercio';
+  const legalName = t.legalName || receipt.business?.name || fantasy;
+  const logoUrl = t.logoUrl;
+
+  // Emisor: compacto y discreto (informativo / legal), NO protagonista.
+  const emisor = [
+    esc(legalName),
+    receipt.business?.cuit ? `CUIT ${esc(receipt.business.cuit)}` : '',
+    esc(receipt.business?.address),
+    receipt.business?.grossIncomeNumber ? `IIBB ${esc(receipt.business.grossIncomeNumber)}` : '',
+    receipt.business?.activityStartDate ? `Inicio act. ${new Date(receipt.business.activityStartDate).toLocaleDateString('es-AR')}` : '',
+  ].filter(Boolean).join(' · ');
+
+  const rows = receipt.items.map((i: any) => {
+    const unit = Number(i.unitPrice ?? (Number(i.subtotal) / Math.max(1, Number(i.qty))));
+    return `<tr><td class="q">${esc(i.qty)}</td><td class="n">${esc(i.name)}<span class="u">${esc(i.qty)} × ${money(unit)}</span></td><td class="p">${money(i.subtotal)}</td></tr>`;
+  }).join('');
+
+  const logo = logoUrl && (logoUrl.startsWith('data:') || logoUrl.startsWith('http'))
+    ? `<img class="logo" src="${esc(logoUrl)}" alt=""/>` : '';
+
+  const docLine = fiscal
+    ? `<div class="doc-fiscal"><b>FACTURA C</b><span>Pto. Vta. ${String(doc.pointOfSale).padStart(5, '0')} · Nº ${String(doc.receiptNumber).padStart(8, '0')}</span></div>`
+    : `<div class="doc-internal">Comprobante no fiscal — no válido como factura</div>`;
+
   const fiscalFooter = fiscal
-    ? `<p>CAE: ${esc(doc.cae)}</p><p>Vto. CAE: ${new Date(doc.caeExpiresAt).toLocaleDateString('es-AR')}</p><div class="qr-frame"><img class="qr" src="${qr}" alt="QR ARCA"/></div>`
+    ? `<div class="sep"></div><div class="cae">CAE ${esc(doc.cae)} · Vto. ${new Date(doc.caeExpiresAt).toLocaleDateString('es-AR')}</div>${qr ? `<img class="qr" src="${qr}" alt=""/>` : ''}`
     : '';
-  popup.document.write(`<!doctype html><html><head><title>Comprobante</title><style>
-    @page{size:58mm auto;margin:2mm}*{box-sizing:border-box}body{width:54mm;margin:0;color:#000;font-size:11px}body.clasico{font-family:monospace}body.moderno{font-family:Arial,Helvetica,sans-serif}h1,h2,p{text-align:center;margin:4px 0}.ticket-header{text-align:center}.logo{display:block;max-width:42mm;max-height:28mm;width:auto;height:auto;object-fit:contain;margin:0 auto 3mm}.fantasy{font-size:21px;font-weight:900;line-height:1.05;margin:2px 0 5px}.legal{font-size:8px;font-weight:400;line-height:1.2;color:#444;margin:0 auto;max-width:49mm}.line{border-top:1px dashed #000;margin:6px 0}.internal{font-size:15px;font-weight:bold;border:2px solid #000;padding:6px}table{width:100%;border-collapse:collapse}td{padding:3px 0;border-bottom:1px dashed #777}.qty{width:9mm;text-align:center}.detail{text-align:left}.amount{width:17mm;text-align:right;white-space:nowrap}.total{font-size:15px;font-weight:bold;text-align:right;margin:8px 0}.qr{display:block;width:36mm;height:36mm;margin:auto}.qr-frame{width:max-content;margin:5px auto}.moderno .logo{max-width:44mm;max-height:32mm;margin-bottom:4mm}.moderno .fantasy{font-size:23px;border:2px solid #000;border-width:2px 0;padding:5px 2px;margin-bottom:4px;text-transform:uppercase}.moderno .legal{font-size:8px;line-height:1.15;color:#555}.moderno .line{border-top-style:solid}.moderno table{margin-top:5px}.moderno td{border-bottom:1px solid #bbb;padding:4px 1px}.moderno .total{border:2px solid #000;padding:6px;text-align:center;font-size:17px}.moderno .qr-frame{border:1px solid #000;padding:2mm}.moderno .qr{width:34mm;height:34mm}
-  </style></head><body class="${template}">${header}<div class="line"></div>${fiscalBlock}<p>${new Date(receipt.createdAt).toLocaleString('es-AR')}</p><table>${rows}</table>${Number(receipt.discount) > 0 ? `<p>Descuento: -$${Number(receipt.discount).toFixed(2)}</p>` : ''}<p class="total">TOTAL $${Number(receipt.totalFinal).toFixed(2)}</p><p>Pago: ${esc(receipt.paymentMethod)}</p>${fiscalFooter}<p>Gracias por su compra</p><script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script></body></html>`);
+
+  const discount = Number(receipt.discount) > 0
+    ? `<div class="line"><span>Descuento</span><span>-${money(receipt.discount)}</span></div>` : '';
+
+  const css = `
+    @page{size:58mm auto;margin:0}
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{background:#fff}
+    body{width:54mm;margin:0 auto;color:#000;font-size:11px;line-height:1.3;padding:3mm 2mm 6mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:${template === 'moderno' ? "'Helvetica Neue',Arial,sans-serif" : "'Courier New',ui-monospace,monospace"}}
+    .logo{display:block;margin:0 auto 2mm;max-width:30mm;max-height:18mm;filter:grayscale(1) contrast(1.15)}
+    .fantasy{text-align:center;font-weight:800;font-size:16px;letter-spacing:.5px;line-height:1.1;text-transform:uppercase}
+    .emisor{text-align:center;font-size:7.5px;color:#444;line-height:1.25;margin:1.5mm 1mm 0;font-family:'Helvetica Neue',Arial,sans-serif}
+    .sep{border-top:1px ${template === 'moderno' ? 'solid #000' : 'dashed #000'};margin:2mm 0}
+    .doc-internal{text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+    .doc-fiscal{text-align:center}
+    .doc-fiscal b{display:block;font-size:15px;font-weight:800;letter-spacing:1px}
+    .doc-fiscal span{font-size:9.5px}
+    .meta{text-align:center;font-size:9px;color:#333;margin-top:1mm}
+    table{width:100%;border-collapse:collapse}
+    td{vertical-align:top;padding:.6mm 0}
+    td.q{width:6mm;font-weight:700}
+    td.n{padding:.6mm 1.5mm}
+    td.n .u{display:block;font-size:8px;color:#555}
+    td.p{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .line{display:flex;justify-content:space-between;font-size:10px;margin:.5mm 0}
+    .total{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:15px;margin:1mm 0}
+    .total .amt{font-variant-numeric:tabular-nums}
+    .pay{text-align:center;font-size:10px;margin-top:1mm}
+    .cae{text-align:center;font-size:8px;color:#333;line-height:1.3}
+    .qr{display:block;width:26mm;height:26mm;margin:1.5mm auto 0}
+    .thanks{text-align:center;font-size:10.5px;margin-top:3mm;font-weight:600}
+  `;
+
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ticket</title><style>${css}</style></head><body>${logo}<div class="fantasy">${esc(fantasy)}</div>${emisor ? `<div class="emisor">${emisor}</div>` : ''}<div class="sep"></div>${docLine}<div class="meta">${new Date(receipt.createdAt).toLocaleString('es-AR')}</div><div class="sep"></div><table>${rows}</table><div class="sep"></div>${discount}<div class="total"><span>TOTAL</span><span class="amt">${money(receipt.totalFinal)}</span></div><div class="pay">Pago: ${esc(receipt.paymentMethod)}</div>${fiscalFooter}<div class="thanks">¡Gracias por su compra!</div><script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script></body></html>`);
   popup.document.close();
 }
-export function FiscalReceiptModal({ receipt, onClose, onRefresh }: { receipt:any; onClose:()=>void; onRefresh:(r:any)=>void }) {
- const doc=receipt.fiscalDocument; const retry=async()=>{await api(`/fiscal/sales/${receipt.id}/retry`,{method:'POST'});onRefresh(await api(`/fiscal/sales/${receipt.id}/receipt`));};
- return <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70]"><div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4"><h2 className="text-xl font-bold text-white mb-2">Venta registrada</h2>{doc?.kind==='INTERNAL'?<div className="rounded-lg border border-slate-600 bg-slate-800 p-4 mb-4"><p className="font-bold text-slate-200">COMPROBANTE INTERNO</p><p className="text-sm text-amber-400">No válido como factura</p></div>:doc?.status==='AUTHORIZED'?<div className="rounded-lg border border-emerald-700 bg-emerald-950/20 p-4 mb-4"><p className="font-bold text-emerald-300">Factura C autorizada</p><p className="text-sm text-slate-300">Nº {String(doc.pointOfSale).padStart(5,'0')}-{String(doc.receiptNumber).padStart(8,'0')} · CAE {doc.cae}</p></div>:<div className="rounded-lg border border-red-700 bg-red-950/20 p-4 mb-4"><p className="font-bold text-red-300">La venta se guardó, pero ARCA no autorizó</p><p className="text-sm text-red-200 mt-1">{doc?.errorMessage}</p><button onClick={()=>void retry()} className="mt-3 px-3 py-2 rounded bg-red-700 text-white text-sm">Reintentar ARCA</button></div>}<p className="text-2xl font-bold text-right text-white mb-4">Total ${Number(receipt.totalFinal).toFixed(2)}</p><div className="grid grid-cols-2 gap-2"><button onClick={()=>{ onClose(); void printFiscalReceipt(receipt); }} className="py-3 rounded-lg btn-brand font-bold">Imprimir</button><button onClick={onClose} className="py-3 rounded-lg bg-slate-700 text-white font-bold">No imprimir</button></div></div></div>;
+
+export function FiscalReceiptModal({ receipt, onClose, onRefresh }: { receipt: any; onClose: () => void; onRefresh: (r: any) => void }) {
+  const doc = receipt.fiscalDocument;
+  const retry = async () => { await api(`/fiscal/sales/${receipt.id}/retry`, { method: 'POST' }); onRefresh(await api(`/fiscal/sales/${receipt.id}/receipt`)); };
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70]">
+      <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4">
+        <h2 className="text-xl font-bold text-fg mb-2">Venta registrada</h2>
+        {doc?.kind === 'INTERNAL' ? (
+          <div className="rounded-lg border border-hair bg-raised p-4 mb-4"><p className="font-bold text-fg">Comprobante interno</p><p className="text-sm text-warn">No válido como factura</p></div>
+        ) : doc?.status === 'AUTHORIZED' ? (
+          <div className="rounded-lg border border-[color:var(--ok)] bg-ok-soft p-4 mb-4"><p className="font-bold text-ok">Factura C autorizada</p><p className="text-sm text-fg-muted">Nº {String(doc.pointOfSale).padStart(5, '0')}-{String(doc.receiptNumber).padStart(8, '0')} · CAE {doc.cae}</p></div>
+        ) : (
+          <div className="rounded-lg border border-[color:var(--crit)] bg-crit-soft p-4 mb-4"><p className="font-bold text-crit">La venta se guardó, pero ARCA no autorizó</p><p className="text-sm text-crit mt-1">{doc?.errorMessage}</p><button onClick={() => void retry()} className="mt-3 px-3 py-2 rounded bg-crit text-white text-sm">Reintentar ARCA</button></div>
+        )}
+        <p className="text-2xl font-bold text-right text-fg mb-4">Total {'$'}{Number(receipt.totalFinal).toFixed(2)}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => { onClose(); void printFiscalReceipt(receipt); }} className="py-3 rounded-lg btn-brand font-bold">Imprimir</button>
+          <button onClick={onClose} className="py-3 rounded-lg bg-raised2 border border-hair text-fg font-bold">No imprimir</button>
+        </div>
+      </div>
+    </div>
+  );
 }
