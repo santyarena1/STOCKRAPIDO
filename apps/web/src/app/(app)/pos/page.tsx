@@ -10,7 +10,7 @@ import {
   paymentNeedsCustomerConfirmStep,
 } from '@/lib/customer-display-sync';
 import { FiscalReceiptModal, printFiscalReceipt } from '@/components/FiscalCheckout';
-import { Search } from 'lucide-react';
+import { Search, ShoppingCart } from 'lucide-react';
 import { Loader } from '@/components/ui/Loader';
 
 type CartItem = {
@@ -164,6 +164,7 @@ export default function POSPage() {
   const [showSeller, setShowSeller] = useState(false);
   const [showPaused, setShowPaused] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
   /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
   const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'>('internal');
@@ -310,6 +311,15 @@ export default function POSPage() {
 
   const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
   const total = Math.max(0, subtotal - discountTotal);
+  const openPayment = () => {
+    if (cart.length === 0) return;
+    if (!openCashRegisterId) {
+      pendingPaymentAfterOpenRef.current = true;
+      setShowOpenCaja(true);
+      return;
+    }
+    setShowPayment(true);
+  };
 
   const fetchPaused = useCallback(async () => {
     const token = getToken();
@@ -463,7 +473,7 @@ export default function POSPage() {
       // No aplicar atajos si el foco está en el carrito (evitar acoplamiento con inputs de cantidad/precio)
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest?.('[data-pos-cart]')) return;
-      if (showShortcuts || showDiscount || showManual || showQuickProduct || showSeller || showPaused || showPayment || showCustomer || showOpenCaja) {
+      if (showShortcuts || showDiscount || showManual || showQuickProduct || showSeller || showPaused || showPayment || showCustomer || showOpenCaja || showMobileCart) {
         if (e.key === 'Escape') {
           setShowShortcuts(false);
           setShowDiscount(false);
@@ -474,6 +484,7 @@ export default function POSPage() {
           setShowPayment(false);
           setShowCustomer(false);
           setShowOpenCaja(false);
+          setShowMobileCart(false);
           e.preventDefault();
         }
         if (
@@ -574,6 +585,7 @@ export default function POSPage() {
     showPayment,
     showCustomer,
     showOpenCaja,
+    showMobileCart,
     results,
     selectedResultIndex,
     cart.length,
@@ -774,7 +786,7 @@ export default function POSPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-3 sm:p-4 lg:grid-cols-3 lg:overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-3 pb-24 sm:p-4 sm:pb-24 lg:grid-cols-3 lg:overflow-hidden lg:pb-4">
         <div className="lg:col-span-2 flex flex-col min-h-0">
           <div className="mb-2 flex flex-wrap gap-2 sm:flex-nowrap">
             <div className="relative flex-1">
@@ -843,7 +855,7 @@ export default function POSPage() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-hair-soft bg-surface" data-pos-cart>
+        <div className="hidden min-h-0 flex-col overflow-hidden rounded-xl border border-hair-soft bg-surface lg:flex" data-pos-cart>
           <div className="flex justify-between border-b border-hair-soft px-4 py-2.5 font-medium text-fg-muted">
             <span>Carrito</span>
             {discountTotal > 0 && <span className="font-mono tabular-nums text-warn">-${discountTotal.toFixed(0)}</span>}
@@ -904,15 +916,7 @@ export default function POSPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (cart.length === 0) return;
-                  if (!openCashRegisterId) {
-                    pendingPaymentAfterOpenRef.current = true;
-                    setShowOpenCaja(true);
-                    return;
-                  }
-                  setShowPayment(true);
-                }}
+                onClick={openPayment}
                 disabled={cart.length === 0}
                 data-tour="pos-cobrar"
                 className="flex-1 py-3 rounded-lg bg-green-600 text-fg font-bold hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -923,6 +927,14 @@ export default function POSPage() {
           </div>
         </div>
       </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-hair-soft bg-surface px-3 py-2 shadow-2xl lg:hidden">
+        <button type="button" onClick={() => setShowMobileCart(true)} aria-label="Abrir carrito" className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-hair bg-raised text-fg"><ShoppingCart className="h-5 w-5" />{cart.length > 0 && <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--brand-accent)] px-1 font-mono text-[10px] font-bold text-white">{cart.reduce((sum, item) => sum + item.qty, 0)}</span>}</button>
+        <div className="min-w-0 flex-1"><span className="block text-[10px] uppercase tracking-wide text-fg-faint">Total</span><strong className="block truncate font-mono text-xl tabular-nums text-fg">${total.toFixed(0)}</strong></div>
+        <button type="button" onClick={openPayment} disabled={cart.length === 0} className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-50">Cobrar</button>
+      </div>
+
+      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div>{selectedCustomer && <p className="text-sm text-warn">Al fiado: {selectedCustomer.name}</p>}<div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => { setShowMobileCart(false); setShowCustomer(true); }} className={`rounded-lg py-3 font-medium ${selectedCustomer ? 'bg-amber-600 text-white' : 'bg-raised2 text-fg'}`}>{selectedCustomer ? `Fiado: ${selectedCustomer.name}` : 'Vender al fiado'}</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
 
       {showOpenCaja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>

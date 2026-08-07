@@ -167,7 +167,7 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle="Tu operación diaria, ventas e inventario en un solo lugar."
         className="mb-6"
-        actions={<div className="flex items-center gap-2">
+        actions={<div className="hidden items-center gap-2 lg:flex">
           {isEditing && (
             <button
               type="button"
@@ -228,9 +228,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Grid editable */}
-      <div className="react-grid-layout-wrapper max-w-full overflow-x-auto overscroll-x-contain [&_.react-grid-item]:overflow-visible [&_.react-grid-item>div]:h-full [&_.react-grid-item>div]:min-h-0">
+      <div className="react-grid-layout-wrapper hidden max-w-full [&_.react-grid-item]:overflow-visible [&_.react-grid-item>div]:h-full [&_.react-grid-item>div]:min-h-0 lg:block">
         <ResponsiveGrid
-          className="layout min-w-[900px] lg:min-w-0"
+          className="layout"
           layouts={{ lg: layout }}
           breakpoints={{ lg: 0 }}
           cols={{ lg: 12 }}
@@ -372,6 +372,21 @@ export default function DashboardPage() {
           </ul>
         </div>
       </ResponsiveGrid>
+      </div>
+
+      <div className="space-y-3 lg:hidden">
+        {[
+          { title: `Ventas por día · ${currentMonth}`, data: salesByDay, label: 'Ventas', color: 'var(--brand-accent)', empty: 'Sin ventas este mes' },
+          { title: `Compras por día · ${currentMonth}`, data: purchasesByDay, label: 'Compras', color: 'var(--warn)', empty: 'Sin compras este mes' },
+          { title: `Gastos por día · ${currentMonth}`, data: expensesByDay, label: 'Gastos', color: 'var(--crit)', empty: 'Sin gastos este mes' },
+        ].map((widget) => <section key={widget.label} className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className="mb-3 font-semibold text-fg">{widget.title}</h3><div className="h-40 w-full">{widget.data.some((item) => item.total > 0) ? <ResponsiveContainer width="100%" height="100%"><BarChart data={widget.data} margin={chartDefaults.margin}><CartesianGrid strokeDasharray="3 3" stroke="var(--hair-soft)" /><XAxis dataKey="day" tick={chartDefaults.tickStyle} tickLine={false} /><YAxis tick={chartDefaults.tickStyle} tickLine={false} tickFormatter={(value) => `$${value}`} /><Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, widget.label]} labelFormatter={(label) => `Día ${label}`} /><Bar dataKey="total" fill={widget.color} radius={[4, 4, 0, 0]} maxBarSize={24} /></BarChart></ResponsiveContainer> : <p className="flex h-full items-center justify-center text-sm text-fg-faint">{widget.empty}</p>}</div></section>)}
+        <section className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className="mb-3 font-semibold text-fg">Resumen del mes</h3><div className="space-y-2"><div className="flex justify-between rounded-lg bg-raised2 px-3 py-2"><span className="text-fg-muted">Ventas</span><span className="font-mono font-bold text-fg">${salesMonth?.total?.toFixed(0) ?? 0}</span></div><div className="flex justify-between rounded-lg bg-raised2 px-3 py-2"><span className="text-fg-muted">Cant. ventas</span><span className="font-mono font-bold text-fg">{salesMonth?.count ?? 0}</span></div><div className="flex justify-between rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-3 py-2"><span className="text-ok">Ganancia</span><span className="font-mono font-bold text-ok">${marginMonth?.margin?.toFixed(0) ?? 0}</span></div></div></section>
+        {[
+          { title: 'Más vendidos', items: topSold, tone: 'text-brand', value: (item: TopProduct) => `${item.qty} un.` },
+          { title: 'Más ganancia', items: topProfit, tone: 'text-ok', value: (item: TopProduct) => `$${item.profit?.toFixed(0) ?? 0}` },
+          { title: 'Menos vendidos', items: leastSold, tone: 'text-warn', value: (item: TopProduct) => `${item.qty} un.` },
+        ].map((widget) => <section key={widget.title} className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className={`mb-3 font-semibold ${widget.tone}`}>{widget.title}</h3><ul className="space-y-2 text-sm">{widget.items.length === 0 ? <li className="text-fg-faint">Sin datos</li> : widget.items.map((item, index) => <li key={index} className="flex justify-between gap-3 border-b border-hair-soft pb-2 last:border-0 last:pb-0"><span className="min-w-0 truncate text-fg-muted">{item.name}</span><span className={`shrink-0 font-mono ${widget.tone}`}>{widget.value(item)}</span></li>)}</ul></section>)}
+        <section className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className="mb-3 font-semibold text-crit">Próximos a vencer</h3><ul className="space-y-2 text-sm">{topExpiringSoon.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topExpiringSoon.map((item, index) => <li key={index} className="border-b border-hair-soft pb-2 last:border-0 last:pb-0"><div className="flex justify-between gap-3"><span className="min-w-0 truncate text-fg-muted">{item.name}</span><span className="shrink-0 font-mono text-crit">{item.qty} un.</span></div><p className="mt-0.5 font-mono text-xs text-fg-faint">Vence: {formatDate(item.nextExpiry)}</p></li>)}</ul></section>
       </div>
 
       {/* Caja y links */}
