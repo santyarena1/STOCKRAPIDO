@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+export type ReportPeriod = 'today' | 'week' | 'month' | 'year';
+
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
-  private getDateRange(period: 'today' | 'week' | 'month') {
+  /** Conserva los rangos históricos de los endpoints existentes. */
+  private getLegacyDateRange(period: 'today' | 'week' | 'month') {
     const now = new Date();
     const from = new Date(now);
     if (period === 'today') {
@@ -20,8 +23,45 @@ export class ReportsService {
     return { from, to: now };
   }
 
+  private getDateRange(period: ReportPeriod, explicitFrom?: Date, explicitTo?: Date) {
+    if (explicitFrom || explicitTo) {
+      return {
+        from: explicitFrom ?? new Date(0),
+        to: explicitTo ?? new Date(),
+      };
+    }
+    const now = new Date();
+    const argentinaNow = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    let year = argentinaNow.getUTCFullYear();
+    let month = argentinaNow.getUTCMonth();
+    let day = argentinaNow.getUTCDate();
+    if (period === 'today') {
+      // El offset fijo -03:00 es válido para Argentina (sin DST).
+    } else if (period === 'week') {
+      const start = new Date(Date.UTC(year, month, day - 6));
+      year = start.getUTCFullYear();
+      month = start.getUTCMonth();
+      day = start.getUTCDate();
+    } else if (period === 'month') {
+      day = 1;
+    } else {
+      month = 0;
+      day = 1;
+    }
+    const from = new Date(Date.UTC(year, month, day, 3, 0, 0, 0));
+    return { from, to: now };
+  }
+
+  private argentinaHour(date: Date) {
+    return new Date(date.getTime() - 3 * 60 * 60 * 1000).getUTCHours();
+  }
+
+  private argentinaWeekday(date: Date) {
+    return new Date(date.getTime() - 3 * 60 * 60 * 1000).getUTCDay();
+  }
+
   async salesSummary(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getDateRange(period);
+    const { from, to } = this.getLegacyDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -32,7 +72,7 @@ export class ReportsService {
   }
 
   async topProducts(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getDateRange(period);
+    const { from, to } = this.getLegacyDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -58,7 +98,7 @@ export class ReportsService {
    * El costo sale del producto; ítems manuales sin producto cuentan costo 0.
    */
   async marginEstimate(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getDateRange(period);
+    const { from, to } = this.getLegacyDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -85,7 +125,7 @@ export class ReportsService {
 
   /** Ganancia = Ventas - Compras - Gastos (del período). */
   async netProfit(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getDateRange(period);
+    const { from, to } = this.getLegacyDateRange(period);
     const [sales, purchases, registers] = await Promise.all([
       this.prisma.sale.findMany({
         where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
@@ -386,7 +426,7 @@ export class ReportsService {
 
   /** Top productos por ganancia bruta (ingreso neto de línea − costo × cantidad; mismo criterio que /reports/margin). */
   async topProductsByProfit(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getDateRange(period);
+    const { from, to } = this.getLegacyDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -418,7 +458,7 @@ export class ReportsService {
 
   /** Productos menos vendidos en el período (los que tienen ventas pero menor cantidad). */
   async leastSoldProducts(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getDateRange(period);
+    const { from, to } = this.getLegacyDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -518,6 +558,363 @@ export class ReportsService {
       const v = byDay.get(day) ?? { total: 0, count: 0 };
       return { day, ...v };
     });
+  }
+
+  async salesByHour(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: { createdAt: true, totalFinal: true },
+    });
+    const rows = Array.from({ length: 24 }, (_, hour) => ({ hour, total: 0, count: 0 }));
+    for (const sale of sales) {
+      const row = rows[this.argentinaHour(sale.createdAt)];
+      row.total += Number(sale.totalFinal);
+      row.count += 1;
+    }
+    return rows;
+  }
+
+  async salesByWeekday(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: { createdAt: true, totalFinal: true },
+    });
+    const rows = Array.from({ length: 7 }, (_, weekday) => ({ weekday, total: 0, count: 0 }));
+    for (const sale of sales) {
+      const row = rows[this.argentinaWeekday(sale.createdAt)];
+      row.total += Number(sale.totalFinal);
+      row.count += 1;
+    }
+    return rows;
+  }
+
+  async salesByPayment(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: { paymentMethod: true, totalFinal: true },
+    });
+    const grouped = new Map<string, { paymentMethod: string; total: number; count: number }>();
+    for (const sale of sales) {
+      const paymentMethod = sale.paymentMethod?.trim() || 'sin_metodo';
+      const row = grouped.get(paymentMethod) ?? { paymentMethod, total: 0, count: 0 };
+      row.total += Number(sale.totalFinal);
+      row.count += 1;
+      grouped.set(paymentMethod, row);
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total);
+  }
+
+  async salesByUser(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: { userId: true, totalFinal: true, user: { select: { name: true } } },
+    });
+    const grouped = new Map<string, { userId: string; userName: string; total: number; count: number }>();
+    for (const sale of sales) {
+      const row = grouped.get(sale.userId) ?? {
+        userId: sale.userId,
+        userName: sale.user.name,
+        total: 0,
+        count: 0,
+      };
+      row.total += Number(sale.totalFinal);
+      row.count += 1;
+      grouped.set(sale.userId, row);
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total);
+  }
+
+  async salesByCategory(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: {
+        total: true,
+        totalFinal: true,
+        items: { select: { qty: true, subtotal: true, product: { select: { category: true } } } },
+      },
+    });
+    const grouped = new Map<string, { categoryId: string | null; categoryName: string; total: number; qty: number }>();
+    for (const sale of sales) {
+      const subtotal = Number(sale.total);
+      const discountFactor = subtotal > 0 ? Number(sale.totalFinal) / subtotal : 1;
+      for (const item of sale.items) {
+        const category = item.product?.category;
+        const key = category?.id ?? '__uncategorized__';
+        const row = grouped.get(key) ?? {
+          categoryId: category?.id ?? null,
+          categoryName: category?.name ?? 'Sin categoría',
+          total: 0,
+          qty: 0,
+        };
+        row.total += Number(item.subtotal) * discountFactor;
+        row.qty += item.qty;
+        grouped.set(key, row);
+      }
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total);
+  }
+
+  async salesByBrand(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: {
+        total: true,
+        totalFinal: true,
+        items: { select: { qty: true, subtotal: true, product: { select: { brand: true } } } },
+      },
+    });
+    const grouped = new Map<string, { brand: string; total: number; qty: number }>();
+    for (const sale of sales) {
+      const subtotal = Number(sale.total);
+      const discountFactor = subtotal > 0 ? Number(sale.totalFinal) / subtotal : 1;
+      for (const item of sale.items) {
+        const brand = item.product?.brand?.trim() || 'Sin marca';
+        const row = grouped.get(brand) ?? { brand, total: 0, qty: 0 };
+        row.total += Number(item.subtotal) * discountFactor;
+        row.qty += item.qty;
+        grouped.set(brand, row);
+      }
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total);
+  }
+
+  async averageTicket(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const result = await this.prisma.sale.aggregate({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      _sum: { totalFinal: true },
+      _count: { _all: true },
+    });
+    const total = Number(result._sum.totalFinal ?? 0);
+    const count = result._count._all;
+    return { avg: count ? total / count : 0, count, total };
+  }
+
+  async salesComparison(businessId: string) {
+    const nowAr = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const year = nowAr.getUTCFullYear();
+    const month = nowAr.getUTCMonth();
+    const currentFrom = new Date(Date.UTC(year, month, 1, 3));
+    const previousFrom = new Date(Date.UTC(year, month - 1, 1, 3));
+    const previousTo = new Date(currentFrom.getTime() - 1);
+    const [currentAgg, previousAgg] = await Promise.all([
+      this.prisma.sale.aggregate({
+        where: { businessId, status: 'completed', createdAt: { gte: currentFrom, lte: new Date() } },
+        _sum: { totalFinal: true },
+        _count: { _all: true },
+      }),
+      this.prisma.sale.aggregate({
+        where: { businessId, status: 'completed', createdAt: { gte: previousFrom, lte: previousTo } },
+        _sum: { totalFinal: true },
+        _count: { _all: true },
+      }),
+    ]);
+    const current = { total: Number(currentAgg._sum.totalFinal ?? 0), count: currentAgg._count._all };
+    const previous = { total: Number(previousAgg._sum.totalFinal ?? 0), count: previousAgg._count._all };
+    const deltaPct = previous.total ? ((current.total - previous.total) / previous.total) * 100 : current.total ? 100 : 0;
+    return { current, previous, deltaPct };
+  }
+
+  async deadStock(businessId: string, days = 30) {
+    const safeDays = Number.isFinite(days) ? Math.max(1, Math.min(Math.floor(days), 3650)) : 30;
+    const cutoff = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    const products = await this.prisma.product.findMany({
+      where: { businessId, isActive: true, stock: { gt: 0 } },
+      select: {
+        id: true,
+        name: true,
+        stock: true,
+        saleItems: {
+          where: { sale: { businessId, status: 'completed' } },
+          orderBy: { sale: { createdAt: 'desc' } },
+          take: 1,
+          select: { sale: { select: { createdAt: true } } },
+        },
+      },
+    });
+    return products
+      .flatMap((product) => {
+        const lastSaleAt = product.saleItems[0]?.sale.createdAt ?? null;
+        if (lastSaleAt && lastSaleAt >= cutoff) return [];
+        return [{
+          id: product.id,
+          name: product.name,
+          stock: product.stock,
+          lastSaleAt,
+          // Sin venta histórica no existe una fecha desde la cual calcular antigüedad.
+          daysSinceSale: lastSaleAt ? Math.floor((Date.now() - lastSaleAt.getTime()) / 86400000) : null,
+        }];
+      })
+      .sort((a, b) => (b.daysSinceSale ?? Number.MAX_SAFE_INTEGER) - (a.daysSinceSale ?? Number.MAX_SAFE_INTEGER));
+  }
+
+  async stockOuts(businessId: string) {
+    return this.prisma.product.findMany({
+      where: { businessId, isActive: true, stockControl: true, stock: { lte: 0 } },
+      select: { id: true, name: true, minStock: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async inventoryValuation(businessId: string) {
+    const summary = await this.stockSummary(businessId);
+    return {
+      atCost: summary.valueAtCostProduct,
+      atSale: summary.valueAtSale,
+      potentialMargin: summary.potentialMargin,
+      units: summary.totalUnits,
+    };
+  }
+
+  async topCustomers(businessId: string, period: ReportPeriod = 'month', limit = 10, from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        businessId,
+        status: 'completed',
+        customerId: { not: null },
+        createdAt: { gte: range.from, lte: range.to },
+      },
+      select: { customerId: true, totalFinal: true, customer: { select: { name: true } } },
+    });
+    const grouped = new Map<string, { customerId: string; name: string; total: number; count: number }>();
+    for (const sale of sales) {
+      if (!sale.customerId || !sale.customer) continue;
+      const row = grouped.get(sale.customerId) ?? { customerId: sale.customerId, name: sale.customer.name, total: 0, count: 0 };
+      row.total += Number(sale.totalFinal);
+      row.count += 1;
+      grouped.set(sale.customerId, row);
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total).slice(0, Math.max(1, Math.min(limit, 200)));
+  }
+
+  async fiadoAging(businessId: string) {
+    // Customer no guarda fecha de origen del saldo; por eso no se inventan buckets de antigüedad.
+    const customers = await this.prisma.customer.findMany({
+      where: { businessId, balance: { gt: 0 } },
+      select: { id: true, name: true, balance: true },
+      orderBy: { balance: 'desc' },
+    });
+    return customers.map((customer) => ({ customerId: customer.id, name: customer.name, balance: Number(customer.balance) }));
+  }
+
+  async purchasesBySupplier(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const purchases = await this.prisma.purchase.findMany({
+      where: { businessId, createdAt: { gte: range.from, lte: range.to } },
+      select: { supplierId: true, total: true, supplier: { select: { name: true } } },
+    });
+    const grouped = new Map<string, { supplierId: string | null; supplierName: string; total: number; count: number }>();
+    for (const purchase of purchases) {
+      const key = purchase.supplierId ?? '__without_supplier__';
+      const row = grouped.get(key) ?? {
+        supplierId: purchase.supplierId,
+        supplierName: purchase.supplier?.name ?? 'Sin proveedor',
+        total: 0,
+        count: 0,
+      };
+      row.total += Number(purchase.total);
+      row.count += 1;
+      grouped.set(key, row);
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total);
+  }
+
+  async expensesByCategory(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const registers = await this.prisma.cashRegister.findMany({ where: { businessId }, select: { id: true } });
+    if (!registers.length) return [];
+    const movements = await this.prisma.cashMovement.findMany({
+      where: {
+        cashRegisterId: { in: registers.map((register) => register.id) },
+        type: 'expense',
+        createdAt: { gte: range.from, lte: range.to },
+      },
+      select: { category: true, amount: true },
+    });
+    const grouped = new Map<string, { category: string; total: number; count: number }>();
+    for (const movement of movements) {
+      const category = movement.category?.trim() || 'Sin categoría';
+      const row = grouped.get(category) ?? { category, total: 0, count: 0 };
+      row.total += Number(movement.amount);
+      row.count += 1;
+      grouped.set(category, row);
+    }
+    return [...grouped.values()].sort((a, b) => b.total - a.total);
+  }
+
+  async grossMargin(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: {
+        total: true,
+        totalFinal: true,
+        items: { select: { qty: true, subtotal: true, product: { select: { cost: true } } } },
+      },
+    });
+    let revenue = 0;
+    let cogs = 0;
+    for (const sale of sales) {
+      const subtotal = Number(sale.total);
+      const discountFactor = subtotal > 0 ? Number(sale.totalFinal) / subtotal : 1;
+      for (const item of sale.items) {
+        revenue += Number(item.subtotal) * discountFactor;
+        cogs += Number(item.product?.cost ?? 0) * item.qty;
+      }
+    }
+    const grossMargin = revenue - cogs;
+    return { revenue, cogs, grossMargin, marginPct: revenue ? (grossMargin / revenue) * 100 : 0 };
+  }
+
+  async fiscalSummary(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
+      select: { totalFinal: true, fiscalDocument: { select: { kind: true } } },
+    });
+    const result = { facturaC: { count: 0, total: 0 }, internal: { count: 0, total: 0 } };
+    for (const sale of sales) {
+      const bucket = sale.fiscalDocument?.kind === 'FACTURA_C' ? result.facturaC : result.internal;
+      bucket.count += 1;
+      bucket.total += Number(sale.totalFinal);
+    }
+    return result;
+  }
+
+  async cashSessions(businessId: string, period: ReportPeriod = 'month', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
+    const sessions = await this.prisma.cashRegister.findMany({
+      where: { businessId, openedAt: { gte: range.from, lte: range.to } },
+      select: {
+        id: true,
+        openedAt: true,
+        closedAt: true,
+        openingCash: true,
+        openingBank: true,
+        closingCash: true,
+        closingBank: true,
+      },
+      orderBy: { openedAt: 'desc' },
+    });
+    return sessions.map((session) => ({
+      id: session.id,
+      openedAt: session.openedAt,
+      closedAt: session.closedAt,
+      opening: Number(session.openingCash) + Number(session.openingBank),
+      counted: session.closingCash == null && session.closingBank == null
+        ? null
+        : Number(session.closingCash ?? 0) + Number(session.closingBank ?? 0),
+      // El modelo no persiste efectivo esperado ni diferencia de arqueo.
+      expected: null,
+      difference: null,
+    }));
   }
 
   async salesCsv(businessId: string, from: Date, to: Date) {

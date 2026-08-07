@@ -50,6 +50,7 @@ export class ProductsController {
     @CurrentUser() user: User,
     @Query('q') q?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('excludeCategoryIds') excludeCategoryIds?: string,
     @Query('brand') brand?: string,
     @Query('provider') provider?: string,
     @Query('type') type?: string,
@@ -77,6 +78,7 @@ export class ProductsController {
     const query: ProductCatalogQuery = {
       q,
       categoryId,
+      excludeCategoryIds: excludeCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
       brand,
       provider,
       type,

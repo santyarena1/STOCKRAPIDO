@@ -8,6 +8,7 @@ import { decorateProductUnits } from '../common/units';
 export type ProductCatalogQuery = {
   q?: string;
   categoryId?: string;
+  excludeCategoryIds?: string[];
   brand?: string;
   provider?: string;
   type?: string;
@@ -334,33 +335,42 @@ export class ProductsService {
 
   private catalogWhere(businessId: string, query: ProductCatalogQuery): Record<string, unknown> {
     const tokens = query.q?.trim().split(/\s+/).filter(Boolean) ?? [];
+    const and: Record<string, unknown>[] = tokens.map((token) => ({
+      OR: [
+        { name: { contains: token, mode: 'insensitive' } },
+        { barcode: { contains: token } },
+        { brand: { contains: token, mode: 'insensitive' } },
+        { supplierSku: { contains: token, mode: 'insensitive' } },
+        { externalId: { contains: token, mode: 'insensitive' } },
+      ],
+    }));
+    if (query.provider) {
+      and.push({
+        OR: [
+          { sourceProvider: { equals: query.provider, mode: 'insensitive' } },
+          { sourceConnectionId: query.provider },
+        ],
+      });
+    }
+    if (query.excludeCategoryIds?.length) {
+      and.push({
+        OR: [
+          { categoryId: null },
+          { categoryId: { notIn: query.excludeCategoryIds } },
+        ],
+      });
+    }
     const where: Record<string, unknown> = {
       businessId,
       ...(query.status !== 'all' && { isActive: query.status === 'active' }),
       ...(query.categoryId && { categoryId: query.categoryId }),
       ...(query.brand && { brand: { equals: query.brand, mode: 'insensitive' } }),
-      ...(query.provider && {
-        OR: [
-          { sourceProvider: { equals: query.provider, mode: 'insensitive' } },
-          { sourceConnectionId: query.provider },
-        ],
-      }),
       ...(query.type && { format: { equals: query.type, mode: 'insensitive' } }),
       ...(query.subcategory && { subcategory: { equals: query.subcategory, mode: 'insensitive' } }),
       ...(query.presentation && { presentation: { equals: query.presentation, mode: 'insensitive' } }),
       ...(query.stockControl !== undefined && { stockControl: query.stockControl }),
       ...(query.hasStock && { stock: { gt: 0 } }),
-      ...(tokens.length && {
-        AND: tokens.map((token) => ({
-          OR: [
-            { name: { contains: token, mode: 'insensitive' } },
-            { barcode: { contains: token } },
-            { brand: { contains: token, mode: 'insensitive' } },
-            { supplierSku: { contains: token, mode: 'insensitive' } },
-            { externalId: { contains: token, mode: 'insensitive' } },
-          ],
-        })),
-      }),
+      ...(and.length && { AND: and }),
     };
     return where;
   }

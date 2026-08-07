@@ -1,15 +1,140 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { saleDateRangeFromQuery } from '../common/argentina-date-range';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { ReportsService } from './reports.service';
+import { ReportPeriod, ReportsService } from './reports.service';
 
 type User = { businessId: string };
+
+function reportParams(period?: string, from?: string, to?: string) {
+  const allowed: ReportPeriod[] = ['today', 'week', 'month', 'year'];
+  const parsedPeriod = (period ?? 'month') as ReportPeriod;
+  if (!allowed.includes(parsedPeriod)) {
+    throw new BadRequestException('period debe ser today, week, month o year.');
+  }
+  return { period: parsedPeriod, ...saleDateRangeFromQuery(from, to) };
+}
+
+function positiveInt(value: string | undefined, fallback: number, max: number) {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException('El parámetro debe ser un entero positivo.');
+  return Math.min(parsed, max);
+}
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
 export class ReportsController {
   constructor(private reports: ReportsService) {}
+
+  @Get('sales-by-hour')
+  salesByHour(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.salesByHour(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('sales-by-weekday')
+  salesByWeekday(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.salesByWeekday(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('sales-by-payment')
+  salesByPayment(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.salesByPayment(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('sales-by-user')
+  salesByUser(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.salesByUser(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('sales-by-category')
+  salesByCategory(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.salesByCategory(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('sales-by-brand')
+  salesByBrand(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.salesByBrand(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('average-ticket')
+  averageTicket(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.averageTicket(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('sales-comparison')
+  salesComparison(@CurrentUser() user: User) {
+    return this.reports.salesComparison(user.businessId);
+  }
+
+  @Get('dead-stock')
+  deadStock(@CurrentUser() user: User, @Query('days') days?: string) {
+    return this.reports.deadStock(user.businessId, positiveInt(days, 30, 3650));
+  }
+
+  @Get('stock-outs')
+  stockOuts(@CurrentUser() user: User) {
+    return this.reports.stockOuts(user.businessId);
+  }
+
+  @Get('inventory-valuation')
+  inventoryValuation(@CurrentUser() user: User) {
+    return this.reports.inventoryValuation(user.businessId);
+  }
+
+  @Get('top-customers')
+  topCustomers(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = reportParams(period, from, to);
+    return this.reports.topCustomers(user.businessId, range.period, positiveInt(limit, 10, 200), range.from, range.to);
+  }
+
+  @Get('fiado-aging')
+  fiadoAging(@CurrentUser() user: User) {
+    return this.reports.fiadoAging(user.businessId);
+  }
+
+  @Get('purchases-by-supplier')
+  purchasesBySupplier(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.purchasesBySupplier(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('expenses-by-category')
+  expensesByCategory(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.expensesByCategory(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('gross-margin')
+  grossMargin(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.grossMargin(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('fiscal-summary')
+  fiscalSummary(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.fiscalSummary(user.businessId, range.period, range.from, range.to);
+  }
+
+  @Get('cash-sessions')
+  cashSessions(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const range = reportParams(period, from, to);
+    return this.reports.cashSessions(user.businessId, range.period, range.from, range.to);
+  }
 
   @Get('sales')
   salesSummary(@CurrentUser() user: User, @Query('period') period?: string) {

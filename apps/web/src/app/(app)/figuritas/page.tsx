@@ -1,13 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Eye, MessageCircle, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  buildFiguritasOrderWhatsApp,
   figuritasContactWhatsAppUrl,
   formatFiguritasMoney,
   getPublicFiguritasCatalogUrl,
-  whatsappUrl,
 } from '@/lib/figuritas';
 import { getPublicAppUrl } from '@/lib/env-urls';
 import { AlbumSpread } from '@/components/figuritas/AlbumSpread';
@@ -54,17 +53,21 @@ type ShareInfo = {
 };
 
 type OrderItem = {
-  id: string;
+  id?: string;
+  stickerId: string;
   qty: number;
-  sticker: { number: number; country: { name: string; flag: string } };
+  unitPrice: number | string;
+  sticker?: { number: number; country: { name: string; flag?: string | null } } | null;
 };
+
+type OrderStatus = 'pending' | 'confirmed' | 'delivered' | 'cancelled';
 
 type Order = {
   id: string;
   buyerName: string | null;
   buyerPhone: string | null;
   notes: string | null;
-  status: string;
+  status: OrderStatus;
   total: number | string;
   createdAt: string;
   items: OrderItem[];
@@ -80,15 +83,15 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-500/20 text-yellow-200 border border-yellow-500/30',
-  confirmed: 'bg-red-500/20 text-red-200 border border-red-500/30',
-  delivered: 'bg-red-400/20 text-red-100 border border-red-400/30',
-  cancelled: 'bg-red-950/40 text-red-200/40 border border-red-900/30',
+  pending: 'border border-warn/30 bg-[var(--warn-soft)] text-warn',
+  confirmed: 'border border-[color:var(--brand-accent)] bg-brand-highlight text-brand',
+  delivered: 'border border-ok/30 bg-[var(--ok-soft)] text-ok',
+  cancelled: 'border border-crit/30 bg-[var(--crit-soft)] text-crit',
 };
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[status] ?? 'bg-red-950/40 text-red-200/60'}`}>
+    <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${STATUS_COLORS[status] ?? 'border border-hair bg-raised2 text-fg-muted'}`}>
       {STATUS_LABELS[status] ?? status}
     </span>
   );
@@ -696,197 +699,99 @@ function TabCatalogo() {
 
 function TabPedidos() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [statusEdits, setStatusEdits] = useState<Record<string, string>>({});
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
+    setMsg(null);
     try {
-      const data = await api<Order[]>('/stickers/orders', {
-        params: statusFilter !== 'all' ? { status: statusFilter } : {},
-      });
-      setOrders(data);
-      const init: Record<string, string> = {};
-      data.forEach((o) => { init[o.id] = o.status; });
-      setStatusEdits(init);
+      const allRequest = api<Order[]>('/stickers/orders');
+      if (statusFilter === 'all') {
+        const data = await allRequest;
+        setAllOrders(data);
+        setOrders(data);
+      } else {
+        const [all, filtered] = await Promise.all([
+          allRequest,
+          api<Order[]>('/stickers/orders', { params: { status: statusFilter } }),
+        ]);
+        setAllOrders(all);
+        setOrders(filtered);
+      }
     } catch (e) { setMsg((e as Error).message); } finally { setLoading(false); }
   }, [statusFilter]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
-  const updateStatus = async (orderId: string) => {
+  const updateStatus = async (orderId: string, status: OrderStatus) => {
+    if (status === 'cancelled' && !confirm('¿Cancelar este pedido? Las figuritas reservadas volverán al stock.')) return;
     setBusyId(orderId);
+    setMsg(null);
     try {
       await api(`/stickers/orders/${orderId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: statusEdits[orderId] }),
+        body: JSON.stringify({ status }),
       });
+      setDetailOrder(null);
       await loadOrders();
     } catch (e) { setMsg((e as Error).message); } finally { setBusyId(null); }
   };
 
   const deleteOrder = async (orderId: string) => {
+    if (!confirm('¿Eliminar este pedido definitivamente?')) return;
     setBusyId(orderId);
+    setMsg(null);
     try {
       await api(`/stickers/orders/${orderId}`, { method: 'DELETE' });
-      setConfirmDelete(null);
+      setDetailOrder(null);
       await loadOrders();
     } catch (e) { setMsg((e as Error).message); } finally { setBusyId(null); }
   };
 
-  if (loading) return <FigLoading label="Cargando pedidos…" />;
+  const counts = {
+    pending: allOrders.filter((order) => order.status === 'pending').length,
+    confirmed: allOrders.filter((order) => order.status === 'confirmed').length,
+    delivered: allOrders.filter((order) => order.status === 'delivered').length,
+  };
+  const receivable = allOrders
+    .filter((order) => order.status === 'pending' || order.status === 'confirmed')
+    .reduce((sum, order) => sum + Number(order.total), 0);
+  const filters: Array<{ value: 'all' | OrderStatus; label: string }> = [
+    { value: 'all', label: 'Todos' }, { value: 'pending', label: 'Pendientes' },
+    { value: 'confirmed', label: 'Confirmados' }, { value: 'delivered', label: 'Entregados' },
+    { value: 'cancelled', label: 'Cancelados' },
+  ];
+  const whatsappHref = (order: Order) => {
+    const phone = order.buyerPhone?.replace(/\D/g, '') ?? '';
+    const name = order.buyerName?.trim() || 'cliente';
+    const message = `Hola ${name}, tu pedido de figuritas por ${formatFiguritasMoney(order.total)} está ${STATUS_LABELS[order.status].toLowerCase()}.`;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  };
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <FigCard className="!py-3 sm:!py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <label className="text-sm text-red-200/70 font-medium shrink-0">Filtrar por estado</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className={`${fig.inputSm} sm:max-w-[200px]`}
-          >
-            <option value="all">Todos</option>
-            {Object.entries(STATUS_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
-          <span className="text-xs text-red-200/40 sm:ml-auto">
-            {orders.length} pedido{orders.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </FigCard>
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] p-4"><p className="text-xs font-medium text-warn">Pendientes</p><p className="mt-1 font-mono text-3xl font-bold tabular-nums text-fg">{counts.pending}</p></div>
+        <div className="rounded-xl border border-[color:var(--brand-accent)] bg-brand-highlight p-4"><p className="text-xs font-medium text-brand">Confirmados</p><p className="mt-1 font-mono text-3xl font-bold tabular-nums text-fg">{counts.confirmed}</p></div>
+        <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4"><p className="text-xs font-medium text-ok">Entregados</p><p className="mt-1 font-mono text-3xl font-bold tabular-nums text-fg">{counts.delivered}</p></div>
+        <div className="rounded-xl border border-hair-soft bg-surface p-4"><p className="text-xs font-medium text-fg-muted">Total a cobrar</p><p className="mt-1 font-mono text-2xl font-bold tabular-nums text-brand">{formatFiguritasMoney(receivable)}</p><p className="mt-1 text-xs text-fg-faint">Pendientes + confirmados</p></div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-hair-soft bg-surface p-3">
+        {filters.map((filter) => <button key={filter.value} type="button" onClick={() => setStatusFilter(filter.value)} className={`rounded-lg border px-3 py-2 text-sm transition-colors ${statusFilter === filter.value ? 'border-[color:var(--brand-accent)] bg-brand-highlight text-brand' : 'border-hair bg-raised text-fg-muted hover:bg-raised2'}`}>{filter.label}</button>)}
+        <span className="ml-auto font-mono text-xs tabular-nums text-fg-faint">{orders.length} pedido{orders.length !== 1 ? 's' : ''}</span>
+      </div>
 
       {msg && <FigMessage variant="error">{msg}</FigMessage>}
 
-      {orders.length === 0 && (
-        <FigEmpty
-          emoji="📦"
-          title="Sin pedidos aún"
-          subtitle="Cuando un cliente arme su pedido desde el link público, aparecerá acá."
-        />
-      )}
+      {loading ? <FigLoading label="Cargando pedidos…" /> : orders.length === 0 ? <FigEmpty emoji="📦" title="Sin pedidos" subtitle={statusFilter === 'all' ? 'Cuando un cliente arme su pedido desde el link público, aparecerá acá.' : 'No hay pedidos con este estado.'} /> : <div className="overflow-hidden rounded-xl border border-hair-soft bg-surface"><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint"><tr><th className="px-3 py-3">Comprador</th><th className="px-3 py-3">Figuritas</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Fecha</th><th className="px-3 py-3">Estado</th><th className="px-3 py-3 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-hair-soft">{orders.map((order) => { const itemQty = order.items.reduce((sum, item) => sum + item.qty, 0); return <tr key={order.id} className="align-top hover:bg-raised/60"><td className="px-3 py-3"><strong className="block text-fg">{order.buyerName?.trim() || 'Sin nombre'}</strong>{order.buyerPhone && <a href={`tel:${order.buyerPhone.replace(/\s/g, '')}`} className="mt-0.5 block font-mono text-xs text-fg-muted hover:text-brand">{order.buyerPhone}</a>}</td><td className="px-3 py-3 font-mono tabular-nums text-fg-muted">{itemQty}</td><td className="px-3 py-3 font-mono font-semibold tabular-nums text-fg">{formatFiguritasMoney(order.total)}</td><td className="whitespace-nowrap px-3 py-3 font-mono text-xs tabular-nums text-fg-muted">{new Date(order.createdAt).toLocaleString('es-AR')}</td><td className="px-3 py-3"><StatusBadge status={order.status} /></td><td className="px-3 py-3"><div className="flex min-w-max flex-wrap justify-end gap-2"><button type="button" onClick={() => setDetailOrder(order)} className="inline-flex items-center gap-1.5 rounded-lg border border-hair bg-raised px-2.5 py-1.5 text-xs text-fg-muted hover:bg-raised2"><Eye className="h-3.5 w-3.5" />Ver</button>{order.buyerPhone && <a href={whatsappHref(order)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-2.5 py-1.5 text-xs font-medium text-ok"><MessageCircle className="h-3.5 w-3.5" />WhatsApp</a>}{order.status === 'pending' && <button type="button" disabled={busyId === order.id} onClick={() => updateStatus(order.id, 'confirmed')} className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-2.5 py-1.5 text-xs font-medium text-brand disabled:opacity-50">Confirmar</button>}{order.status === 'confirmed' && <button type="button" disabled={busyId === order.id} onClick={() => updateStatus(order.id, 'delivered')} className="rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-2.5 py-1.5 text-xs font-medium text-ok disabled:opacity-50">Marcar entregado</button>}{(order.status === 'pending' || order.status === 'confirmed') && <button type="button" disabled={busyId === order.id} onClick={() => updateStatus(order.id, 'cancelled')} className="rounded-lg border border-warn/30 px-2.5 py-1.5 text-xs font-medium text-warn disabled:opacity-50">Cancelar</button>}<button type="button" disabled={busyId === order.id} onClick={() => deleteOrder(order.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-crit/30 px-2.5 py-1.5 text-xs text-crit disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />Eliminar</button></div></td></tr>; })}</tbody></table></div></div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-        {orders.map((order) => {
-          const waText = buildFiguritasOrderWhatsApp({
-            buyerName: order.buyerName,
-            buyerPhone: order.buyerPhone,
-            notes: order.notes,
-            items: order.items,
-            total: order.total,
-          });
-          return (
-            <FigCard key={order.id} className="!p-0 overflow-hidden">
-              <div className="p-4 sm:p-5 space-y-3 border-b border-red-900/30 bg-red-950/20">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-bold text-red-50 truncate">
-                      {order.buyerName ?? 'Sin nombre'}
-                    </p>
-                    {order.buyerPhone && (
-                      <a
-                        href={`tel:${order.buyerPhone.replace(/\s/g, '')}`}
-                        className="text-sm text-red-200/70 hover:text-red-100"
-                      >
-                        {order.buyerPhone}
-                      </a>
-                    )}
-                    <p className="text-[11px] text-red-200/40 mt-1">
-                      {new Date(order.createdAt).toLocaleString('es-AR')}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <StatusBadge status={order.status} />
-                    <p className="text-lg font-black text-fg">
-                      {formatFiguritasMoney(order.total)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 sm:p-5 space-y-3">
-                <p className="text-[10px] uppercase tracking-wider text-red-200/50 font-semibold">
-                  Figuritas ({order.items.length})
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {order.items.map((item) => (
-                    <span
-                      key={item.id}
-                      className="text-xs bg-red-950/50 border border-red-900/40 rounded-lg px-2 py-1 text-red-100"
-                    >
-                      {item.sticker.country.flag} {item.sticker.country.name}{' '}
-                      <span className="font-mono text-red-300">#{item.sticker.number}</span>
-                      {' '}×{item.qty}
-                    </span>
-                  ))}
-                </div>
-                {order.notes && (
-                  <p className="text-xs text-red-200/50 italic border-l-2 border-red-800/50 pl-2">
-                    {order.notes}
-                  </p>
-                )}
-
-                <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-2 border-t border-red-900/30">
-                  <select
-                    value={statusEdits[order.id] ?? order.status}
-                    onChange={(e) => setStatusEdits((p) => ({ ...p, [order.id]: e.target.value }))}
-                    className={fig.inputSm + ' flex-1 min-w-[140px]'}
-                  >
-                    {Object.entries(STATUS_LABELS).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
-                    ))}
-                  </select>
-                  <FigBtnSecondary
-                    onClick={() => updateStatus(order.id)}
-                    disabled={busyId === order.id}
-                    className="sm:flex-1"
-                  >
-                    {busyId === order.id ? '…' : 'Actualizar estado'}
-                  </FigBtnSecondary>
-                  <a
-                    href={whatsappUrl(waText)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-fg font-bold text-sm px-4 py-2 transition-colors sm:flex-1"
-                  >
-                    💬 WhatsApp
-                  </a>
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  {confirmDelete === order.id ? (
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <FigBtnPrimary
-                        onClick={() => deleteOrder(order.id)}
-                        disabled={busyId === order.id}
-                        className="!py-2 flex-1 sm:flex-none !from-red-700 !to-red-800"
-                      >
-                        Confirmar eliminar
-                      </FigBtnPrimary>
-                      <FigBtnSecondary onClick={() => setConfirmDelete(null)} className="!py-2">
-                        Cancelar
-                      </FigBtnSecondary>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(order.id)}
-                      className="text-xs text-red-200/40 hover:text-red-300 underline underline-offset-2"
-                    >
-                      Eliminar pedido
-                    </button>
-                  )}
-                </div>
-              </div>
-            </FigCard>
-          );
-        })}
-      </div>
+      {detailOrder && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetailOrder(null); }}><div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-hair bg-surface p-5 shadow-xl"><div className="mb-5 flex items-start justify-between gap-4"><div><p className="text-xs uppercase tracking-wide text-fg-faint">Detalle del pedido</p><h2 className="mt-1 text-xl font-bold text-fg">{detailOrder.buyerName?.trim() || 'Sin nombre'}</h2><p className="font-mono text-xs text-fg-muted">{detailOrder.buyerPhone || 'Sin teléfono'} · {new Date(detailOrder.createdAt).toLocaleString('es-AR')}</p></div><button type="button" onClick={() => setDetailOrder(null)} className="text-sm text-fg-muted hover:text-fg">Cerrar</button></div><div className="mb-4 flex items-center justify-between rounded-xl border border-hair-soft bg-raised p-3"><StatusBadge status={detailOrder.status} /><strong className="font-mono text-xl tabular-nums text-brand">{formatFiguritasMoney(detailOrder.total)}</strong></div><div className="overflow-hidden rounded-xl border border-hair-soft"><table className="w-full text-sm"><thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint"><tr><th className="px-3 py-2.5">Figurita</th><th className="px-3 py-2.5 text-right">Cant.</th><th className="px-3 py-2.5 text-right">Precio</th><th className="px-3 py-2.5 text-right">Subtotal</th></tr></thead><tbody className="divide-y divide-hair-soft">{detailOrder.items.map((item) => <tr key={item.id ?? item.stickerId}><td className="px-3 py-2.5 text-fg">{item.sticker ? <>{item.sticker.country.flag || '🏳️'} {item.sticker.country.name} <span className="font-mono text-brand">#{item.sticker.number}</span></> : 'Figurita eliminada'}</td><td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">{item.qty}</td><td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">{formatFiguritasMoney(item.unitPrice)}</td><td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg">{formatFiguritasMoney(Number(item.unitPrice) * item.qty)}</td></tr>)}</tbody></table></div>{detailOrder.notes && <div className="mt-4 rounded-xl border border-hair-soft bg-raised p-4"><p className="text-xs font-semibold uppercase tracking-wide text-fg-faint">Notas del comprador</p><p className="mt-2 whitespace-pre-wrap text-sm text-fg-muted">{detailOrder.notes}</p></div>}<div className="mt-5 flex flex-wrap justify-end gap-2">{detailOrder.buyerPhone && <a href={whatsappHref(detailOrder)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-4 py-2 text-sm font-medium text-ok"><MessageCircle className="h-4 w-4" />WhatsApp</a>}<button type="button" onClick={() => setDetailOrder(null)} className="rounded-lg border border-hair bg-raised px-4 py-2 text-sm text-fg-muted hover:bg-raised2">Cerrar</button></div></div></div>}
     </div>
   );
 }
