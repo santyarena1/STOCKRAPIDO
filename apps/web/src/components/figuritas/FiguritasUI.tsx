@@ -1,6 +1,7 @@
 'use client';
 
 import { fig } from './theme';
+import { Loader } from '@/components/ui/Loader';
 
 export function FigMessage({ children, variant = 'info' }: { children: React.ReactNode; variant?: 'info' | 'error' }) {
   return <div className={variant === 'error' ? fig.msgError : fig.msgInfo}>{children}</div>;
@@ -113,11 +114,6 @@ export function FigEmpty({ emoji, title, subtitle }: { emoji: string; title: str
   );
 }
 
-export function FigLoading({ label = 'Cargando…' }: { label?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-red-500/30 border-t-red-400 animate-spin" />
-      <p className="text-red-200/60 text-sm">{label}</p>
-    </div>
-  );
+export function FigLoading({ label = 'Procesando' }: { label?: string }) {
+  return <Loader label={label} />;
 }
