@@ -20,13 +20,17 @@ export async function printFiscalReceipt(receipt: any, existingPopup?: Window | 
   const logoUrl = t.logoUrl;
 
   // Emisor: compacto y discreto (informativo / legal), NO protagonista.
+  // Se organiza en líneas prolijas y solo se muestran los campos cargados.
+  const fiscalMeta = [
+    receipt.business?.cuit ? `CUIT ${esc(receipt.business.cuit)}` : '',
+    receipt.business?.grossIncomeNumber ? `IIBB ${esc(receipt.business.grossIncomeNumber)}` : '',
+  ].filter(Boolean).join('  ·  ');
   const emisor = [
     esc(legalName),
-    receipt.business?.cuit ? `CUIT ${esc(receipt.business.cuit)}` : '',
+    fiscalMeta,
     esc(receipt.business?.address),
-    receipt.business?.grossIncomeNumber ? `IIBB ${esc(receipt.business.grossIncomeNumber)}` : '',
-    receipt.business?.activityStartDate ? `Inicio act. ${new Date(receipt.business.activityStartDate).toLocaleDateString('es-AR')}` : '',
-  ].filter(Boolean).join(' · ');
+    receipt.business?.activityStartDate ? `Inicio de actividad ${new Date(receipt.business.activityStartDate).toLocaleDateString('es-AR')}` : '',
+  ].filter(Boolean).join('<br>');
 
   const rows = receipt.items.map((i: any) => {
     const unit = Number(i.unitPrice ?? (Number(i.subtotal) / Math.max(1, Number(i.qty))));

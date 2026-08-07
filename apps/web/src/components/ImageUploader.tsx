@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { getToken } from '@/lib/api';
 
 async function compressImage(file: File, maxPx: number, quality: number): Promise<Blob> {
+  // PNG/WebP conservan transparencia; el resto se comprime a JPEG (más liviano).
+  const keepAlpha = file.type === 'image/png' || file.type === 'image/webp';
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -16,8 +18,8 @@ async function compressImage(file: File, maxPx: number, quality: number): Promis
       canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob(
         (b) => (b ? resolve(b) : reject(new Error('canvas error'))),
-        'image/jpeg',
-        quality,
+        keepAlpha ? 'image/png' : 'image/jpeg',
+        keepAlpha ? undefined : quality,
       );
     };
     img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('load error')); };
@@ -28,7 +30,7 @@ async function compressImage(file: File, maxPx: number, quality: number): Promis
 async function uploadToBlob(file: File, maxPx: number, quality: number): Promise<string> {
   const compressed = await compressImage(file, maxPx, quality);
   const fd = new FormData();
-  fd.append('file', compressed, 'image.jpg');
+  fd.append('file', compressed, compressed.type === 'image/png' ? 'image.png' : 'image.jpg');
   const token = getToken();
   const res = await fetch('/api/upload', {
     method: 'POST',
