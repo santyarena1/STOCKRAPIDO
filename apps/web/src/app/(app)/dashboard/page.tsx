@@ -166,13 +166,24 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle="Tu operación diaria, ventas e inventario en un solo lugar."
         className="mb-6"
-        actions={<button
-          type="button"
-          onClick={() => setIsEditing((e) => !e)}
-          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-hair-soft text-fg-muted hover:bg-raised'}`}
-        >
-          {isEditing ? 'Listo (guardado)' : 'Editar dashboard'}
-        </button>}
+        actions={<div className="flex items-center gap-2">
+          {isEditing && (
+            <button
+              type="button"
+              onClick={() => { localStorage.removeItem(STORAGE_KEY); setLayout(defaultLayout); }}
+              className="px-3 py-2 rounded-lg border border-hair-soft text-fg-muted text-sm font-medium hover:bg-raised"
+            >
+              Restablecer diseño
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsEditing((e) => !e)}
+            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border-transparent' : 'border-hair-soft text-fg-muted hover:bg-raised'}`}
+          >
+            {isEditing ? 'Listo (guardado)' : 'Editar dashboard'}
+          </button>
+        </div>}
       />
 
       {/* KPIs fijos */}
@@ -220,17 +231,20 @@ export default function DashboardPage() {
         <ResponsiveGrid
           className="layout"
           layouts={{ lg: layout }}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
-          cols={{ lg: 12, md: 12, sm: 6, xs: 4 }}
+          breakpoints={{ lg: 0 }}
+          cols={{ lg: 12 }}
           rowHeight={72}
           isDraggable={isEditing}
           isResizable={isEditing}
+          isBounded
+          compactType="vertical"
+          preventCollision={false}
           onLayoutChange={onLayoutChange}
-        draggableHandle={isEditing ? '.drag-handle' : undefined}
-        margin={[16, 16]}
+          draggableHandle=".drag-handle"
+          margin={[16, 16]}
       >
-        <div key="ventas" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
+        <div key="ventas" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-fg font-semibold mb-2 shrink-0">Ventas por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {salesByDay.length > 0 ? (
@@ -251,8 +265,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="compras" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
+        <div key="compras" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-fg font-semibold mb-2 shrink-0">Compras por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {purchasesByDay.some((d) => d.total > 0) ? (
@@ -273,8 +287,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="gastos" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
+        <div key="gastos" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-fg font-semibold mb-2 shrink-0">Gastos por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {expensesByDay.some((d) => d.total > 0) ? (
@@ -295,8 +309,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="resumen" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-5 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
+        <div key="resumen" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-5 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-fg font-semibold mb-3 shrink-0">Resumen del mes</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0 flex-1">
             <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-raised2 text-base min-w-0">
@@ -314,8 +328,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div key="top-vendidos" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
+        <div key="top-vendidos" className="relative overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-brand font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-brand-dot" />Más vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topSold.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topSold.map((p, i) => (
@@ -324,8 +338,8 @@ export default function DashboardPage() {
           </ul>
         </div>
 
-        <div key="top-ganancia" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
+        <div key="top-ganancia" className="relative overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-ok font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--ok-soft)]" />Más ganancia</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topProfit.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topProfit.map((p, i) => (
@@ -334,8 +348,8 @@ export default function DashboardPage() {
           </ul>
         </div>
 
-        <div key="top-menos" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
+        <div key="top-menos" className="relative overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-warn font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--warn-soft)]" />Menos vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {leastSold.length === 0 ? <li className="text-fg-faint">Sin datos</li> : leastSold.map((p, i) => (
@@ -344,8 +358,8 @@ export default function DashboardPage() {
           </ul>
         </div>
 
-        <div key="top-vencer" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
+        <div key="top-vencer" className="relative overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
+          {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
           <h3 className="text-crit font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--crit-soft)]" />Próximos a vencer</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topExpiringSoon.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topExpiringSoon.map((p, i) => (
