@@ -80,6 +80,7 @@ type PosConfigPatchBody = {
     aiInvoice?: Partial<AiInvoicePosConfig>;
     branding?: Partial<BrandingPosConfig>;
     customerDisplay?: Partial<CustomerDisplayPosConfig>;
+    hiddenCategoryIds?: string[] | null;
   };
   clearAiInvoiceWebhookSecret?: boolean;
 };
@@ -124,6 +125,8 @@ export function mergePosConfigUpdate(
   const incomingAi = patch.posConfig?.aiInvoice;
   const incomingBrand = patch.posConfig?.branding;
   const incomingCd = patch.posConfig?.customerDisplay;
+  const hasHiddenCategoryIds =
+    patch.posConfig !== undefined && 'hiddenCategoryIds' in patch.posConfig;
   const hasAi =
     incomingAi !== undefined &&
     typeof incomingAi === 'object' &&
@@ -137,9 +140,25 @@ export function mergePosConfigUpdate(
     typeof incomingCd === 'object' &&
     Object.keys(incomingCd as object).length > 0;
 
-  if (!hasAi && !hasBrand && !hasCd) return undefined;
+  if (!hasAi && !hasBrand && !hasCd && !hasHiddenCategoryIds) return undefined;
 
   const base = existing && typeof existing === 'object' ? { ...(existing as Record<string, unknown>) } : {};
+
+  if (hasHiddenCategoryIds) {
+    const incoming = patch.posConfig?.hiddenCategoryIds;
+    if (Array.isArray(incoming)) {
+      base.hiddenCategoryIds = [
+        ...new Set(
+          incoming
+            .filter((id): id is string => typeof id === 'string')
+            .map((id) => id.trim())
+            .filter(Boolean),
+        ),
+      ];
+    } else {
+      delete base.hiddenCategoryIds;
+    }
+  }
 
   if (hasBrand) {
     const prev =

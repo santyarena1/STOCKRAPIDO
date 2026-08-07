@@ -87,6 +87,11 @@ export class BusinessCustomerDisplayDto {
 
 export class BusinessPosConfigDto {
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hiddenCategoryIds?: string[];
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => BusinessAiInvoiceDto)
   aiInvoice?: BusinessAiInvoiceDto;

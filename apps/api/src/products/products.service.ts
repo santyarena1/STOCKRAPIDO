@@ -75,7 +75,13 @@ export class ProductsService {
     });
   }
 
-  async search(businessId: string, q: string, limit = 20, excludeCombos = false) {
+  async search(
+    businessId: string,
+    q: string,
+    limit = 20,
+    excludeCombos = false,
+    excludeCategoryIds: string[] = [],
+  ) {
     const term = q.trim();
     if (!term) return [];
     const byBarcode = await this.prisma.product.findMany({
@@ -89,13 +95,18 @@ export class ProductsService {
       where: {
         businessId,
         isActive: true,
-        AND: tokens.map((token) => ({
-          OR: [
-            { name: { contains: token, mode: 'insensitive' } },
-            { barcode: { contains: token } },
-            { brand: { contains: token, mode: 'insensitive' } },
-          ],
-        })),
+        AND: [
+          ...tokens.map((token) => ({
+            OR: [
+              { name: { contains: token, mode: 'insensitive' as const } },
+              { barcode: { contains: token } },
+              { brand: { contains: token, mode: 'insensitive' as const } },
+            ],
+          })),
+          ...(excludeCategoryIds.length
+            ? [{ OR: [{ categoryId: null }, { categoryId: { notIn: excludeCategoryIds } }] }]
+            : []),
+        ],
         ...(excludeCombos && {
           NOT: {
             category: { is: { name: { equals: 'combo', mode: 'insensitive' } } },

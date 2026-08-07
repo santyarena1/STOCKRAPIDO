@@ -184,6 +184,7 @@ export default function POSPage() {
   const [sellers, setSellers] = useState<Vendedor[]>([]);
   const [activeSeller, setActiveSeller] = useState<Vendedor | null>(null);
   const [sellerBusy, setSellerBusy] = useState(false);
+  const [hiddenCategoryIds, setHiddenCategoryIds] = useState<string[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const lastEnterForCobrarRef = useRef<number>(0);
@@ -196,6 +197,14 @@ export default function POSPage() {
   const [cobrandoBusy, setCobrandoBusy] = useState(false);
   useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('stockrapido:pos-preferences')||'{}');if(v.fiscalMode==='internal'||v.fiscalMode==='factura_c')setFiscalMode(v.fiscalMode);if(typeof v.printEnabled==='boolean')setPrintEnabled(v.printEnabled)}catch{}setPreferencesLoaded(true)},[]);
   useEffect(()=>{if(preferencesLoaded)localStorage.setItem('stockrapido:pos-preferences',JSON.stringify({fiscalMode,printEnabled}))},[fiscalMode,printEnabled,preferencesLoaded]);
+  useEffect(() => {
+    api<{ posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')
+      .then((business) => {
+        const ids = business.posConfig?.hiddenCategoryIds;
+        setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+      })
+      .catch(() => setHiddenCategoryIds([]));
+  }, []);
 
   /** Caja abierta: las ventas se vinculan para el arqueo (cierre de caja). Fiado no suma efectivo. */
   const [openCashRegisterId, setOpenCashRegisterId] = useState<string | null>(null);
@@ -400,7 +409,12 @@ export default function POSPage() {
             cost?: unknown;
           }>
         >('/products/search', {
-          params: { q: term, limit: '40', excludeCombos: '1' },
+          params: {
+            q: term,
+            limit: '40',
+            excludeCombos: '1',
+            excludeCategoryIds: hiddenCategoryIds.length ? hiddenCategoryIds.join(',') : undefined,
+          },
         });
         if (cancelled) return;
         const list = Array.isArray(data) ? data : [];
@@ -435,7 +449,7 @@ export default function POSPage() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [search, addToCart]);
+  }, [search, addToCart, hiddenCategoryIds]);
 
   const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,activeSeller?.id]);
   const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar]);

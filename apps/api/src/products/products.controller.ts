@@ -36,12 +36,16 @@ export class ProductsController {
     @Query('q') q: string,
     @Query('limit') limit?: string,
     @Query('excludeCombos') excludeCombos?: string,
+    @Query('excludeCategoryIds') excludeCategoryIds?: string,
   ) {
     return this.products.search(
       user.businessId,
       q || '',
       limit ? parseInt(limit, 10) : 20,
       excludeCombos === '1' || excludeCombos === 'true',
+      excludeCategoryIds
+        ? [...new Set(excludeCategoryIds.split(',').map((id) => id.trim()).filter(Boolean))]
+        : [],
     );
   }
 
