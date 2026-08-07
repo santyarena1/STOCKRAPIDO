@@ -40,7 +40,7 @@ function ProductSearchRow({ product, onAdd }: { product: Product; onAdd: (qty: n
           min={1}
           value={qty}
           onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          className="w-14 px-2 py-1 rounded bg-raised2 border border-hair00 text-fg text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-14 px-2 py-1 rounded bg-raised2 border border-hair-soft text-fg text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
         <button
           type="button"
@@ -310,7 +310,7 @@ export default function PromocionesPage() {
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="Ej: 2x1 en gaseosas"
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               required
             />
           </div>
@@ -322,7 +322,7 @@ export default function PromocionesPage() {
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               placeholder="Opcional"
               rows={2}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
 
@@ -331,7 +331,7 @@ export default function PromocionesPage() {
             <select
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'percent' | 'fixed' | 'bogo' | 'precio_fijo' }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             >
               {PROMO_TYPES.map((t) => (
                 <option key={t.id} value={t.id}>{t.label}</option>
@@ -348,7 +348,7 @@ export default function PromocionesPage() {
                   min={1}
                   value={form.buyQty}
                   onChange={(e) => setForm((f) => ({ ...f, buyQty: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
                 />
               </div>
               <div>
@@ -358,7 +358,7 @@ export default function PromocionesPage() {
                   min={0}
                   value={form.getQtyFree}
                   onChange={(e) => setForm((f) => ({ ...f, getQtyFree: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                  className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
                 />
               </div>
             </div>
@@ -378,7 +378,7 @@ export default function PromocionesPage() {
                 value={form.value}
                 onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
                 placeholder={form.type === 'precio_fijo' ? '1500' : form.type === 'percent' ? '15' : '500'}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
                 required
               />
             </div>
@@ -393,7 +393,7 @@ export default function PromocionesPage() {
               value={form.minPurchase}
               onChange={(e) => setForm((f) => ({ ...f, minPurchase: e.target.value }))}
               placeholder="0 = sin mínimo"
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
 
@@ -404,7 +404,7 @@ export default function PromocionesPage() {
               value={form.promoCode}
               onChange={(e) => setForm((f) => ({ ...f, promoCode: e.target.value }))}
               placeholder="Ej: VERANO20"
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
 
@@ -415,7 +415,7 @@ export default function PromocionesPage() {
                 type="date"
                 value={form.validFrom}
                 onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               />
             </div>
             <div>
@@ -424,7 +424,7 @@ export default function PromocionesPage() {
                 type="date"
                 value={form.validTo}
                 onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               />
             </div>
           </div>
@@ -440,11 +440,11 @@ export default function PromocionesPage() {
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   placeholder="Buscar producto por nombre o código..."
-                  className="flex-1 px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                  className="flex-1 px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
                 />
               </div>
               {productSearch && (
-                <div className="rounded-lg border border-hair00 bg-raised p-2 max-h-40 overflow-auto">
+                <div className="rounded-lg border border-hair-soft bg-raised p-2 max-h-40 overflow-auto">
                   {searching ? (
                     <p className="text-fg-faint text-sm">Buscando...</p>
                   ) : searchResults.length === 0 ? (
@@ -463,7 +463,7 @@ export default function PromocionesPage() {
                 </div>
               )}
               {form.productItems.length > 0 && (
-                <div className="rounded-lg border border-hair00 bg-raised p-2 space-y-2">
+                <div className="rounded-lg border border-hair-soft bg-raised p-2 space-y-2">
                   <p className="text-fg-muted text-xs">Productos en el combo:</p>
                   {form.productItems.map((item) => (
                     <div key={item.productId} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-raised2">
@@ -475,7 +475,7 @@ export default function PromocionesPage() {
                           value={item.qty}
                           onChange={(e) => updateProductItemQty(item.productId, e.target.valueAsNumber)}
                           onBlur={(e) => updateProductItemQty(item.productId, e.target.valueAsNumber)}
-                          className="w-14 px-2 py-1 rounded bg-raised2 border border-hair00 text-fg text-sm text-center"
+                          className="w-14 px-2 py-1 rounded bg-raised2 border border-hair-soft text-fg text-sm text-center"
                         />
                         <button
                           type="button"
@@ -527,7 +527,7 @@ export default function PromocionesPage() {
             <button
               type="button"
               onClick={() => { setShowForm(false); resetForm(); }}
-              className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised"
+              className="px-4 py-2 rounded-lg border border-hair-soft text-fg-muted hover:bg-raised"
             >
               Cancelar
             </button>
@@ -551,7 +551,7 @@ export default function PromocionesPage() {
                 <th className="text-right p-3 font-mono tabular-nums">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hair-soft00">
+            <tbody className="divide-y divide-hair-soft">
               {promos.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-fg-faint text-center">

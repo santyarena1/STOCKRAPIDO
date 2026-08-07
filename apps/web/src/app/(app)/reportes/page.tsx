@@ -57,7 +57,7 @@ export default function ReportesPage() {
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value as 'today' | 'week' | 'month')}
-            className="px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           >
             <option value="today">Hoy</option>
             <option value="week">Semana</option>
@@ -128,7 +128,7 @@ export default function ReportesPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-fg-faint border-b border-hair00">
+                    <tr className="text-left text-fg-faint border-b border-hair-soft">
                       <th className="py-2 pr-4">Producto</th>
                       <th className="py-2 pr-4">Cant.</th>
                       <th className="py-2">Vence</th>
@@ -139,7 +139,7 @@ export default function ReportesPage() {
                       const d = p?.expiresAt ? new Date(p.expiresAt) : new Date();
                       const dias = Math.ceil((d.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
                       return (
-                        <tr key={i} className="border-b border-hair00/50">
+                        <tr key={i} className="border-b border-hair-soft/50">
                           <td className="py-2 pr-4 text-fg-muted">{p?.name ?? '-'}</td>
                           <td className="py-2 pr-4 text-fg-muted">{p?.qtyExpiring ?? 0} un.</td>
                           <td className={`py-2 ${dias < 0 ? 'text-crit' : dias <= 7 ? 'text-warn' : 'text-fg-muted'}`}>

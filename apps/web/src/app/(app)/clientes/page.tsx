@@ -146,7 +146,7 @@ export default function ClientesPage() {
             placeholder="Nombre *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             required
           />
           <input
@@ -154,14 +154,14 @@ export default function ClientesPage() {
             placeholder="Teléfono"
             value={form.phone}
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
           <input
             type="text"
             placeholder="Notas"
             value={form.notes}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
           <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Guardar</button>
         </form>
@@ -170,7 +170,7 @@ export default function ClientesPage() {
       {/* Modal registrar pago */}
       {paymentFor && (
         <form onSubmit={handlePayment} className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-surface border border-hair00 rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface border border-hair-soft rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-fg mb-4">Registrar pago</h3>
             <input
               type="number"
@@ -178,7 +178,7 @@ export default function ClientesPage() {
               placeholder="Monto"
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg mb-2"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg mb-2"
               autoFocus
             />
             <input
@@ -186,10 +186,10 @@ export default function ClientesPage() {
               placeholder="Nota"
               value={paymentNote}
               onChange={(e) => setPaymentNote(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg mb-4"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg mb-4"
             />
             <div className="flex gap-2">
-              <button type="button" onClick={() => setPaymentFor(null)} className="flex-1 py-2 rounded-lg border border-hair00 text-fg-muted">Cancelar</button>
+              <button type="button" onClick={() => setPaymentFor(null)} className="flex-1 py-2 rounded-lg border border-hair-soft text-fg-muted">Cancelar</button>
               <button type="submit" className="flex-1 py-2 rounded-lg bg-[var(--ok-soft)] text-fg">Registrar</button>
             </div>
           </div>
@@ -200,11 +200,11 @@ export default function ClientesPage() {
       {detailCustomer && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setDetailCustomer(null)}>
           <div
-            className="bg-surface border border-hair00 rounded-xl w-full max-w-2xl max-h-[90dvh] flex flex-col"
+            className="bg-surface border border-hair-soft rounded-xl w-full max-w-2xl max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 p-5 border-b border-hair00">
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-hair-soft">
               <div>
                 <h2 className="text-xl font-bold text-fg">{detailCustomer.name}</h2>
                 {detailCustomer.phone && <p className="text-fg-muted text-sm">{detailCustomer.phone}</p>}
@@ -227,7 +227,7 @@ export default function ClientesPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-hair00 px-5">
+            <div className="flex border-b border-hair-soft px-5">
               <button
                 type="button"
                 onClick={() => setDetailTab('ventas')}
@@ -256,7 +256,7 @@ export default function ClientesPage() {
                     {detailSales.map((sale) => {
                       const isOpen = expandedSaleId === sale.id;
                       return (
-                        <li key={sale.id} className="rounded-lg border border-hair00 bg-raised overflow-hidden">
+                        <li key={sale.id} className="rounded-lg border border-hair-soft bg-raised overflow-hidden">
                           <button
                             type="button"
                             onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
@@ -275,7 +275,7 @@ export default function ClientesPage() {
                             </span>
                           </button>
                           {isOpen && (
-                            <ul className="border-t border-hair00 divide-y divide-hair-soft00/50">
+                            <ul className="border-t border-hair-soft divide-y divide-hair-soft/50">
                               {sale.items.map((item) => (
                                 <li key={item.id} className="flex justify-between items-center px-4 py-2 text-sm">
                                   <span className="text-fg-muted flex-1 min-w-0 truncate">{itemName(item)}</span>
@@ -296,7 +296,7 @@ export default function ClientesPage() {
                 ) : (
                   <ul className="space-y-2">
                     {detailPayments.map((p) => (
-                      <li key={p.id} className="flex justify-between items-center rounded-lg border border-hair00 bg-raised px-4 py-3">
+                      <li key={p.id} className="flex justify-between items-center rounded-lg border border-hair-soft bg-raised px-4 py-3">
                         <span className="flex flex-col gap-0.5">
                           <span className="text-fg text-sm">{formatDate(p.createdAt)}</span>
                           {p.note && <span className="text-fg-faint text-xs">{p.note}</span>}
@@ -325,7 +325,7 @@ export default function ClientesPage() {
                 <th className="p-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hair-soft00">
+            <tbody className="divide-y divide-hair-soft">
               {customers.map((c) => (
                 <tr key={c.id} className="hover:bg-raised">
                   <td className="p-3">

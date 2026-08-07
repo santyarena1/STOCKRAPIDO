@@ -62,7 +62,7 @@ export default function UsuariosPage() {
             placeholder="Email *"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             required
           />
           <input
@@ -70,7 +70,7 @@ export default function UsuariosPage() {
             placeholder="Nombre *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             required
           />
           <input
@@ -78,13 +78,13 @@ export default function UsuariosPage() {
             placeholder="Contraseña *"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             required
           />
           <select
             value={form.role}
             onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           >
             <option value="CAJERO">Cajero</option>
             <option value="ADMIN">Admin</option>
@@ -109,7 +109,7 @@ export default function UsuariosPage() {
                 <th className="p-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hair-soft00">
+            <tbody className="divide-y divide-hair-soft">
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-raised">
                   <td className="p-3 text-fg">{u.name}</td>

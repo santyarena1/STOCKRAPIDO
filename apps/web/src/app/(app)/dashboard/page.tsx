@@ -169,7 +169,7 @@ export default function DashboardPage() {
         actions={<button
           type="button"
           onClick={() => setIsEditing((e) => !e)}
-          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-hair00 text-fg-muted hover:bg-raised'}`}
+          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isEditing ? 'btn-brand border border-white/20' : 'border-hair-soft text-fg-muted hover:bg-raised'}`}
         >
           {isEditing ? 'Listo (guardado)' : 'Editar dashboard'}
         </button>}
@@ -230,7 +230,7 @@ export default function DashboardPage() {
         margin={[16, 16]}
       >
         <div key="ventas" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-fg font-semibold mb-2 shrink-0">Ventas por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {salesByDay.length > 0 ? (
@@ -252,7 +252,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="compras" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-fg font-semibold mb-2 shrink-0">Compras por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {purchasesByDay.some((d) => d.total > 0) ? (
@@ -274,7 +274,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="gastos" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-fg font-semibold mb-2 shrink-0">Gastos por día · {currentMonth}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {expensesByDay.some((d) => d.total > 0) ? (
@@ -296,7 +296,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="resumen" className="flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-5 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00 shrink-0">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft shrink-0">⋮⋮ Arrastrar</div>}
           <h3 className="text-fg font-semibold mb-3 shrink-0">Resumen del mes</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0 flex-1">
             <div className="flex justify-between items-center gap-3 py-3 px-4 rounded-lg bg-raised2 text-base min-w-0">
@@ -315,7 +315,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="top-vendidos" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
           <h3 className="text-brand font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-brand-dot" />Más vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topSold.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topSold.map((p, i) => (
@@ -325,7 +325,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="top-ganancia" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
           <h3 className="text-ok font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--ok-soft)]" />Más ganancia</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topProfit.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topProfit.map((p, i) => (
@@ -335,7 +335,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="top-menos" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
           <h3 className="text-warn font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--warn-soft)]" />Menos vendidos</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {leastSold.length === 0 ? <li className="text-fg-faint">Sin datos</li> : leastSold.map((p, i) => (
@@ -345,7 +345,7 @@ export default function DashboardPage() {
         </div>
 
         <div key="top-vencer" className="overflow-auto rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
-          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair00">⋮⋮ Arrastrar</div>}
+          {isEditing && <div className="drag-handle cursor-move text-fg-faint text-xs mb-2 pb-2 border-b border-hair-soft">⋮⋮ Arrastrar</div>}
           <h3 className="text-crit font-semibold mb-2 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[var(--crit-soft)]" />Próximos a vencer</h3>
           <ul className="space-y-1.5 text-sm max-h-48 overflow-y-auto">
             {topExpiringSoon.length === 0 ? <li className="text-fg-faint">Sin datos</li> : topExpiringSoon.map((p, i) => (
@@ -373,10 +373,10 @@ export default function DashboardPage() {
           </div>
         )}
         <div data-tour="dashboard-links" className="flex flex-wrap gap-2">
-          <Link href="/reportes" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Reportes</Link>
-          <Link href="/productos" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Productos</Link>
-          <Link href="/compras" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Compras</Link>
-          <Link href="/clientes" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted hover:bg-raised">Clientes</Link>
+          <Link href="/reportes" className="px-4 py-2 rounded-lg border border-hair-soft text-fg-muted hover:bg-raised">Reportes</Link>
+          <Link href="/productos" className="px-4 py-2 rounded-lg border border-hair-soft text-fg-muted hover:bg-raised">Productos</Link>
+          <Link href="/compras" className="px-4 py-2 rounded-lg border border-hair-soft text-fg-muted hover:bg-raised">Compras</Link>
+          <Link href="/clientes" className="px-4 py-2 rounded-lg border border-hair-soft text-fg-muted hover:bg-raised">Clientes</Link>
         </div>
       </div>
     </Container>

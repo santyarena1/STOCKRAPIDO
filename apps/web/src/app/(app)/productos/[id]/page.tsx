@@ -176,7 +176,7 @@ export default function EditarProductoPage() {
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               required
             />
           </div>
@@ -187,7 +187,7 @@ export default function EditarProductoPage() {
                 type="text"
                 value={form.barcode}
                 onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               />
             </div>
             <div>
@@ -209,7 +209,7 @@ export default function EditarProductoPage() {
                 step="0.01"
                 value={form.cost}
                 onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               />
               <p className="text-xs text-fg-faint mt-0.5">Siempre por unidad · se actualiza con la última compra</p>
             </div>
@@ -220,7 +220,7 @@ export default function EditarProductoPage() {
                 step="0.01"
                 value={form.price}
                 onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
                 required
               />
               <p className="text-xs text-fg-faint mt-0.5">Precio por unidad · se actualiza con la última compra</p>
@@ -242,7 +242,7 @@ export default function EditarProductoPage() {
               type="number"
               value={form.minStock}
               onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
           <div>
@@ -251,7 +251,7 @@ export default function EditarProductoPage() {
               type="date"
               value={form.expiresAt}
               onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
             <p className="text-xs text-fg-faint mt-0.5">El vencimiento por lote se define en cada compra (ver Lotes abajo)</p>
           </div>
@@ -260,11 +260,11 @@ export default function EditarProductoPage() {
             <input
               value={form.brand}
               onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
 
-          <div className="border-t border-hair00 pt-3">
+          <div className="border-t border-hair-soft pt-3">
             <p className="text-sm font-medium text-fg-muted mb-1">Datos internos / catálogo</p>
             <p className="text-xs text-fg-faint mb-3">Campos del proveedor. Unidades por bulto define si el producto se vende por bulto (referencia interna).</p>
             <div className="mb-3">
@@ -291,7 +291,7 @@ export default function EditarProductoPage() {
                   <input
                     value={form[key]}
                     onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+                    className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
                   />
                 </div>
               ))}
@@ -352,10 +352,10 @@ export default function EditarProductoPage() {
             <p className="text-xs text-fg-faint mb-3">
               Mismo producto puede tener distintos vencimientos o costos por compra. Acá se ve cada lote (cantidad, costo, vencimiento). Se descuentan por orden de vencimiento al vender.
             </p>
-            <div className="overflow-x-auto rounded border border-hair00 mb-4">
+            <div className="overflow-x-auto rounded border border-hair-soft mb-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-fg-faint bg-raised border-b border-hair00">
+                  <tr className="text-left text-fg-faint bg-raised border-b border-hair-soft">
                     <th className="px-3 py-2">Cantidad</th>
                     <th className="px-3 py-2">Costo unit.</th>
                     <th className="px-3 py-2">Vencimiento</th>
@@ -370,7 +370,7 @@ export default function EditarProductoPage() {
                     </tr>
                   ) : (
                     (product.batches ?? []).map((b) => (
-                      <tr key={b.id} className="border-b border-hair00/50">
+                      <tr key={b.id} className="border-b border-hair-soft/50">
                         <td className="px-3 py-2 text-fg">{b.qty}</td>
                         <td className="px-3 py-2 text-fg-muted">${Number(b.unitCost).toFixed(0)}</td>
                         <td className="px-3 py-2 text-fg-muted">
@@ -393,7 +393,7 @@ export default function EditarProductoPage() {
                     placeholder="Ej: 10 o -5"
                     value={adjustQty}
                     onChange={(e) => setAdjustQty(e.target.value)}
-                    className="w-24 px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                    className="w-24 px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                   />
                 </div>
                 <div className="flex-1">
@@ -401,7 +401,7 @@ export default function EditarProductoPage() {
                   <select
                     value={adjustReason}
                     onChange={(e) => setAdjustReason(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                    className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                   >
                     <option value="">Elegir motivo...</option>
                     {STOCK_REASONS.map((r) => (
@@ -419,7 +419,7 @@ export default function EditarProductoPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-fg-faint border-b border-hair00">
+                  <tr className="text-left text-fg-faint border-b border-hair-soft">
                     <th className="px-4 py-2">Fecha</th>
                     <th className="px-4 py-2">Cantidad</th>
                     <th className="px-4 py-2">Motivo</th>
@@ -430,7 +430,7 @@ export default function EditarProductoPage() {
                     <tr><td colSpan={3} className="px-4 py-4 text-fg-faint text-center">Sin movimientos</td></tr>
                   ) : (
                     (Array.isArray(moves) ? moves : []).map((m) => (
-                      <tr key={m.id} className="border-b border-hair00/50 hover:bg-raised">
+                      <tr key={m.id} className="border-b border-hair-soft/50 hover:bg-raised">
                         <td className="px-4 py-2 text-fg-muted">{new Date(m.createdAt).toLocaleString('es-AR')}</td>
                         <td className={`px-4 py-2 font-medium ${m.qty >= 0 ? 'text-ok' : 'text-crit'}`}>
                           {m.qty >= 0 ? '+' : ''}{m.qty}

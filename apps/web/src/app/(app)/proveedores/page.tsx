@@ -55,7 +55,7 @@ export default function ProveedoresPage() {
             placeholder="Nombre *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             required
           />
           <input
@@ -63,21 +63,21 @@ export default function ProveedoresPage() {
             placeholder="Teléfono"
             value={form.phone}
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
           <input
             type="email"
             placeholder="Email"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
           <input
             type="text"
             placeholder="Dirección"
             value={form.address}
             onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
           <button type="submit" className="px-4 py-2 rounded-lg btn-brand">Guardar</button>
         </form>
@@ -96,7 +96,7 @@ export default function ProveedoresPage() {
                 <th className="text-right p-3 font-mono tabular-nums">Compras</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hair-soft00">
+            <tbody className="divide-y divide-hair-soft">
               {suppliers.map((s) => (
                 <tr key={s.id} className="hover:bg-raised">
                   <td className="p-3 text-fg">{s.name}</td>

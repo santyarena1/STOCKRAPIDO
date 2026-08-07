@@ -353,11 +353,11 @@ export default function ComprasPage() {
                         }}
                         onKeyDown={(e) => handleProductInputKeyDown(i, e)}
                         placeholder="Nombre o buscar..."
-                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg text-sm"
                       />
                       {!item.productId && (searchResults[i]?.length ?? 0) > 0 && (
                         <ul
-                          className="mt-1 border border-hair00 rounded bg-raised max-h-32 overflow-auto"
+                          className="mt-1 border border-hair-soft rounded bg-raised max-h-32 overflow-auto"
                           role="listbox"
                           aria-label="Resultados de búsqueda"
                         >
@@ -385,7 +385,7 @@ export default function ComprasPage() {
                         value={item.barcode}
                         onChange={(e) => setItem(i, { barcode: e.target.value })}
                         placeholder="Opcional"
-                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg text-sm"
                       />
                     </div>
                     <div>
@@ -408,7 +408,7 @@ export default function ComprasPage() {
                         min="1"
                         value={item.qty}
                         onChange={(e) => setItem(i, { qty: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                       />
                     </div>
                     <div>
@@ -419,7 +419,7 @@ export default function ComprasPage() {
                         min="0"
                         value={item.unitCost}
                         onChange={(e) => setItem(i, { unitCost: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                       />
                     </div>
                     <div>
@@ -431,7 +431,7 @@ export default function ComprasPage() {
                         value={item.price}
                         onChange={(e) => setItem(i, { price: e.target.value })}
                         placeholder="Opcional"
-                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                       />
                     </div>
                     <div>
@@ -440,7 +440,7 @@ export default function ComprasPage() {
                         type="date"
                         value={item.expiresAt}
                         onChange={(e) => setItem(i, { expiresAt: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                        className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                       />
                     </div>
                   </div>
@@ -460,13 +460,13 @@ export default function ComprasPage() {
       )}
 
       <div data-tour="compras-history" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
-        <div className="px-4 py-3 border-b border-hair00 flex flex-wrap items-center justify-between gap-4">
+        <div className="px-4 py-3 border-b border-hair-soft flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-lg font-medium text-fg">Historial de compras</h2>
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={historyFilters.supplierId}
               onChange={(e) => setHistoryFilters((f) => ({ ...f, supplierId: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair-soft text-fg text-sm"
             >
               <option value="">Todos los proveedores</option>
               {suppliers.map((s) => (
@@ -477,7 +477,7 @@ export default function ComprasPage() {
               type="date"
               value={historyFilters.from}
               onChange={(e) => setHistoryFilters((f) => ({ ...f, from: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair-soft text-fg text-sm"
               title="Desde (fecha)"
             />
             <span className="text-fg-faint">a</span>
@@ -485,7 +485,7 @@ export default function ComprasPage() {
               type="date"
               value={historyFilters.to}
               onChange={(e) => setHistoryFilters((f) => ({ ...f, to: e.target.value }))}
-              className="px-2 py-1.5 rounded-lg bg-raised border border-hair00 text-fg text-sm"
+              className="px-2 py-1.5 rounded-lg bg-raised border border-hair-soft text-fg text-sm"
               title="Hasta (fecha)"
             />
           </div>
@@ -501,7 +501,7 @@ export default function ComprasPage() {
                 <th className="text-right p-3 font-mono tabular-nums">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-hair-soft00">
+            <tbody className="divide-y divide-hair-soft">
               {purchases.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-6 text-fg-faint text-center">
@@ -564,15 +564,15 @@ export default function ComprasPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2 border-t border-hair00 bg-raised text-xs text-fg-faint">
+        <div className="px-4 py-2 border-t border-hair-soft bg-raised text-xs text-fg-faint">
           <strong>Columnas:</strong> Fecha = cuándo se cargó la compra · Proveedor = quién vendió · Total = monto pagado · Detalle = productos y cantidades (con vencimiento si se cargó). <strong>Repetir</strong> = cargar misma compra como nueva para cambiar vencimientos/costos. <strong>Editar</strong> = igual, cargar para modificar y guardar. <strong>Ver</strong> = ver detalle.
         </div>
       </div>
 
       {viewPurchase && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setViewPurchase(null)}>
-          <div className="rounded-lg border border-hair00 bg-raised max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-hair00 flex justify-between items-center">
+          <div className="rounded-lg border border-hair-soft bg-raised max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-hair-soft flex justify-between items-center">
               <h3 className="text-lg font-medium text-fg">Detalle de compra</h3>
               <button type="button" onClick={() => setViewPurchase(null)} className="text-fg-muted hover:text-fg">Cerrar</button>
             </div>
@@ -584,7 +584,7 @@ export default function ComprasPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-fg-faint border-b border-hair00">
+                    <tr className="text-left text-fg-faint border-b border-hair-soft">
                       <th className="py-2 pr-3">Producto</th>
                       <th className="py-2 pr-3 text-right font-mono tabular-nums">Cant.</th>
                       <th className="py-2 pr-3 text-right font-mono tabular-nums">Costo unit.</th>
@@ -593,7 +593,7 @@ export default function ComprasPage() {
                   </thead>
                   <tbody>
                     {viewPurchase.items.map((it, j) => (
-                      <tr key={j} className="border-b border-hair00/50">
+                      <tr key={j} className="border-b border-hair-soft/50">
                         <td className="py-2 pr-3 text-fg">{it.product.name}</td>
                         <td className="py-2 pr-3 text-right text-fg-muted font-mono tabular-nums">{it.qty}</td>
                         <td className="py-2 pr-3 text-right text-fg-muted font-mono tabular-nums">${Number(it.unitCost).toFixed(0)}</td>

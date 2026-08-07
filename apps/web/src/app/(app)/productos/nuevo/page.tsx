@@ -71,7 +71,7 @@ export default function NuevoProductoPage() {
             type="text"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             required
           />
         </div>
@@ -82,7 +82,7 @@ export default function NuevoProductoPage() {
               type="text"
               value={form.barcode}
               onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
           <div data-tour="nuevo-producto-categoria">
@@ -104,7 +104,7 @@ export default function NuevoProductoPage() {
               step="0.01"
               value={form.cost}
               onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
           <div>
@@ -114,7 +114,7 @@ export default function NuevoProductoPage() {
               step="0.01"
               value={form.price}
               onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
               required
             />
           </div>
@@ -126,7 +126,7 @@ export default function NuevoProductoPage() {
               type="number"
               value={form.stock}
               onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
           <div>
@@ -135,7 +135,7 @@ export default function NuevoProductoPage() {
               type="number"
               value={form.minStock}
               onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
             />
           </div>
         </div>
@@ -145,7 +145,7 @@ export default function NuevoProductoPage() {
             type="date"
             value={form.expiresAt}
             onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
           <p className="text-fg-faint text-xs mt-1">Para lácteos, snacks y productos con fecha de vencimiento</p>
         </div>
@@ -155,7 +155,7 @@ export default function NuevoProductoPage() {
             type="text"
             value={form.brand}
             onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair00 text-fg"
+            className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
           />
         </div>
         <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
@@ -170,7 +170,7 @@ export default function NuevoProductoPage() {
           <button type="submit" disabled={loading} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {loading ? 'Guardando...' : 'Guardar'}
           </button>
-          <Link href="/productos" className="px-4 py-2 rounded-lg border border-hair00 text-fg-muted">
+          <Link href="/productos" className="px-4 py-2 rounded-lg border border-hair-soft text-fg-muted">
             Cancelar
           </Link>
         </div>

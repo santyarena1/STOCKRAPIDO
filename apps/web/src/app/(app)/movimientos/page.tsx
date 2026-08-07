@@ -53,7 +53,7 @@ export default function MovimientosPage() {
           className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
             kind === 'altas'
               ? 'bg-[var(--ok-soft)] border-ok/30 text-ok'
-              : 'border-hair00 text-fg-muted hover:bg-raised'
+              : 'border-hair-soft text-fg-muted hover:bg-raised'
           }`}
         >
           Altas de productos
@@ -64,7 +64,7 @@ export default function MovimientosPage() {
           className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
             kind === 'all'
               ? 'bg-[var(--ok-soft)] border-ok/30 text-ok'
-              : 'border-hair00 text-fg-muted hover:bg-raised'
+              : 'border-hair-soft text-fg-muted hover:bg-raised'
           }`}
         >
           Todos los movimientos
@@ -78,7 +78,7 @@ export default function MovimientosPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-fg-faint bg-raised border-b border-hair00">
+                <tr className="text-left text-fg-faint bg-raised border-b border-hair-soft">
                   <th className="px-4 py-3">Fecha y hora</th>
                   <th className="px-4 py-3">Producto</th>
                   <th className="px-4 py-3 text-right font-mono tabular-nums">Cantidad</th>
@@ -100,7 +100,7 @@ export default function MovimientosPage() {
                   </tr>
                 ) : (
                   (Array.isArray(moves) ? moves : []).map((m) => (
-                    <tr key={m.id} className="border-b border-hair00/50 hover:bg-raised">
+                    <tr key={m.id} className="border-b border-hair-soft/50 hover:bg-raised">
                       <td className="px-4 py-2 text-fg-muted">
                         {new Date(m.createdAt).toLocaleString('es-AR')}
                       </td>

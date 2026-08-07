@@ -341,7 +341,7 @@ export default function ComprasIaPage() {
             setSendOnlyOk(null);
           }}
           disabled={uploading || !!jobId}
-          className="mt-1 rounded border-hair00"
+          className="mt-1 rounded border-hair-soft"
         />
         <span className="text-sm text-fg-muted">
           <strong className="text-fg">Solo enviar a N8N (probar conexión)</strong> — envía la misma
@@ -374,7 +374,7 @@ export default function ComprasIaPage() {
           className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-10 cursor-pointer transition-colors ${
             dragOver
               ? 'border-hair bg-raised'
-              : 'border-hair00 hover:border-hair'
+              : 'border-hair-soft hover:border-hair'
           } ${uploading || (jobId && !sendOnlyMode) ? 'opacity-80 cursor-not-allowed' : ''}`}
         >
           <input
@@ -420,7 +420,7 @@ export default function ComprasIaPage() {
         )}
 
         {(pickedFile || uploadConfirmed || uploadError || pollError) && (
-          <div className="mt-4 space-y-2 rounded-lg border border-hair00 bg-surface p-4 text-sm" aria-live="polite">
+          <div className="mt-4 space-y-2 rounded-lg border border-hair-soft bg-surface p-4 text-sm" aria-live="polite">
             <p className="text-fg-faint text-xs uppercase tracking-wide">Estado del archivo</p>
             {pickedFile && uploading && (
               <p className="text-warn text-sm">
@@ -514,10 +514,10 @@ export default function ComprasIaPage() {
                       }}
                       onKeyDown={(e) => handleProductInputKeyDown(i, e)}
                       placeholder="Nombre o buscar..."
-                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg text-sm"
                     />
                     {!item.productId && (searchResults[i]?.length ?? 0) > 0 && (
-                      <ul className="mt-1 border border-hair00 rounded bg-raised max-h-32 overflow-auto" role="listbox">
+                      <ul className="mt-1 border border-hair-soft rounded bg-raised max-h-32 overflow-auto" role="listbox">
                         {searchResults[i].map((p, idx) => {
                           const highlighted = Math.min(highlightedResultIndex[i] ?? 0, searchResults[i].length - 1);
                           return (
@@ -543,7 +543,7 @@ export default function ComprasIaPage() {
                       value={item.barcode}
                       onChange={(e) => setItem(i, { barcode: e.target.value })}
                       placeholder="Opcional"
-                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg text-sm"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg text-sm"
                     />
                   </div>
                   <div>
@@ -566,7 +566,7 @@ export default function ComprasIaPage() {
                       min="1"
                       value={item.qty}
                       onChange={(e) => setItem(i, { qty: e.target.value })}
-                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                     />
                   </div>
                   <div>
@@ -577,7 +577,7 @@ export default function ComprasIaPage() {
                       min="0"
                       value={item.unitCost}
                       onChange={(e) => setItem(i, { unitCost: e.target.value })}
-                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                     />
                   </div>
                   <div>
@@ -589,7 +589,7 @@ export default function ComprasIaPage() {
                       value={item.price}
                       onChange={(e) => setItem(i, { price: e.target.value })}
                       placeholder="Opcional"
-                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                     />
                   </div>
                   <div>
@@ -598,7 +598,7 @@ export default function ComprasIaPage() {
                       type="date"
                       value={item.expiresAt}
                       onChange={(e) => setItem(i, { expiresAt: e.target.value })}
-                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair00 text-fg"
+                      className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
                     />
                   </div>
                 </div>
