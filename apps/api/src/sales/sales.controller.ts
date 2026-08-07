@@ -22,6 +22,7 @@ export class SalesController {
       paymentMethod?: string;
       cashRegisterId?: string;
       fiscalMode?: 'internal' | 'factura_c';
+      sellerId?: string;
     },
   ) {
     return this.sales.create(user.businessId, user.id, body.items, {
@@ -30,6 +31,7 @@ export class SalesController {
       paymentMethod: body.paymentMethod,
       cashRegisterId: body.cashRegisterId,
       fiscalMode: body.fiscalMode,
+      sellerId: body.sellerId,
     });
   }
 

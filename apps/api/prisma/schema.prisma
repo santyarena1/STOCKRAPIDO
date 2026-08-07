@@ -47,6 +47,8 @@ model Business {
   stickerOrders       StickerOrder[]
   fiscalConfig        FiscalConfig?
   fiscalDocuments     FiscalDocument[]
+  vendedores          Vendedor[]
+  vendedorSessions    VendedorSession[]
 }
 
 model Promo {
@@ -113,6 +115,7 @@ model Product {
   stockControl Boolean  @default(true)
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
+  incomplete  Boolean   @default(false)
   businessId  String
   brand       String?
   iva         Decimal?
@@ -154,6 +157,7 @@ model Sale {
   voidReason     String?
   voidedAt       DateTime?
   voidedById     String?
+  sellerId       String?
 
   business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user         User          @relation(fields: [userId], references: [id])
@@ -161,6 +165,35 @@ model Sale {
   cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
   items        SaleItem[]
   fiscalDocument FiscalDocument?
+  seller       Vendedor?      @relation(fields: [sellerId], references: [id])
+}
+
+model Vendedor {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sessions VendedorSession[]
+  sales    Sale[]
+
+  @@index([businessId, active])
+}
+
+model VendedorSession {
+  id         String    @id @default(cuid())
+  businessId String
+  vendedorId String
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  vendedor Vendedor @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, endedAt])
+  @@index([vendedorId, startedAt])
 }
 
 model FiscalConfig {

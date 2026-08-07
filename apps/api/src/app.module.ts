@@ -18,6 +18,7 @@ import { MailModule } from './mail/mail.module';
 import { SyncModule } from './sync/sync.module';
 import { StickersModule } from './stickers/stickers.module';
 import { FiscalModule } from './fiscal/fiscal.module';
+import { VendedoresModule } from './vendedores/vendedores.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { FiscalModule } from './fiscal/fiscal.module';
     SyncModule,
     StickersModule,
     FiscalModule,
+    VendedoresModule,
   ],
 })
 export class AppModule {}

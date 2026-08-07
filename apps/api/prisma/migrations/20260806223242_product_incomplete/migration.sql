@@ -1,0 +1,2 @@
+ALTER TABLE "Product"
+ADD COLUMN "incomplete" BOOLEAN NOT NULL DEFAULT false;

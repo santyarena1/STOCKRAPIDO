@@ -20,7 +20,14 @@ export class SalesService {
     businessId: string,
     userId: string,
     items: SaleItemInput[],
-    options?: { customerId?: string; discount?: number; paymentMethod?: string; cashRegisterId?: string; fiscalMode?: 'internal' | 'factura_c' },
+    options?: {
+      customerId?: string;
+      discount?: number;
+      paymentMethod?: string;
+      cashRegisterId?: string;
+      fiscalMode?: 'internal' | 'factura_c';
+      sellerId?: string;
+    },
   ) {
     if (!options?.cashRegisterId?.trim()) {
       throw new BadRequestException('Tenés que tener la caja abierta para registrar ventas.');
@@ -29,6 +36,13 @@ export class SalesService {
       where: { id: options.cashRegisterId.trim(), businessId, closedAt: null },
     });
     if (!reg) throw new BadRequestException('Caja no encontrada o cerrada. Abrí caja desde el menú Caja.');
+    if (options?.sellerId) {
+      const seller = await this.prisma.vendedor.findFirst({
+        where: { id: options.sellerId, businessId, active: true },
+        select: { id: true },
+      });
+      if (!seller) throw new BadRequestException('El vendedor seleccionado no existe o está inactivo.');
+    }
 
     const discount = options?.discount ?? 0;
     let total = 0;
@@ -56,6 +70,7 @@ export class SalesService {
         totalFinal: new Decimal(totalFinal),
         paymentMethod: options?.paymentMethod,
         cashRegisterId: options.cashRegisterId.trim(),
+        sellerId: options?.sellerId ?? null,
         items: { create: saleItems },
       },
       include: { items: { include: { product: true } }, customer: true },

@@ -90,6 +90,7 @@ const GROUPS = [
       { href: '/config/negocio', label: 'Negocio' },
       { href: '/config/apariencia', label: 'Apariencia' },
       { href: '/config/ticket', label: 'Ticket' },
+      { href: '/config/vendedores', label: 'Vendedores' },
       { href: '/config/proveedores', label: 'Proveedores' },
       { href: '/config/pantalla', label: 'Pantalla cliente' },
       { href: '/config/compras-ia', label: 'Compras IA' },
@@ -291,7 +292,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <button
                     type="button"
                     aria-expanded={open}
-                    onClick={() => setOpenGroups((current) => ({ ...current, [title]: !open }))}
+                    onClick={() => setOpenGroups((current) => (current[title] ? {} : { [title]: true }))}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg',
                       groupActive

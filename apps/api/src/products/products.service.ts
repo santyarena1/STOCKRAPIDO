@@ -396,6 +396,7 @@ export class ProductsService {
     subcategory?: string;
     supplierSku?: string;
     externalId?: string;
+    incomplete?: boolean;
   }) {
     const initialStock = Math.max(0, Math.floor(data.stock ?? 0));
     const product = await this.prisma.product.create({
@@ -421,6 +422,7 @@ export class ProductsService {
         subcategory: data.subcategory,
         supplierSku: data.supplierSku,
         externalId: data.externalId,
+        incomplete: data.incomplete ?? false,
       },
       include: { category: true },
     });
@@ -437,6 +439,33 @@ export class ProductsService {
     return product;
   }
 
+  async quick(businessId: string, data: { name: string; price: number; barcode?: string }) {
+    const name = typeof data?.name === 'string' ? data.name.trim() : '';
+    const price = Number(data?.price);
+    if (!name) throw new BadRequestException('El nombre es obligatorio.');
+    if (!Number.isFinite(price) || price < 0) {
+      throw new BadRequestException('El precio debe ser un número mayor o igual a cero.');
+    }
+    const product = await this.create(businessId, {
+      name,
+      price,
+      barcode: typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : undefined,
+      stockControl: false,
+      incomplete: true,
+    });
+    if (!product) throw new BadRequestException('No se pudo crear el producto.');
+    return decorateProductUnits(product);
+  }
+
+  async incomplete(businessId: string) {
+    const products = await this.prisma.product.findMany({
+      where: { businessId, incomplete: true, isActive: true },
+      include: { category: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return products.map(decorateProductUnits);
+  }
+
   async update(id: string, businessId: string, data: Partial<{
     name: string;
     barcode: string;
@@ -446,6 +475,7 @@ export class ProductsService {
     minStock: number;
     stockControl: boolean;
     isActive: boolean;
+    incomplete: boolean;
     brand: string;
     iva: number;
     expiresAt: string;

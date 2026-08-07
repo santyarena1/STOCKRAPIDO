@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { api, getApiBaseUrl, getToken } from '@/lib/api';
 import { formatMoneyArs } from '@/lib/units';
 import {
@@ -20,6 +21,7 @@ type CartItem = {
   discount: number;
   imageUrl?: string | null;
 };
+type Vendedor = { id: string; name: string; active: boolean };
 
 type PausedSalePayload={items:CartItem[];discount?:number;selectedCustomer?:{id:string;name:string}|null;paymentMethod?:string|null;status?:'building'|'awaiting_payment'};type PausedSale={id:string;payload:PausedSalePayload;createdAt:string};
 
@@ -157,6 +159,8 @@ export default function POSPage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [showQuickProduct, setShowQuickProduct] = useState(false);
+  const [showSeller, setShowSeller] = useState(false);
   const [showPaused, setShowPaused] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
@@ -172,6 +176,13 @@ export default function POSPage() {
   const [discountInput, setDiscountInput] = useState('');
   const [manualName, setManualName] = useState('');
   const [manualPrice, setManualPrice] = useState('');
+  const [quickName, setQuickName] = useState('');
+  const [quickPrice, setQuickPrice] = useState('');
+  const [quickBarcode, setQuickBarcode] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [sellers, setSellers] = useState<Vendedor[]>([]);
+  const [activeSeller, setActiveSeller] = useState<Vendedor | null>(null);
+  const [sellerBusy, setSellerBusy] = useState(false);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const lastEnterForCobrarRef = useRef<number>(0);
@@ -305,6 +316,12 @@ export default function POSPage() {
   }, []);
 
   useEffect(()=>{void fetchPaused()},[fetchPaused]);
+  useEffect(() => {
+    Promise.allSettled([api<Vendedor | null>('/vendedores/active'), api<Vendedor[]>('/vendedores')]).then(([activeResult, sellersResult]) => {
+      if (activeResult.status === 'fulfilled') setActiveSeller(activeResult.value);
+      if (sellersResult.status === 'fulfilled') setSellers(sellersResult.value);
+    });
+  }, []);
 
   const addToCart = useCallback(
     (
@@ -419,7 +436,7 @@ export default function POSPage() {
     };
   }, [search, addToCart]);
 
-  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled]);
+  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,activeSeller?.id]);
   const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar]);
   const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
   useEffect(() => {
@@ -431,11 +448,13 @@ export default function POSPage() {
       // No aplicar atajos si el foco está en el carrito (evitar acoplamiento con inputs de cantidad/precio)
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest?.('[data-pos-cart]')) return;
-      if (showShortcuts || showDiscount || showManual || showPaused || showPayment || showCustomer || showOpenCaja) {
+      if (showShortcuts || showDiscount || showManual || showQuickProduct || showSeller || showPaused || showPayment || showCustomer || showOpenCaja) {
         if (e.key === 'Escape') {
           setShowShortcuts(false);
           setShowDiscount(false);
           setShowManual(false);
+          setShowQuickProduct(false);
+          setShowSeller(false);
           setShowPaused(false);
           setShowPayment(false);
           setShowCustomer(false);
@@ -534,6 +553,8 @@ export default function POSPage() {
     showShortcuts,
     showDiscount,
     showManual,
+    showQuickProduct,
+    showSeller,
     showPaused,
     showPayment,
     showCustomer,
@@ -624,9 +645,47 @@ export default function POSPage() {
     setShowManual(false);
   };
 
+  const createQuickProduct = async () => {
+    const name = quickName.trim();
+    const price = Number(quickPrice.replace(',', '.'));
+    if (!name) return alert('Ingresá un nombre.');
+    if (!Number.isFinite(price) || price < 0) return alert('Ingresá un precio válido.');
+    setQuickBusy(true);
+    try {
+      const product = await api<{ id: string; name: string; price: string; stock: number; stockControl: boolean; imageUrl?: string | null }>('/products/quick', {
+        method: 'POST',
+        body: JSON.stringify({ name, price, barcode: quickBarcode.trim() || undefined }),
+      });
+      addToCart(product);
+      setQuickName('');
+      setQuickPrice('');
+      setQuickBarcode('');
+      setShowQuickProduct(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Error al crear el producto rápido');
+    } finally {
+      setQuickBusy(false);
+    }
+  };
+
+  const changeSeller = async (seller: Vendedor) => {
+    if (!confirm(`¿Cambiar el vendedor a ${seller.name}?`)) return;
+    setSellerBusy(true);
+    try {
+      const selected = await api<Vendedor>('/vendedores/set-active', { method: 'POST', body: JSON.stringify({ vendedorId: seller.id }) });
+      setActiveSeller(selected);
+      localStorage.setItem('sr-vendedor', selected.id);
+      setShowSeller(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Error al cambiar vendedor');
+    } finally {
+      setSellerBusy(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col bg-app">
-      <div className="shrink-0 px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-fg-muted uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="ml-auto px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div>
+      <div className="shrink-0 px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-fg-muted uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="ml-auto flex items-center gap-2">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
       <div className="flex items-center justify-between border-b border-hair-soft bg-surface px-4 py-2.5">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold leading-tight text-fg">POS</h1>
@@ -723,6 +782,9 @@ export default function POSPage() {
               className="whitespace-nowrap rounded-lg border border-hair bg-raised px-4 py-3 text-fg-muted hover:bg-raised2 hover:text-fg"
             >
               Producto manual
+            </button>
+            <button type="button" onClick={() => setShowQuickProduct(true)} className="whitespace-nowrap rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-4 py-3 font-medium text-warn hover:bg-raised2">
+              Producto rápido
             </button>
           </div>
           <div data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
@@ -1045,6 +1107,21 @@ export default function POSPage() {
           </div>
         </div>
       )}
+
+      {showQuickProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => !quickBusy && setShowQuickProduct(false)}>
+          <div className="mx-4 w-full max-w-sm rounded-xl border border-hair bg-surface p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg">Producto rápido</h2>
+            <p className="mb-4 mt-1 text-sm text-fg-muted">Se crea como incompleto y sin control de stock.</p>
+            <label className="mb-3 block text-sm text-fg-muted">Nombre<input autoFocus type="text" value={quickName} onChange={(event) => setQuickName(event.target.value)} placeholder="Nombre del producto" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand" /></label>
+            <label className="mb-3 block text-sm text-fg-muted">Precio<input type="text" inputMode="decimal" value={quickPrice} onChange={(event) => setQuickPrice(event.target.value)} placeholder="0,00" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono tabular-nums text-fg placeholder:text-fg-faint focus-brand" /></label>
+            <label className="mb-5 block text-sm text-fg-muted">SKU / código de barras <span className="text-fg-faint">(opcional)</span><input type="text" value={quickBarcode} onChange={(event) => setQuickBarcode(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createQuickProduct(); }} placeholder="Código escaneable" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg placeholder:text-fg-faint focus-brand" /></label>
+            <div className="flex gap-2"><button type="button" disabled={quickBusy} onClick={() => setShowQuickProduct(false)} className="flex-1 rounded-lg border border-hair bg-raised py-2 text-fg-muted hover:bg-raised2 disabled:opacity-50">Cancelar</button><button type="button" disabled={quickBusy} onClick={() => void createQuickProduct()} className="btn-brand flex-1 rounded-lg py-2 font-medium disabled:opacity-50">{quickBusy ? 'Creando…' : 'Crear y agregar'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {showSeller && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !sellerBusy && setShowSeller(false)}><div className="w-full max-w-sm rounded-xl border border-hair bg-surface p-5 shadow-xl" onClick={(event) => event.stopPropagation()}><h2 className="text-lg font-bold text-fg">Cambiar vendedor</h2><p className="mb-4 mt-1 text-sm text-fg-muted">Elegí quién operará las próximas ventas.</p><div className="space-y-2">{sellers.filter((seller) => seller.active).map((seller) => <button key={seller.id} type="button" disabled={sellerBusy || seller.id === activeSeller?.id} onClick={() => void changeSeller(seller)} className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left ${seller.id === activeSeller?.id ? 'border-[color:var(--brand-accent)] bg-brand-highlight text-brand' : 'border-hair bg-raised text-fg hover:bg-raised2'} disabled:opacity-60`}><span className="font-medium">{seller.name}</span>{seller.id === activeSeller?.id && <span className="text-xs">Activo</span>}</button>)}</div><button type="button" disabled={sellerBusy} onClick={() => setShowSeller(false)} className="mt-4 w-full rounded-lg border border-hair py-2 text-fg-muted hover:bg-raised">Cerrar</button></div></div>}
 
       {showPaused && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPaused(false)}>

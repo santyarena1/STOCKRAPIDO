@@ -105,6 +105,19 @@ export class ProductsController {
     return this.products.bulk(user.businessId, body);
   }
 
+  @Post('quick')
+  quick(
+    @CurrentUser() user: User,
+    @Body() body: { name: string; price: number; barcode?: string },
+  ) {
+    return this.products.quick(user.businessId, body);
+  }
+
+  @Get('incomplete')
+  incomplete(@CurrentUser() user: User) {
+    return this.products.incomplete(user.businessId);
+  }
+
   @Get('duplicates')
   duplicates(@CurrentUser() user: User) {
     return this.products.duplicates(user.businessId);
