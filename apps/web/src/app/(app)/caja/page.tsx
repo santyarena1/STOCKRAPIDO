@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader, Spinner } from '@/components/ui/Loader';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 type CajaPreview = {
   openingEfectivo: number;
@@ -52,12 +54,13 @@ export default function CajaPage() {
   const [closeActualEfectivo, setCloseActualEfectivo] = useState('');
   const [closeActualBanco, setCloseActualBanco] = useState('');
   const [closing, setClosing] = useState(false);
-  const [historyFrom, setHistoryFrom] = useState(() => {
+  const defaultHistoryFrom = (() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
     return d.toISOString().slice(0, 10);
-  });
-  const [historyTo, setHistoryTo] = useState(() => new Date().toISOString().slice(0, 10));
+  })();
+  const [historyFrom, setHistoryFrom] = usePersistedState('sr-filters:caja:from', defaultHistoryFrom);
+  const [historyTo, setHistoryTo] = usePersistedState('sr-filters:caja:to', new Date().toISOString().slice(0, 10));
 
   const fetchOpen = async () => {
     try {
@@ -176,7 +179,7 @@ export default function CajaPage() {
 
   const preview = open?.preview;
 
-  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
+  if (loading) return <Loader full />;
 
   return (
     <Container className="max-w-4xl space-y-6">
@@ -396,7 +399,7 @@ export default function CajaPage() {
               disabled={historyLoading}
               className="px-3 py-1.5 rounded-lg bg-raised2 text-fg-muted text-sm hover:bg-raised2 disabled:opacity-50"
             >
-              {historyLoading ? 'Cargando...' : 'Actualizar'}
+              {historyLoading ? <Spinner /> : 'Actualizar'}
             </button>
           </div>
         </div>
@@ -415,9 +418,7 @@ export default function CajaPage() {
             <tbody>
               {historyLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-fg-faint text-center">
-                    Cargando historial...
-                  </td>
+                  <td colSpan={6} className="px-4 py-6"><Loader size="sm" label="Historial" /></td>
                 </tr>
               ) : history.length === 0 ? (
                 <tr>

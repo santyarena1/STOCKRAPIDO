@@ -12,15 +12,18 @@ import {
   Settings,
   SlidersHorizontal,
   ShoppingCart,
+  Menu,
   Moon,
   Sun,
   Truck,
+  X,
 } from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 import { cn } from '@/lib/cn';
+import { Loader } from '@/components/ui/Loader';
 
 type Branding = {
   accentColor?: string;
@@ -96,6 +99,7 @@ const GROUPS = [
       { href: '/config/compras-ia', label: 'Compras IA' },
       { href: '/config/categorias', label: 'Categorías' },
       { href: '/config/fiscal', label: 'Fiscal' },
+      { href: '/config/eliminar-datos', label: 'Eliminar datos' },
     ],
   },
   {
@@ -151,6 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => activeGroups(pathname));
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const applyBranding = useCallback(() => {
     api<{ name: string; posConfig?: { branding?: Branding } }>('/business/me')
@@ -222,7 +227,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setTheme(current === 'light' ? 'light' : 'dark');
   }, []);
 
-  if (!ready) return <div className="flex min-h-screen items-center justify-center bg-app text-fg-muted">Cargando...</div>;
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) setMobileSidebarOpen(false);
+    };
+    closeOnDesktop(desktop);
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
+
+  if (!ready) return <Loader full label="Cargando" />;
 
   const handleLogoutAll = async () => {
     const token = localStorage.getItem('accessToken');
@@ -242,108 +261,59 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setTheme(next);
   };
 
+  const sidebarContent = (closeAfterNavigation = false) => (
+    <>
+      <div className="shrink-0 border-b border-hair-soft p-4">
+        <Link
+          href="/dashboard"
+          onClick={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined}
+          className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-fg"
+        >
+          {brand.logoUrl &&
+          (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-hair object-cover" />
+          ) : null}
+          <span className="truncate">{sidebarTitle}</span>
+        </Link>
+      </div>
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3">
+        <div className="space-y-1">
+          {PINNED.map(({ href, label, icon: Icon }) => {
+            const active = isActivePath(pathname, href);
+            return <Link key={href} href={href} onClick={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined} className={cn('flex items-center gap-3 rounded-lg border-r-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors', active ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted hover:bg-raised hover:text-fg')}><Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-current' : 'text-fg-muted')} /><span>{label}</span></Link>;
+          })}
+        </div>
+        <div className="mt-4 space-y-1">
+          {GROUPS.map(({ title, icon: Icon, items }) => {
+            const open = openGroups[title] ?? false;
+            const groupActive = items.some(({ href }) => isActivePath(pathname, href));
+            return <div key={title}><button type="button" aria-expanded={open} onClick={() => setOpenGroups((current) => (current[title] ? {} : { [title]: true }))} className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg', groupActive ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted')}><Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-fg-muted')} /><span className="min-w-0 flex-1 truncate">{title}</span><ChevronDown className={cn('h-4 w-4 shrink-0 text-fg-faint transition-transform', open && 'rotate-180')} /></button>{open ? <div className="ml-5 mt-0.5 space-y-0.5 border-l border-hair-soft pl-3">{items.map(({ href, label }) => { const active = isActivePath(pathname, href); return <Link key={href} href={href} onClick={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined} className={cn('flex items-center rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors', active ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted hover:bg-raised hover:text-fg')}>{label}</Link>; })}</div> : null}</div>;
+          })}
+        </div>
+      </nav>
+      <div className="shrink-0 border-t border-hair-soft p-2"><button type="button" onClick={handleLogoutAll} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-[var(--crit-soft)] hover:text-crit">Cerrar sesión en todos los dispositivos</button></div>
+    </>
+  );
+
   return (
     <div className="flex h-screen min-h-0 overflow-hidden bg-app text-fg">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-hair-soft bg-surface">
-        <div className="shrink-0 border-b border-hair-soft p-4">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-fg">
-            {brand.logoUrl &&
-            (brand.logoUrl.startsWith('data:') ||
-              brand.logoUrl.startsWith('http://') ||
-              brand.logoUrl.startsWith('https://')) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={brand.logoUrl}
-                alt=""
-                className="h-9 w-9 shrink-0 rounded-lg border border-hair object-cover"
-              />
-            ) : null}
-            <span className="truncate">{sidebarTitle}</span>
-          </Link>
-        </div>
-        <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-          <div className="space-y-1">
-            {PINNED.map(({ href, label, icon: Icon }) => {
-              const active = isActivePath(pathname, href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg border-r-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
-                    active
-                      ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                      : 'text-fg-muted hover:bg-raised hover:text-fg',
-                  )}
-                >
-                  <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-current' : 'text-fg-muted')} />
-                  <span>{label}</span>
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 space-y-1">
-            {GROUPS.map(({ title, icon: Icon, items }) => {
-              const open = openGroups[title] ?? false;
-              const groupActive = items.some(({ href }) => isActivePath(pathname, href));
-              return (
-                <div key={title}>
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    onClick={() => setOpenGroups((current) => (current[title] ? {} : { [title]: true }))}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg',
-                      groupActive
-                        ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                        : 'text-fg-muted',
-                    )}
-                  >
-                    <Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-fg-muted')} />
-                    <span className="min-w-0 flex-1 truncate">{title}</span>
-                    <ChevronDown
-                      className={cn('h-4 w-4 shrink-0 text-fg-faint transition-transform', open && 'rotate-180')}
-                    />
-                  </button>
-                  {open ? (
-                    <div className="ml-5 mt-0.5 space-y-0.5 border-l border-hair-soft pl-3">
-                      {items.map(({ href, label }) => {
-                        const active = isActivePath(pathname, href);
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            className={cn(
-                              'flex items-center rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors',
-                              active
-                                ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]'
-                                : 'text-fg-muted hover:bg-raised hover:text-fg',
-                            )}
-                          >
-                            {label}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </nav>
-        <div className="shrink-0 border-t border-hair-soft p-2">
-          <button
-            type="button"
-            onClick={handleLogoutAll}
-            className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-[var(--crit-soft)] hover:text-crit"
-          >
-            Cerrar sesión en todos los dispositivos
-          </button>
-        </div>
-      </aside>
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-hair-soft bg-surface lg:flex">{sidebarContent()}</aside>
+      <div className={cn('fixed inset-0 z-40 lg:hidden', mobileSidebarOpen ? 'pointer-events-auto' : 'pointer-events-none')} aria-hidden={!mobileSidebarOpen}>
+        <button type="button" aria-label="Cerrar menú" onClick={() => setMobileSidebarOpen(false)} className={cn('absolute inset-0 bg-black/60 transition-opacity', mobileSidebarOpen ? 'opacity-100' : 'opacity-0')} />
+        <aside className={cn('relative flex h-full w-[min(18rem,85vw)] flex-col border-r border-hair-soft bg-surface shadow-2xl transition-transform duration-200', mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full')}>
+          <button type="button" aria-label="Cerrar menú" onClick={() => setMobileSidebarOpen(false)} className="absolute right-2 top-2 z-10 rounded-lg border border-hair bg-raised p-2 text-fg-muted"><X className="h-4 w-4" /></button>
+          {sidebarContent(true)}
+        </aside>
+      </div>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 justify-end gap-2 border-b border-hair-soft px-4 py-2">
+        <div className="flex shrink-0 items-center gap-2 border-b border-hair-soft px-3 py-2 lg:hidden">
+          <button type="button" aria-label="Abrir menú" aria-expanded={mobileSidebarOpen} onClick={() => setMobileSidebarOpen(true)} className="rounded-lg border border-hair bg-raised p-2 text-fg-muted"><Menu className="h-5 w-5" /></button>
+          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 font-semibold text-fg">{brand.logoUrl && (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? <img src={brand.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg border border-hair object-cover" /> : null}<span className="truncate">{sidebarTitle}</span></Link>
+          <button type="button" onClick={toggleTheme} aria-label="Cambiar tema" className="rounded-lg border border-hair p-2 text-fg-muted hover:bg-raised">{theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}</button>
+          <button type="button" onClick={() => setShowTutorial(true)} className="btn-brand rounded-lg px-2.5 py-2 text-xs font-medium">Tutorial</button>
+        </div>
+        <div className="hidden shrink-0 justify-end gap-2 border-b border-hair-soft px-4 py-2 lg:flex">
           <button
             type="button"
             onClick={toggleTheme}
@@ -360,7 +330,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Tutorial
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
       </main>
       <TutorialOverlay open={showTutorial} onClose={() => setShowTutorial(false)} />
     </div>

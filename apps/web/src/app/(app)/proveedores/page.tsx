@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 
 type Supplier = { id: string; name: string; phone?: string; email?: string; _count?: { purchases: number } };
 
@@ -84,9 +85,9 @@ export default function ProveedoresPage() {
       )}
 
       {loading ? (
-        <p className="text-fg-faint">Cargando...</p>
+        <Loader />
       ) : (
-        <div data-tour="proveedores-list" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div data-tour="proveedores-list" className="overflow-x-auto rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
             <thead className="bg-raised text-fg-muted">
               <tr>

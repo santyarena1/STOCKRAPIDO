@@ -6,6 +6,8 @@ import { api, getApiBaseUrl } from '@/lib/api';
 import { formatMoneyArs } from '@/lib/units';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 type Connection = {
   id: string;
@@ -61,14 +63,14 @@ const PROVIDERS: Record<
 
 export default function SincronizacionesPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = usePersistedState<string | null>('sr-filters:sincronizaciones:connection', null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [items, setItems] = useState<Synced[]>([]);
-  const [q, setQ] = useState('');
-  const [onlyWithCost, setOnlyWithCost] = useState(false);
-  const [showInternal, setShowInternal] = useState(false);
+  const [q, setQ] = usePersistedState('sr-filters:sincronizaciones:q', '');
+  const [onlyWithCost, setOnlyWithCost] = usePersistedState('sr-filters:sincronizaciones:only-with-cost', false);
+  const [showInternal, setShowInternal] = usePersistedState('sr-filters:sincronizaciones:show-internal', false);
 
   const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
   const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
@@ -157,7 +159,7 @@ export default function SincronizacionesPage() {
   };
 
   if (loading) {
-    return <div className="p-6 text-fg-muted">Cargando sincronizaciones…</div>;
+    return <Loader full label="Sincronizaciones" />;
   }
 
   return (

@@ -9,6 +9,7 @@ import { STOCK_REASONS } from '@/components/StockAdjustReasons';
 import { ImageUploader } from '@/components/ImageUploader';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 
 type ProductBatch = {
   id: string;
@@ -144,7 +145,7 @@ export default function EditarProductoPage() {
     }
   };
 
-  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
+  if (loading) return <Loader full />;
   if (!product) return (
     <div className="p-6">
       <Link href="/productos" className="text-brand hover:underline">← Productos</Link>

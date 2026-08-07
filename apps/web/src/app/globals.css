@@ -10,6 +10,15 @@
   --brand-accent: #DC2626;
 }
 
+@media (max-width: 1023px) {
+  /* Las tablas dentro de diálogos también deben poder recorrerse sin ensanchar la página. */
+  [class*='fixed'][class*='inset-0'] table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
 :root,
 :root[data-theme='dark'] {
   --bg: #151519;

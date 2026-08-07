@@ -11,6 +11,7 @@ import {
 } from '@/lib/customer-display-sync';
 import { FiscalReceiptModal, printFiscalReceipt } from '@/components/FiscalCheckout';
 import { Search } from 'lucide-react';
+import { Loader } from '@/components/ui/Loader';
 
 type CartItem = {
   productId: string;
@@ -685,8 +686,8 @@ export default function POSPage() {
 
   return (
     <div className="flex h-full flex-col bg-app">
-      <div className="shrink-0 px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-fg-muted uppercase">Próximas ventas</span><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setFiscalMode('internal')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="ml-auto flex items-center gap-2">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
-      <div className="flex items-center justify-between border-b border-hair-soft bg-surface px-4 py-2.5">
+      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-2 sm:gap-3"><span className="w-full text-xs font-semibold text-fg-muted uppercase sm:w-auto">Próximas ventas</span><div className="inline-flex max-w-full rounded-lg border border-hair overflow-x-auto"><button type="button" onClick={()=>setFiscalMode('internal')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hair-soft bg-surface px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold leading-tight text-fg">POS</h1>
           {openCashRegisterId ? (
@@ -759,9 +760,9 @@ export default function POSPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-3 sm:p-4 lg:grid-cols-3 lg:overflow-hidden">
         <div className="lg:col-span-2 flex flex-col min-h-0">
-          <div className="mb-2 flex gap-2">
+          <div className="mb-2 flex flex-wrap gap-2 sm:flex-nowrap">
             <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-fg-faint" />
             <input
@@ -779,16 +780,16 @@ export default function POSPage() {
               type="button"
               onClick={() => setShowManual(true)}
               data-tour="pos-manual"
-              className="whitespace-nowrap rounded-lg border border-hair bg-raised px-4 py-3 text-fg-muted hover:bg-raised2 hover:text-fg"
+              className="flex-1 whitespace-nowrap rounded-lg border border-hair bg-raised px-3 py-3 text-fg-muted hover:bg-raised2 hover:text-fg sm:flex-none sm:px-4"
             >
               Producto manual
             </button>
-            <button type="button" onClick={() => setShowQuickProduct(true)} className="whitespace-nowrap rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-4 py-3 font-medium text-warn hover:bg-raised2">
+            <button type="button" onClick={() => setShowQuickProduct(true)} className="flex-1 whitespace-nowrap rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-3 font-medium text-warn hover:bg-raised2 sm:flex-none sm:px-4">
               Producto rápido
             </button>
           </div>
           <div data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
-            {loading && <p className="p-2 text-fg-faint">Buscando...</p>}
+            {loading && <Loader size="sm" label="Productos" />}
             {!loading && results.length > 0 && (
               <ul className="divide-y divide-hair-soft">
                 {results.map((p, idx) => (
@@ -870,7 +871,7 @@ export default function POSPage() {
             {selectedCustomer && (
               <p className="text-amber-400 text-sm">Al fiado: {selectedCustomer.name}</p>
             )}
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => setShowCustomer(true)}
@@ -910,8 +911,8 @@ export default function POSPage() {
       </div>
 
       {showOpenCaja && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
-          <div className="bg-surface border border-hair rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
+          <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg mb-1">Abrir caja</h2>
             <p className="text-fg-faint text-sm mb-4">Ingresá el efectivo y banco inicial del turno (podés dejar 0).</p>
             <form onSubmit={handleOpenCaja} className="space-y-3">
@@ -968,8 +969,8 @@ export default function POSPage() {
       )}
 
       {showShortcuts && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowShortcuts(false)}>
-          <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowShortcuts(false)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg mb-4">Atajos de teclado</h2>
             <ul className="space-y-2 text-fg-muted">
               {SHORTCUTS.map(({ key, desc }) => (
@@ -985,8 +986,8 @@ export default function POSPage() {
       )}
 
       {showDiscount && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowDiscount(false)}>
-          <div className="bg-surface border border-hair rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowDiscount(false)}>
+          <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg mb-4">Descuento total (monto)</h2>
             <input
               type="text"
@@ -1010,8 +1011,8 @@ export default function POSPage() {
       )}
 
       {showPayment && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPayment(false)}>
-          <div className="mx-4 w-full max-w-md rounded-xl border border-hair bg-surface p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowPayment(false)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-2 text-lg font-bold text-fg">¿Cómo pagó el cliente?</h2>
             <p className="mb-4 text-sm text-fg-muted">
               Total a cobrar: ${total.toFixed(0)} · Efectivo/Fiado cierra en un paso · Transferencia, MP o tarjeta: elegí método
@@ -1033,7 +1034,7 @@ export default function POSPage() {
                 </button>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {PAYMENT_METHODS.map((pm, idx) => (
                 <button
                   key={pm.id}
@@ -1082,8 +1083,8 @@ export default function POSPage() {
       )}
 
       {showManual && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowManual(false)}>
-          <div className="bg-surface border border-hair rounded-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowManual(false)}>
+          <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg mb-4">Producto manual</h2>
             <input
               type="text"
@@ -1109,8 +1110,8 @@ export default function POSPage() {
       )}
 
       {showQuickProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => !quickBusy && setShowQuickProduct(false)}>
-          <div className="mx-4 w-full max-w-sm rounded-xl border border-hair bg-surface p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !quickBusy && setShowQuickProduct(false)}>
+          <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-hair bg-surface p-5 shadow-xl sm:p-6" onClick={(event) => event.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg">Producto rápido</h2>
             <p className="mb-4 mt-1 text-sm text-fg-muted">Se crea como incompleto y sin control de stock.</p>
             <label className="mb-3 block text-sm text-fg-muted">Nombre<input autoFocus type="text" value={quickName} onChange={(event) => setQuickName(event.target.value)} placeholder="Nombre del producto" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand" /></label>
@@ -1124,8 +1125,8 @@ export default function POSPage() {
       {showSeller && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !sellerBusy && setShowSeller(false)}><div className="w-full max-w-sm rounded-xl border border-hair bg-surface p-5 shadow-xl" onClick={(event) => event.stopPropagation()}><h2 className="text-lg font-bold text-fg">Cambiar vendedor</h2><p className="mb-4 mt-1 text-sm text-fg-muted">Elegí quién operará las próximas ventas.</p><div className="space-y-2">{sellers.filter((seller) => seller.active).map((seller) => <button key={seller.id} type="button" disabled={sellerBusy || seller.id === activeSeller?.id} onClick={() => void changeSeller(seller)} className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left ${seller.id === activeSeller?.id ? 'border-[color:var(--brand-accent)] bg-brand-highlight text-brand' : 'border-hair bg-raised text-fg hover:bg-raised2'} disabled:opacity-60`}><span className="font-medium">{seller.name}</span>{seller.id === activeSeller?.id && <span className="text-xs">Activo</span>}</button>)}</div><button type="button" disabled={sellerBusy} onClick={() => setShowSeller(false)} className="mt-4 w-full rounded-lg border border-hair py-2 text-fg-muted hover:bg-raised">Cerrar</button></div></div>}
 
       {showPaused && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPaused(false)}>
-          <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowPaused(false)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg mb-4">Ventas en espera</h2>
             {cart.length > 0 && (
               <button
@@ -1162,8 +1163,8 @@ export default function POSPage() {
       )}
 
       {showCustomer && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowCustomer(false)}>
-          <div className="bg-surface border border-hair rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowCustomer(false)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-fg mb-4">Vender al fiado</h2>
             <button
               type="button"

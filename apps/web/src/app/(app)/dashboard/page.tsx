@@ -17,6 +17,7 @@ import 'react-grid-layout/css/styles.css';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 
 const ResponsiveGrid = WidthProvider(Responsive);
 
@@ -155,7 +156,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
+  if (loading) return <Loader full />;
 
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const currentMonth = monthNames[new Date().getMonth()];
@@ -227,9 +228,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Grid editable */}
-      <div className="react-grid-layout-wrapper [&_.react-grid-item]:overflow-visible [&_.react-grid-item>div]:h-full [&_.react-grid-item>div]:min-h-0">
+      <div className="react-grid-layout-wrapper max-w-full overflow-x-auto overscroll-x-contain [&_.react-grid-item]:overflow-visible [&_.react-grid-item>div]:h-full [&_.react-grid-item>div]:min-h-0">
         <ResponsiveGrid
-          className="layout"
+          className="layout min-w-[900px] lg:min-w-0"
           layouts={{ lg: layout }}
           breakpoints={{ lg: 0 }}
           cols={{ lg: 12 }}

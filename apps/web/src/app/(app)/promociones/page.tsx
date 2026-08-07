@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 
 type ProductItem = { productId: string; qty: number };
 
@@ -446,7 +447,7 @@ export default function PromocionesPage() {
               {productSearch && (
                 <div className="rounded-lg border border-hair-soft bg-raised p-2 max-h-40 overflow-auto">
                   {searching ? (
-                    <p className="text-fg-faint text-sm">Buscando...</p>
+                    <Loader size="sm" label="Resultados" />
                   ) : searchResults.length === 0 ? (
                     <p className="text-fg-faint text-sm">Sin resultados</p>
                   ) : (
@@ -536,9 +537,9 @@ export default function PromocionesPage() {
       )}
 
       {loading ? (
-        <p className="text-fg-faint">Cargando...</p>
+        <Loader />
       ) : (
-        <div data-tour="promos-list" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div data-tour="promos-list" className="overflow-x-auto rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
             <thead className="bg-raised text-fg-muted">
               <tr>

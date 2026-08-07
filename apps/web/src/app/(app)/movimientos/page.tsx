@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 type Move = {
   id: string;
@@ -21,7 +23,7 @@ export default function MovimientosPage() {
   const [moves, setMoves] = useState<Move[]>([]);
   const [loading, setLoading] = useState(true);
   /** all = últimos movimientos de todo tipo; altas = solo productos nuevos (no quedan ocultos tras muchas ventas) */
-  const [kind, setKind] = useState<'all' | 'altas'>('altas');
+  const [kind, setKind] = usePersistedState<'all' | 'altas'>('sr-filters:movimientos:kind', 'altas');
 
   useEffect(() => {
     setLoading(true);
@@ -72,7 +74,7 @@ export default function MovimientosPage() {
       </div>
 
       {loading ? (
-        <p className="text-fg-faint">Cargando...</p>
+        <Loader />
       ) : (
         <div data-tour="movimientos-table" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
           <div className="overflow-x-auto">

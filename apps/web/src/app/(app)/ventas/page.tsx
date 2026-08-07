@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 import { printFiscalReceipt } from '@/components/FiscalCheckout';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 type SaleItem = {
   id: string;
@@ -173,7 +175,7 @@ export default function VentasPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [stats, setStats] = useState<SalesHistoryStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = usePersistedState('sr-filters:ventas:list', {
     from: '',
     to: '',
     customerId: '',
@@ -181,8 +183,8 @@ export default function VentasPage() {
   });
   const [productSearch, setProductSearch] = useState('');
   const [productHits, setProductHits] = useState<ProductHit[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<{ id: string; name: string } | null>(null);
-  const [activeDatePreset, setActiveDatePreset] = useState<VentasDatePresetId | null>(null);
+  const [selectedProduct, setSelectedProduct] = usePersistedState<{ id: string; name: string } | null>('sr-filters:ventas:product', null);
+  const [activeDatePreset, setActiveDatePreset] = usePersistedState<VentasDatePresetId | null>('sr-filters:ventas:date-preset', null);
   const [viewSale, setViewSale] = useState<Sale | null>(null);
 
   const [saleEditDiscount, setSaleEditDiscount] = useState('');
@@ -717,9 +719,7 @@ export default function VentasPage() {
             <tbody className="divide-y divide-hair-soft">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="p-6 text-fg-faint text-center">
-                    Cargando...
-                  </td>
+                  <td colSpan={10} className="p-6"><Loader size="sm" label="Ventas" /></td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>

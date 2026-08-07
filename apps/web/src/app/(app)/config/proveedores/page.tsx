@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 import { api } from '@/lib/api';
 
 type SyncFrequency = 'manual' | 'daily' | 'hourly' | 'every_6h' | 'every_12h';
@@ -155,7 +156,7 @@ export default function ProveedoresConfigPage() {
     finally { setBusy(null); }
   };
 
-  if (loading) return <div className="text-fg-muted">Cargando proveedores…</div>;
+  if (loading) return <Loader full label="Proveedores" />;
 
   return <div className="space-y-6">
     <PageHeader title="Proveedores y sincronización" subtitle="Configurá credenciales, mapeo de columnas y frecuencia de cada proveedor." />
@@ -191,7 +192,7 @@ export default function ProveedoresConfigPage() {
 
       <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-fg">Mapeo de columnas → producto</h2><p className="text-sm text-fg-muted">Elegí qué columna del proveedor completa cada campo del producto.</p></div><button type="button" onClick={saveMapping} disabled={!mapping || busy === 'mapping'} className="btn-brand rounded-lg px-4 py-2 text-sm disabled:opacity-50">{busy === 'mapping' ? 'Guardando…' : 'Guardar mapeo'}</button></div>
-        {mapping ? <div className="grid gap-3 sm:grid-cols-2">{mapping.productFields.map((productField) => <div key={productField} className="flex items-center gap-2"><span className="w-36 shrink-0 truncate text-sm font-medium text-fg-muted" title={FIELD_LABELS[productField] || productField}>{FIELD_LABELS[productField] || productField}</span><span className="text-fg-faint">←</span><select value={mapping.mapping[productField] || ''} onChange={(event) => setMapping({ ...mapping, mapping: { ...mapping.mapping, [productField]: event.target.value } })} className="min-w-0 flex-1 rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"><option value="">— (no completar)</option>{mapping.syncedFields.map((syncedField) => <option key={syncedField} value={syncedField}>{FIELD_LABELS[syncedField] || syncedField}</option>)}</select></div>)}</div> : <p className="text-sm text-fg-faint">Cargando mapeo…</p>}
+        {mapping ? <div className="grid gap-3 sm:grid-cols-2">{mapping.productFields.map((productField) => <div key={productField} className="flex items-center gap-2"><span className="w-36 shrink-0 truncate text-sm font-medium text-fg-muted" title={FIELD_LABELS[productField] || productField}>{FIELD_LABELS[productField] || productField}</span><span className="text-fg-faint">←</span><select value={mapping.mapping[productField] || ''} onChange={(event) => setMapping({ ...mapping, mapping: { ...mapping.mapping, [productField]: event.target.value } })} className="min-w-0 flex-1 rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"><option value="">— (no completar)</option>{mapping.syncedFields.map((syncedField) => <option key={syncedField} value={syncedField}>{FIELD_LABELS[syncedField] || syncedField}</option>)}</select></div>)}</div> : <Loader size="sm" label="Mapeo" />}
       </section>
     </>}
   </div>;

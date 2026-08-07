@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, getApiBaseUrl, getToken } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 
 type Customer = { id: string; name: string; phone?: string; balance: string | number };
 type SaleItem = { id: string; productName?: string | null; product?: { name: string } | null; qty: number; unitPrice: string | number; subtotal: string | number };
@@ -247,7 +248,7 @@ export default function ClientesPage() {
             {/* Contenido */}
             <div className="flex-1 overflow-y-auto p-4">
               {detailLoading ? (
-                <p className="text-fg-faint text-sm p-4">Cargando...</p>
+                <Loader size="sm" />
               ) : detailTab === 'ventas' ? (
                 detailSales.length === 0 ? (
                   <p className="text-fg-faint text-sm p-4">Sin ventas registradas.</p>
@@ -313,9 +314,9 @@ export default function ClientesPage() {
       )}
 
       {loading ? (
-        <p className="text-fg-faint">Cargando...</p>
+        <Loader />
       ) : (
-        <div data-tour="clientes-cobrar" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div data-tour="clientes-cobrar" className="overflow-x-auto rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
             <thead className="bg-raised text-fg-muted">
               <tr>

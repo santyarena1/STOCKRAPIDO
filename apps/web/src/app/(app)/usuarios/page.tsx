@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
 
 type User = { id: string; email: string; name: string; role: string; isActive: boolean };
 
@@ -96,9 +97,9 @@ export default function UsuariosPage() {
       )}
 
       {loading ? (
-        <p className="text-fg-faint">Cargando...</p>
+        <Loader />
       ) : (
-        <div data-tour="usuarios-list" className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+        <div data-tour="usuarios-list" className="overflow-x-auto rounded-xl border border-hair-soft bg-surface">
           <table className="w-full text-sm">
             <thead className="bg-raised text-fg-muted">
               <tr>

@@ -20,7 +20,7 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
         <h1 className="text-2xl font-bold leading-tight text-fg">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm text-fg-muted">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="shrink-0">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">{actions}</div> : null}
     </div>
   );
 }

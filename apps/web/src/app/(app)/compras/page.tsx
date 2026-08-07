@@ -7,6 +7,8 @@ import { SupplierSelector } from '@/components/SupplierSelector';
 import { CategorySelector } from '@/components/CategorySelector';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 type Product = {
   id: string;
@@ -73,7 +75,7 @@ export default function ComprasPage() {
   });
   const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
   const [searchResults, setSearchResults] = useState<Record<number, Product[]>>({});
-  const [historyFilters, setHistoryFilters] = useState({
+  const [historyFilters, setHistoryFilters] = usePersistedState('sr-filters:compras:history', {
     supplierId: '',
     from: '',
     to: '',
@@ -254,7 +256,7 @@ export default function ComprasPage() {
     }
   };
 
-  if (loading) return <div className="p-6 text-fg-muted">Cargando...</div>;
+  if (loading) return <Loader full />;
 
   return (
     <Container className="max-w-6xl space-y-6">

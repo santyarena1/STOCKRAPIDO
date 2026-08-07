@@ -5,6 +5,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Loader } from '@/components/ui/Loader';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 type Period = 'today' | 'week' | 'month' | 'year';
 type SalesSummary = { total: number; count: number };
@@ -73,8 +75,8 @@ function Table({ headers, children, empty }: { headers: string[]; children: Reac
 }
 
 export default function ReportesPage() {
-  const [period, setPeriod] = useState<Period>('today');
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number][0]>('sales');
+  const [period, setPeriod] = usePersistedState<Period>('sr-filters:reportes:period', 'today');
+  const [activeTab, setActiveTab] = usePersistedState<(typeof TABS)[number][0]>('sr-filters:reportes:tab', 'sales');
   const [data, setData] = useState<ReportData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string[]>([]);
@@ -139,7 +141,7 @@ export default function ReportesPage() {
 
     <div className="flex flex-wrap gap-2 border-b border-hair-soft pb-3">{TABS.map(([key, label]) => <button key={key} type="button" onClick={() => setActiveTab(key)} className={`rounded-lg border px-3 py-2 text-sm ${activeTab === key ? 'border-[color:var(--brand-accent)] bg-brand-highlight text-brand' : 'border-hair bg-surface text-fg-muted hover:bg-raised'}`}>{label}</button>)}</div>
     {failed.length > 0 && <p className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-3 text-sm text-warn">Algunos reportes no pudieron cargarse ({failed.length}). El resto sigue disponible.</p>}
-    {loading && <p className="rounded-xl border border-hair-soft bg-surface p-8 text-center text-fg-faint">Cargando...</p>}
+    {loading && <div className="rounded-xl border border-hair-soft bg-surface"><Loader /></div>}
 
     {!loading && activeTab === 'sales' && <div className="space-y-6"><div className="grid gap-4 xl:grid-cols-2"><Card title="Ventas por hora"><Chart data={data.salesByHour.map((row) => ({ ...row, label: `${String(row.hour).padStart(2, '0')}h` }))} xKey="label" /></Card><Card title="Ventas por día de semana"><Chart data={weekdayData} xKey="day" /></Card><Card title="Ventas por categoría"><Chart data={data.salesByCategory.slice(0, 12).map((row) => ({ ...row, label: row.categoryName }))} xKey="label" /></Card><Card title="Top productos"><Table headers={['Producto', 'Cantidad', 'Total']} empty={!data.topProducts.length}>{data.topProducts.slice(0, 10).map((row, index) => <tr key={`${row.name}-${index}`}><td className={td}>{row.name}</td><td className={num}>{row.qty}</td><td className={num}>{money(row.total)}</td></tr>)}</Table></Card></div><div className="grid gap-4 xl:grid-cols-2"><Card title="Por método de pago"><Table headers={['Método', 'Ventas', 'Total']} empty={!data.salesByPayment.length}>{data.salesByPayment.map((row) => <tr key={row.paymentMethod}><td className={td}>{row.paymentMethod}</td><td className={num}>{row.count}</td><td className={num}>{money(row.total)}</td></tr>)}</Table></Card><Card title="Por vendedor"><Table headers={['Vendedor', 'Ventas', 'Total']} empty={!data.salesByUser.length}>{data.salesByUser.map((row) => <tr key={row.userId}><td className={td}>{row.userName}</td><td className={num}>{row.count}</td><td className={num}>{money(row.total)}</td></tr>)}</Table></Card><Card title="Por marca" className="xl:col-span-2"><Table headers={['Marca', 'Unidades', 'Total']} empty={!data.salesByBrand.length}>{data.salesByBrand.map((row) => <tr key={row.brand}><td className={td}>{row.brand}</td><td className={num}>{row.qty}</td><td className={num}>{money(row.total)}</td></tr>)}</Table></Card></div></div>}
 
