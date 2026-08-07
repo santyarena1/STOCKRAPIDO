@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { ImageUploader } from '@/components/ImageUploader';
 import { api } from '@/lib/api';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 import { Business, useConfig } from '../config-context';
@@ -11,12 +12,14 @@ type ReceiptTemplate = 'clasico' | 'moderno';
 export default function TicketConfigPage() {
   const { business, setBusiness } = useConfig();
   const [receiptName, setReceiptName] = useState('');
+  const [ticketLogoUrl, setTicketLogoUrl] = useState('');
   const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate>('clasico');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const branding = business?.posConfig?.branding;
     setReceiptName(branding?.receiptName ?? '');
+    setTicketLogoUrl(branding?.ticketLogoUrl ?? '');
     setReceiptTemplate(branding?.receiptTemplate === 'moderno' ? 'moderno' : 'clasico');
   }, [business]);
 
@@ -30,6 +33,7 @@ export default function TicketConfigPage() {
           posConfig: {
             branding: {
               receiptName: receiptName.trim(),
+              ticketLogoUrl: ticketLogoUrl.trim(),
               receiptTemplate,
             },
           },
@@ -59,6 +63,21 @@ export default function TicketConfigPage() {
             className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand"
           />
           <p className="mt-1 text-xs text-fg-faint">Vacío = se usa el nombre de la app o el nombre del negocio.</p>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Logo del ticket</label>
+          <ImageUploader
+            value={ticketLogoUrl}
+            onChange={setTicketLogoUrl}
+            maxPx={1200}
+            quality={0.95}
+            previewClass="h-24 w-40 bg-white object-contain p-2"
+            label="Subir logo del ticket"
+          />
+          <p className="mt-2 text-xs text-fg-faint">
+            Logo que se imprime en el ticket. Recomendado: PNG con fondo transparente en blanco y negro (la impresora térmica imprime en B&amp;N). Si lo dejás vacío, se usa el logo de Apariencia.
+          </p>
         </div>
 
         <fieldset>

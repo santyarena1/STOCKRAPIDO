@@ -30,6 +30,10 @@ export class BusinessBrandingDto {
 
   @IsOptional()
   @IsString()
+  ticketLogoUrl?: string;
+
+  @IsOptional()
+  @IsString()
   appTitle?: string;
 
   @IsOptional()

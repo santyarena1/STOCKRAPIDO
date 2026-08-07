@@ -10,6 +10,7 @@ export type BrandingPosConfig = {
   accentColor?: string;
   logoUrl?: string;
   faviconUrl?: string;
+  ticketLogoUrl?: string;
   appTitle?: string;
   receiptName?: string;
   receiptTemplate?: 'clasico' | 'moderno';
@@ -88,7 +89,7 @@ const MAX_LOGO_DATA_URL_CHARS = 350_000;
 function mergeBrandImageUrl(
   next: Record<string, unknown>,
   incoming: Record<string, unknown>,
-  key: 'logoUrl' | 'faviconUrl',
+  key: 'logoUrl' | 'faviconUrl' | 'ticketLogoUrl',
 ) {
   if (!(key in incoming)) return;
   const value = incoming[key];
@@ -161,6 +162,7 @@ export function mergePosConfigUpdate(
     }
     mergeBrandImageUrl(next, inc, 'logoUrl');
     mergeBrandImageUrl(next, inc, 'faviconUrl');
+    mergeBrandImageUrl(next, inc, 'ticketLogoUrl');
     if ('appTitle' in inc) {
       const v = inc.appTitle;
       if (typeof v === 'string' && v.trim() !== '') next.appTitle = v.trim().slice(0, 80);

@@ -287,7 +287,10 @@ export class FiscalService {
       (typeof branding.receiptName === 'string' && branding.receiptName.trim()) ||
       (typeof branding.appTitle === 'string' && branding.appTitle.trim()) ||
       sale.business.name;
-    const logoUrl = typeof branding.logoUrl === 'string' && branding.logoUrl.trim() ? branding.logoUrl.trim() : null;
+    const logoUrl =
+      (typeof branding.ticketLogoUrl === 'string' && branding.ticketLogoUrl.trim()) ||
+      (typeof branding.logoUrl === 'string' && branding.logoUrl.trim()) ||
+      null;
     const template = branding.receiptTemplate === 'moderno' ? 'moderno' : 'clasico';
     return { id: sale.id, createdAt: sale.createdAt, total: sale.total, discount: sale.discount, totalFinal: sale.totalFinal, paymentMethod: sale.paymentMethod,
       items: sale.items.map(i => ({ name: i.product?.name || i.productName || 'Producto', qty: i.qty, unitPrice: i.unitPrice, subtotal: i.subtotal })),
