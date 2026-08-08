@@ -152,6 +152,23 @@ export class SyncController {
     });
   }
 
+  @Get('connections/:id/products/:syncedProductId/price-history')
+  @UseGuards(JwtAuthGuard)
+  priceHistory(@CurrentUser() u: User, @Param('id') id: string, @Param('syncedProductId') syncedProductId: string) {
+    return this.sync.getSyncedPriceHistory(id, u.businessId, syncedProductId);
+  }
+
+  @Get('connections/:id/price-changes')
+  @UseGuards(JwtAuthGuard)
+  priceChanges(
+    @CurrentUser() u: User,
+    @Param('id') id: string,
+    @Query('days') days?: string,
+    @Query('threshold') threshold?: string,
+  ) {
+    return this.sync.getPriceChanges(id, u.businessId, days ? Number(days) : 30, threshold ? Number(threshold) : 10);
+  }
+
   @Get('connections/:id/runs')
   @UseGuards(JwtAuthGuard)
   runs(@CurrentUser() u: User, @Param('id') id: string) {

@@ -8,6 +8,7 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { usePersistedState } from '@/lib/use-persisted-state';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 type Connection = {
   id: string;
@@ -88,6 +89,8 @@ type SupplierAccount = {
 };
 type SupplierOrder = { id: string; source: 'harvested' | 'draft'; externalOrderId?: string | null; status?: string | null; total?: unknown; deliveryDate?: string | null; tracking?: string | null; placedAt?: string | null; createdAt: string; items: Array<{ id: string; syncedProductId?: string | null; name?: string | null; uom?: string | null; qty: number; unitPrice?: unknown; total?: unknown }> };
 type DraftLine = { syncedProductId: string; name: string; uom: string; qty: number; unitPrice: number; variants: Array<{ uom: string; sellingPrice?: unknown; cost?: unknown }> };
+type PriceHistoryPoint = { capturedAt: string; cost?: unknown; listPrice?: unknown; sellingPrice?: unknown };
+type PriceChange = { syncedProductId: string; name: string; from: number; to: number; changePct: number; direction: 'up' | 'down' };
 
 const PROVIDERS: Record<
   string,
@@ -153,6 +156,12 @@ export default function SincronizacionesPage() {
   const [orderSearch, setOrderSearch] = useState('');
   const [draftLines, setDraftLines] = useState<DraftLine[]>([]);
   const [draftDeliveryDate, setDraftDeliveryDate] = useState('');
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+  const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
+  const [priceChangesLoading, setPriceChangesLoading] = useState(false);
+  const [priceDays, setPriceDays] = useState(30);
+  const [priceThreshold, setPriceThreshold] = useState(10);
 
   const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
   const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
@@ -228,6 +237,14 @@ export default function SincronizacionesPage() {
     finally { setOrdersLoading(false); }
   }, [conn]);
 
+  const loadPriceChanges = useCallback(async () => {
+    if (!conn) { setPriceChanges([]); return; }
+    setPriceChangesLoading(true);
+    try { setPriceChanges(await api<PriceChange[]>(`/sync/connections/${conn.id}/price-changes`, { params: { days: String(priceDays), threshold: String(priceThreshold) } })); }
+    catch { setPriceChanges([]); }
+    finally { setPriceChangesLoading(false); }
+  }, [conn, priceDays, priceThreshold]);
+
   useEffect(() => {
     loadConnections();
   }, [loadConnections]);
@@ -240,6 +257,13 @@ export default function SincronizacionesPage() {
     loadAccount();
   }, [loadAccount]);
   useEffect(() => { loadOrders(); setDraftLines([]); }, [loadOrders]);
+  useEffect(() => { loadPriceChanges(); }, [loadPriceChanges]);
+  useEffect(() => {
+    if (!conn || !detail) { setPriceHistory([]); return; }
+    setPriceHistoryLoading(true);
+    api<PriceHistoryPoint[]>(`/sync/connections/${conn.id}/products/${detail.id}/price-history`)
+      .then(setPriceHistory).catch(() => setPriceHistory([])).finally(() => setPriceHistoryLoading(false));
+  }, [conn, detail]);
 
   const withCost = items.filter((i) => i.costUnit != null).length;
   const linked = items.filter((i) => i.linkedProductId).length;
@@ -293,6 +317,9 @@ export default function SincronizacionesPage() {
     catch (error) { alert((error as Error).message); }
   };
   const orderProducts = items.filter((product) => !orderSearch.trim() || `${product.name ?? ''} ${product.eanUnit ?? product.ean ?? ''} ${product.sku ?? ''}`.toLowerCase().includes(orderSearch.toLowerCase())).slice(0, 8);
+  const priceChartData = priceHistory.filter((point) => point.cost != null && Number.isFinite(Number(point.cost))).map((point) => ({ date: new Date(point.capturedAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }), cost: Number(point.cost) }));
+  const totalPriceChange = priceChartData.length > 1 && priceChartData[0].cost !== 0 ? ((priceChartData[priceChartData.length - 1].cost - priceChartData[0].cost) / priceChartData[0].cost) * 100 : null;
+  const lastPriceChange = priceChartData.length > 1 && priceChartData[priceChartData.length - 2].cost !== 0 ? ((priceChartData[priceChartData.length - 1].cost - priceChartData[priceChartData.length - 2].cost) / priceChartData[priceChartData.length - 2].cost) * 100 : null;
 
   if (loading) {
     return <Loader full label="Sincronizaciones" />;
@@ -417,6 +444,37 @@ export default function SincronizacionesPage() {
 
               <div><h3 className="mb-2 font-semibold text-fg">Borradores guardados</h3>{draftOrders.length ? <div className="space-y-2">{draftOrders.map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair-soft bg-raised p-3"><div><p className="text-sm text-fg">{order.items.length} ítems · <span className="font-mono font-semibold text-brand">{formatOptionalMoney(order.total)}</span></p><p className="font-mono text-xs text-fg-faint">Creado {new Date(order.createdAt).toLocaleString('es-AR')}{order.deliveryDate ? ` · entrega ${new Date(order.deliveryDate).toLocaleDateString('es-AR')}` : ''}</p></div><button type="button" onClick={() => deleteDraft(order.id)} className="rounded-lg border border-crit/40 px-3 py-1.5 text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>)}</div> : <p className="text-sm text-fg-faint">No hay borradores guardados.</p>}</div>
             </>}
+          </section>
+
+          <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-fg">Cambios de precio</h2>
+                <p className="text-sm text-fg-muted">Detectá subas y bajas bruscas del costo sincronizado.</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <label className="text-xs text-fg-faint">
+                  Período
+                  <select value={priceDays} onChange={(event) => setPriceDays(Number(event.target.value))} className="mt-1 block rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm text-fg">
+                    <option value={7}>7 días</option>
+                    <option value={30}>30 días</option>
+                    <option value={90}>90 días</option>
+                  </select>
+                </label>
+                <label className="text-xs text-fg-faint">
+                  Umbral (%)
+                  <input type="number" min={0} step={1} value={priceThreshold} onChange={(event) => setPriceThreshold(Math.max(0, Number(event.target.value) || 0))} className="mt-1 block w-28 rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm text-fg" />
+                </label>
+              </div>
+            </div>
+            {priceChangesLoading ? <Loader size="sm" label="Cambios de precio" /> : priceChanges.length ? (
+              <div className="overflow-x-auto rounded-xl border border-hair-soft">
+                <table className="w-full min-w-[620px] text-sm">
+                  <thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3">Producto</th><th className="p-3 text-right">Precio anterior</th><th className="p-3 text-right">Precio actual</th><th className="p-3 text-right">Cambio</th><th className="p-3">Dirección</th></tr></thead>
+                  <tbody className="divide-y divide-hair-soft">{priceChanges.map((change) => <tr key={change.syncedProductId} className="hover:bg-raised/70"><td className="p-3 font-medium text-fg">{change.name}</td><td className="p-3 text-right font-mono tabular-nums text-fg-muted">{formatMoneyArs(change.from)}</td><td className="p-3 text-right font-mono tabular-nums text-fg">{formatMoneyArs(change.to)}</td><td className="p-3 text-right"><span className={`rounded-md border px-2 py-1 font-mono text-xs font-semibold tabular-nums ${change.direction === 'down' ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-crit/30 bg-[var(--crit-soft)] text-crit'}`}>{change.changePct > 0 ? '+' : ''}{change.changePct.toFixed(2)}%</span></td><td className={`p-3 text-sm ${change.direction === 'down' ? 'text-ok' : 'text-crit'}`}>{change.direction === 'down' ? 'Baja' : 'Suba'}</td></tr>)}</tbody>
+                </table>
+              </div>
+            ) : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Sin cambios bruscos en el período.</p>}
           </section>
 
           <div className="flex flex-wrap items-end gap-4">
@@ -546,6 +604,13 @@ export default function SincronizacionesPage() {
                 ['Unidades por display', detail.unitsPerDisplay], ['Displays por bulto', detail.displaysPerBox],
                 ['Unidades por bulto', detail.unitsPerBox], ['Retornable', detail.retornable == null ? null : detail.retornable ? 'Sí' : 'No'],
               ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-hair-soft bg-raised p-3"><span className="block text-[11px] uppercase tracking-wide text-fg-faint">{label}</span><span className="mt-1 block break-all font-mono text-sm text-fg">{value ?? '—'}</span></div>)}
+            </div>
+            <div className="mt-6 rounded-xl border border-hair-soft bg-raised p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div><h3 className="font-semibold text-fg">Evolución del costo</h3><p className="text-xs text-fg-faint">Se registra un punto únicamente cuando cambia el costo o el precio de lista.</p></div>
+                {priceChartData.length > 1 && <div className="flex gap-2 text-xs"><span className={`rounded-md border px-2 py-1 font-mono tabular-nums ${totalPriceChange != null && totalPriceChange <= 0 ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-crit/30 bg-[var(--crit-soft)] text-crit'}`}>Total {totalPriceChange != null && totalPriceChange > 0 ? '+' : ''}{totalPriceChange?.toFixed(2)}%</span>{lastPriceChange != null && <span className={`rounded-md border px-2 py-1 font-mono tabular-nums ${lastPriceChange <= 0 ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-crit/30 bg-[var(--crit-soft)] text-crit'}`}>Última {lastPriceChange > 0 ? '+' : ''}{lastPriceChange.toFixed(2)}%</span>}</div>}
+              </div>
+              {priceHistoryLoading ? <Loader size="sm" label="Historial de precios" /> : priceChartData.length <= 1 ? <p className="mt-4 text-sm text-fg-faint">Sin cambios registrados aún.</p> : <div className="mt-4 h-44 w-full"><ResponsiveContainer width="100%" height="100%"><LineChart data={priceChartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}><CartesianGrid stroke="var(--hair-soft)" strokeDasharray="3 3" /><XAxis dataKey="date" stroke="var(--tx-3)" tick={{ fontSize: 10 }} /><YAxis stroke="var(--tx-3)" tick={{ fontSize: 10 }} width={58} tickFormatter={(value) => `$${Number(value).toLocaleString('es-AR')}`} /><Tooltip contentStyle={{ background: 'var(--raised)', border: '1px solid var(--hair)', borderRadius: 8, color: 'var(--tx)' }} formatter={(value) => [formatMoneyArs(Number(value)), 'Costo']} /><Line type="monotone" dataKey="cost" name="Costo" stroke="var(--brand-accent)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} /></LineChart></ResponsiveContainer></div>}
             </div>
             <div className="mt-6">
               <h3 className="font-semibold text-fg">Variantes por unidad de medida</h3>

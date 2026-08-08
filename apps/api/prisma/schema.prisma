@@ -656,8 +656,23 @@ model SyncedProduct {
 
   connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   variants   SyncedVariant[]
+  priceHistory SyncedPriceHistory[]
 
   @@unique([connectionId, externalId])
+}
+
+model SyncedPriceHistory {
+  id              String   @id @default(cuid())
+  syncedProductId String
+  connectionId    String
+  cost            Decimal?
+  listPrice       Decimal?
+  sellingPrice    Decimal?
+  capturedAt      DateTime @default(now())
+
+  syncedProduct SyncedProduct @relation(fields: [syncedProductId], references: [id], onDelete: Cascade)
+
+  @@index([syncedProductId, capturedAt])
 }
 
 model SyncedVariant {

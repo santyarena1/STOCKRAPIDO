@@ -472,6 +472,8 @@ export class SyncService {
     items: NormalizedItem[],
     withCost: boolean,
   ): Promise<number> {
+    const connection = await this.prisma.syncConnection.findFirst({ where: { id: connectionId, businessId }, select: { priceMarkup: true } });
+    const markup = Number(connection?.priceMarkup ?? 0);
     let n = 0;
     for (const it of items) {
       const base: any = {
@@ -541,6 +543,31 @@ export class SyncService {
             });
           }
         }
+        const previousPrice = await tx.syncedPriceHistory.findFirst({
+          where: { syncedProductId: syncedProduct.id },
+          orderBy: { capturedAt: 'desc' },
+        });
+        const sameValue = (left: unknown, right: unknown) =>
+          (left == null && right == null) ||
+          (left != null && right != null && Number(left) === Number(right));
+        if (!previousPrice || !sameValue(previousPrice.cost, syncedProduct.cost) || !sameValue(previousPrice.listPrice, syncedProduct.listPrice)) {
+          const costUnit = bulkCostToUnit(
+            syncedProduct.cost != null ? Number(syncedProduct.cost) : null,
+            syncedProduct.unitsPerBox,
+          );
+          const sellingPrice = costUnit != null
+            ? Math.round(costUnit * (1 + markup / 100) * 100) / 100
+            : null;
+          await tx.syncedPriceHistory.create({
+            data: {
+              syncedProductId: syncedProduct.id,
+              connectionId,
+              cost: syncedProduct.cost,
+              listPrice: syncedProduct.listPrice,
+              sellingPrice: sellingPrice != null ? new Decimal(sellingPrice) : null,
+            },
+          });
+        }
       });
       n++;
     }
@@ -582,6 +609,44 @@ export class SyncService {
       orderBy: { startedAt: 'desc' },
       take: 50,
     });
+  }
+
+  async getSyncedPriceHistory(id: string, businessId: string, syncedProductId: string) {
+    const product = await this.prisma.syncedProduct.findFirst({ where: { id: syncedProductId, connectionId: id, businessId }, select: { id: true } });
+    if (!product) throw new NotFoundException('Producto sincronizado no encontrado.');
+    return this.prisma.syncedPriceHistory.findMany({
+      where: { syncedProductId, connectionId: id },
+      select: { capturedAt: true, cost: true, listPrice: true, sellingPrice: true },
+      orderBy: { capturedAt: 'asc' },
+    });
+  }
+
+  async getPriceChanges(id: string, businessId: string, days = 30, threshold = 10) {
+    await this.getConnection(id, businessId);
+    const safeDays = Number.isFinite(days) ? Math.min(Math.max(Math.trunc(days), 1), 3650) : 30;
+    const safeThreshold = Number.isFinite(threshold) ? Math.max(threshold, 0) : 10;
+    const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    const products = await this.prisma.syncedProduct.findMany({
+      where: { connectionId: id, businessId, priceHistory: { some: { capturedAt: { gte: since }, cost: { not: null } } } },
+      select: {
+        id: true,
+        name: true,
+        priceHistory: {
+          where: { capturedAt: { gte: since }, cost: { not: null } },
+          select: { cost: true, capturedAt: true },
+          orderBy: { capturedAt: 'asc' },
+        },
+      },
+    });
+    return products.flatMap((product) => {
+      if (product.priceHistory.length < 2) return [];
+      const from = Number(product.priceHistory[0].cost);
+      const to = Number(product.priceHistory[product.priceHistory.length - 1].cost);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return [];
+      const changePct = Math.round(((to - from) / from) * 10000) / 100;
+      if (Math.abs(changePct) < safeThreshold) return [];
+      return [{ syncedProductId: product.id, name: product.name, from, to, changePct, direction: changePct >= 0 ? 'up' : 'down' }];
+    }).sort((left, right) => Math.abs(right.changePct) - Math.abs(left.changePct));
   }
 
   // Campos del Producto que se llenan por copia directa (string) según el mapeo.
