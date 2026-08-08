@@ -856,7 +856,7 @@ export default function POSPage() {
           <div ref={resultsRef} data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
             {loading && <Loader size="sm" label="Productos" />}
             {!loading && results.length > 0 && (
-              <><div className="border-b border-hair-soft px-4 py-2 text-right text-xs text-fg-faint"><span className="font-mono tabular-nums">{results.length}</span> resultados</div><ul className="divide-y divide-hair-soft">
+              <><div className="border-b border-hair-soft px-4 py-2 text-right text-xs text-fg-faint"><span className="font-mono tabular-nums">{results.length}</span> {results.length === 1 ? 'resultado' : 'resultados'}</div><ul className="divide-y divide-hair-soft">
                 {results.map((p, idx) => (
                   <li key={p.id}>
                     <button
