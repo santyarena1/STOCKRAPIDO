@@ -97,7 +97,17 @@ export class ProductsService {
     const term = q.trim();
     if (!term) return [];
     const byBarcode = await this.prisma.product.findMany({
-      where: { businessId, barcode: term, isActive: true },
+      where: {
+        businessId,
+        isActive: true,
+        OR: [
+          { barcode: term },
+          { eanBox: term },
+          { supplierSku: term },
+          { supplierRef: term },
+          { externalId: term },
+        ],
+      },
       take: 1,
       include: { category: true },
     });
@@ -112,6 +122,10 @@ export class ProductsService {
             OR: [
               { name: { contains: token, mode: 'insensitive' as const } },
               { barcode: { contains: token } },
+              { eanBox: { contains: token } },
+              { supplierSku: { contains: token, mode: 'insensitive' as const } },
+              { supplierRef: { contains: token, mode: 'insensitive' as const } },
+              { externalId: { contains: token, mode: 'insensitive' as const } },
               { brand: { contains: token, mode: 'insensitive' as const } },
             ],
           })),
