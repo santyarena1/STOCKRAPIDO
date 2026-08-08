@@ -29,6 +29,19 @@ type PausedSalePayload={items:CartItem[];discount?:number;selectedCustomer?:{id:
 /** Mismo umbral que reportes críticos: aviso solo al agregar ese producto al carrito */
 const LOW_STOCK_THRESHOLD = 3;
 
+const normalizeSearchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
+const highlightedName = (name: string, query: string) => {
+  const normalizedName = normalizeSearchText(name);
+  const candidates = [query.trim(), ...query.trim().split(/\s+/)].filter(Boolean);
+  const match = candidates
+    .map((candidate) => ({ index: normalizedName.indexOf(normalizeSearchText(candidate)), length: candidate.length }))
+    .find((candidate) => candidate.index >= 0);
+  if (!match) return name;
+  return <>{name.slice(0, match.index)}<mark className="bg-transparent font-bold text-brand">{name.slice(match.index, match.index + match.length)}</mark>{name.slice(match.index + match.length)}</>;
+};
+
+type SearchMatch = 'nombre' | 'codigo' | 'sku' | 'ref' | 'bulto' | 'marca';
+
 const PAYMENT_METHODS = [
   { id: 'efectivo', label: 'Efectivo' },
   { id: 'tarjeta_debito', label: 'Tarjeta débito' },
@@ -148,6 +161,11 @@ export default function POSPage() {
       stock: number;
       stockControl: boolean;
       barcode?: string | null;
+      eanBox?: string | null;
+      supplierSku?: string | null;
+      supplierRef?: string | null;
+      externalId?: string | null;
+      matched?: SearchMatch;
       imageUrl?: string | null;
       unitsPerBox?: string | null;
       unitsPerBoxNum?: number | null;
@@ -188,6 +206,7 @@ export default function POSPage() {
   const [hiddenCategoryIds, setHiddenCategoryIds] = useState<string[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const lastEnterForCobrarRef = useRef<number>(0);
   const DOUBLE_ENTER_MS = 800;
   // Evitar que React Strict Mode (doble invocación del updater) sume +2 en vez de +1
@@ -206,6 +225,9 @@ export default function POSPage() {
       })
       .catch(() => setHiddenCategoryIds([]));
   }, []);
+  useEffect(() => {
+    resultsRef.current?.querySelector<HTMLElement>(`[data-result-index="${selectedResultIndex}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [selectedResultIndex]);
 
   /** Caja abierta: las ventas se vinculan para el arqueo (cierre de caja). Fiado no suma efectivo. */
   const [openCashRegisterId, setOpenCashRegisterId] = useState<string | null>(null);
@@ -413,6 +435,11 @@ export default function POSPage() {
             stock?: number;
             stockControl?: boolean;
             barcode?: string | null;
+            eanBox?: string | null;
+            supplierSku?: string | null;
+            supplierRef?: string | null;
+            externalId?: string | null;
+            matched?: SearchMatch;
             imageUrl?: string | null;
             unitsPerBox?: string | null;
             unitsPerBoxNum?: number | null;
@@ -435,12 +462,17 @@ export default function POSPage() {
           stock: p.stock ?? 0,
           stockControl: p.stockControl !== false,
           barcode: p.barcode ?? null,
+          eanBox: p.eanBox ?? null,
+          supplierSku: p.supplierSku ?? null,
+          supplierRef: p.supplierRef ?? null,
+          externalId: p.externalId ?? null,
+          matched: p.matched,
           imageUrl: p.imageUrl ?? null,
           unitsPerBox: p.unitsPerBox ?? null,
           unitsPerBoxNum: p.unitsPerBoxNum ?? null,
           cost: p.cost ?? null,
         }));
-        if (mapped.length === 1 && mapped[0].barcode && mapped[0].barcode === term) {
+        if (mapped.length === 1 && [mapped[0].barcode, mapped[0].eanBox, mapped[0].supplierSku, mapped[0].supplierRef, mapped[0].externalId].includes(term)) {
           addToCart(mapped[0], 1);
           return;
         }
@@ -454,7 +486,7 @@ export default function POSPage() {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 180);
+    }, 150);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -533,6 +565,13 @@ export default function POSPage() {
         return;
       }
       const searchFocused = document.activeElement === searchRef.current;
+      if (searchFocused && e.key === 'Escape') {
+        e.preventDefault();
+        setSearch('');
+        setResults([]);
+        setSelectedResultIndex(0);
+        return;
+      }
       if (searchFocused && results.length > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
@@ -814,44 +853,47 @@ export default function POSPage() {
               Producto rápido
             </button>
           </div>
-          <div data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
+          <div ref={resultsRef} data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
             {loading && <Loader size="sm" label="Productos" />}
             {!loading && results.length > 0 && (
-              <ul className="divide-y divide-hair-soft">
+              <><div className="border-b border-hair-soft px-4 py-2 text-right text-xs text-fg-faint"><span className="font-mono tabular-nums">{results.length}</span> resultados</div><ul className="divide-y divide-hair-soft">
                 {results.map((p, idx) => (
                   <li key={p.id}>
                     <button
                       type="button"
+                      data-result-index={idx}
                       onClick={() => addToCart(p)}
-                      className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-raised ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
+                      className={`flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-raised ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
                     >
                       <span className="flex items-center gap-3 min-w-0">
                         {p.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.imageUrl} alt="" className="w-9 h-9 object-contain rounded bg-white/5 shrink-0" />
+                          <img src={p.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" />
                         ) : (
-                          <span className="w-9 h-9 rounded bg-raised2 shrink-0" />
+                          <span className="h-12 w-12 shrink-0 rounded-lg bg-raised2" />
                         )}
                         <span className="flex flex-col min-w-0">
-                          <span className="truncate font-semibold text-fg">{p.name}</span>
+                          <span className="flex min-w-0 flex-wrap items-center gap-2"><span className="truncate text-[15px] font-semibold text-fg">{highlightedName(p.name, search)}</span>{p.matched && p.matched !== 'nombre' && <span className="rounded-md border border-hair bg-raised2 px-1.5 py-0.5 text-[10px] font-medium uppercase text-fg-muted">{{ codigo: 'Código', sku: 'SKU', ref: 'Ref', bulto: 'Bulto', marca: 'Marca' }[p.matched]}</span>}</span>
                           {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && (
                             <span className="text-xs text-fg-faint">Bulto × {p.unitsPerBoxNum} u. · vendés por unidad</span>
                           )}
                         </span>
                       </span>
                       <span className="flex flex-col items-end shrink-0 gap-0.5">
+                        <span className="flex items-center gap-1.5 text-xs text-fg-muted"><span className={`h-2 w-2 rounded-full ${p.stockControl && p.stock <= LOW_STOCK_THRESHOLD ? 'bg-warn' : 'bg-ok'}`} />Stock <span className="font-mono tabular-nums">{p.stock}</span></span>
                         {p.cost != null && Number(p.cost) > 0 && (
                           <span className="font-mono text-xs tabular-nums text-fg-faint">
                             Costo {formatMoneyArs(Number(p.cost))} c/u
                           </span>
                         )}
-                        <span className="font-mono font-semibold tabular-nums text-brand">{formatMoneyArs(parseFloat(p.price))} c/u</span>
+                        <span className="font-mono text-lg font-bold tabular-nums text-brand">{formatMoneyArs(parseFloat(p.price))} c/u</span>
                       </span>
                     </button>
                   </li>
                 ))}
-              </ul>
+              </ul></>
             )}
+            {!loading && search.trim() && results.length === 0 && <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-medium text-fg">No encontramos productos</p><p className="mt-1 text-sm text-fg-faint">Podés crearlo ahora y agregarlo directamente al carrito.</p></div><button type="button" onClick={() => { setQuickName(search.trim()); setShowQuickProduct(true); }} className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-2.5 font-medium text-warn">Crear producto rápido</button></div>}
           </div>
         </div>
 

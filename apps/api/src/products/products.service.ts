@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
@@ -45,6 +46,8 @@ type ProviderFacetGroup = { sourceProvider: string | null; _count: { _all: numbe
 
 @Injectable()
 export class ProductsService {
+  private readonly logger = new Logger(ProductsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -113,6 +116,97 @@ export class ProductsService {
     });
     if (byBarcode.length) return byBarcode.map(decorateProductUnits);
     const tokens = term.split(/\s+/).filter(Boolean);
+    try {
+      const firstToken = tokens[0];
+      const tokenConditions = tokens.map((token) => {
+        const contains = `%${token}%`;
+        return Prisma.sql`(
+          unaccent(lower(p."name")) LIKE unaccent(lower(${contains}))
+          OR unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${contains}))
+          OR COALESCE(p."barcode", '') ILIKE ${contains}
+          OR COALESCE(p."eanBox", '') ILIKE ${contains}
+          OR COALESCE(p."supplierSku", '') ILIKE ${contains}
+          OR COALESCE(p."supplierRef", '') ILIKE ${contains}
+          OR COALESCE(p."externalId", '') ILIKE ${contains}
+        )`;
+      });
+      const firstContains = `%${firstToken}%`;
+      const firstStarts = `${firstToken}%`;
+      const excludedCategories = excludeCategoryIds.length
+        ? Prisma.sql`AND (p."categoryId" IS NULL OR p."categoryId" NOT IN (${Prisma.join(excludeCategoryIds)}))`
+        : Prisma.empty;
+      const excludedCombos = excludeCombos
+        ? Prisma.sql`AND NOT EXISTS (
+            SELECT 1 FROM "Category" c
+            WHERE c."id" = p."categoryId" AND lower(c."name") = lower('combo')
+          )`
+        : Prisma.empty;
+      const raw = await this.prisma.$queryRaw<Array<{ id: string; score: number; matched: string }>>(Prisma.sql`
+        SELECT p."id",
+          CASE
+            WHEN p."barcode" = ${term} OR p."eanBox" = ${term} OR p."supplierSku" = ${term}
+              OR p."supplierRef" = ${term} OR p."externalId" = ${term} THEN 0
+            WHEN unaccent(lower(p."name")) LIKE unaccent(lower(${firstStarts})) THEN 1
+            WHEN unaccent(lower(p."name")) LIKE unaccent(lower(${firstContains})) THEN 2
+            WHEN COALESCE(p."barcode", '') ILIKE ${firstContains}
+              OR COALESCE(p."eanBox", '') ILIKE ${firstContains}
+              OR COALESCE(p."supplierSku", '') ILIKE ${firstContains}
+              OR COALESCE(p."supplierRef", '') ILIKE ${firstContains}
+              OR COALESCE(p."externalId", '') ILIKE ${firstContains} THEN 3
+            WHEN unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${firstContains})) THEN 4
+            ELSE 2
+          END AS score,
+          CASE
+            WHEN p."eanBox" = ${term} THEN 'bulto'
+            WHEN p."supplierSku" = ${term} THEN 'sku'
+            WHEN p."supplierRef" = ${term} THEN 'ref'
+            WHEN p."barcode" = ${term} OR p."externalId" = ${term} THEN 'codigo'
+            WHEN unaccent(lower(p."name")) LIKE unaccent(lower(${firstContains})) THEN 'nombre'
+            WHEN COALESCE(p."barcode", '') ILIKE ${firstContains} OR COALESCE(p."externalId", '') ILIKE ${firstContains} THEN 'codigo'
+            WHEN COALESCE(p."supplierSku", '') ILIKE ${firstContains} THEN 'sku'
+            WHEN COALESCE(p."supplierRef", '') ILIKE ${firstContains} THEN 'ref'
+            WHEN COALESCE(p."eanBox", '') ILIKE ${firstContains} THEN 'bulto'
+            WHEN unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${firstContains})) THEN 'marca'
+            ELSE 'nombre'
+          END AS matched
+        FROM "Product" p
+        WHERE p."businessId" = ${businessId}
+          AND p."isActive" = true
+          AND ${Prisma.join(tokenConditions, ' AND ')}
+          ${excludedCategories}
+          ${excludedCombos}
+        ORDER BY score ASC, p."name" ASC
+        LIMIT ${limit}
+      `);
+      const ids = raw.map((row) => row.id);
+      if (!ids.length) return [];
+      const products = await this.prisma.product.findMany({
+        where: { id: { in: ids }, businessId },
+        include: { category: true },
+      });
+      const productsById = new Map(products.map((product) => [product.id, product]));
+      const matchedById = new Map(raw.map((row) => [row.id, row.matched]));
+      return ids.flatMap((id) => {
+        const product = productsById.get(id);
+        return product
+          ? [{ ...decorateProductUnits(product), matched: matchedById.get(id) ?? 'nombre' }]
+          : [];
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Búsqueda SQL avanzada no disponible; se usa fallback Prisma: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return this.searchWithPrismaFallback(businessId, tokens, limit, excludeCombos, excludeCategoryIds);
+  }
+
+  private async searchWithPrismaFallback(
+    businessId: string,
+    tokens: string[],
+    limit: number,
+    excludeCombos: boolean,
+    excludeCategoryIds: string[],
+  ) {
     const results = await this.prisma.product.findMany({
       where: {
         businessId,
@@ -143,7 +237,7 @@ export class ProductsService {
       include: { category: true },
       orderBy: { name: 'asc' },
     });
-    return results.map(decorateProductUnits);
+    return results.map((product) => ({ ...decorateProductUnits(product), matched: 'nombre' }));
   }
 
   async list(businessId: string, categoryId?: string, lowStock?: boolean) {
