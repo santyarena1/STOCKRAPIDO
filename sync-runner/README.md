@@ -40,10 +40,11 @@ Importar en la web           →  costo/venta c/u en tu catálogo y POS
 
 ## Juntos+ — Coca-Cola FEMSA
 
-Juntos+ usa OTP, por lo que el inicio de sesión es interactivo. El runner abre
-Chromium en `https://ar.juntosplus.com/AR/login`: completá el login, entrá al
-catálogo y presioná Enter en la terminal. El proceso captura de las requests del
-navegador el Bearer y el `cid` sin imprimir el token.
+Juntos+ usa el login de Coca-Cola sobre Microsoft Azure AD B2C. Cargá el número
+de cliente y la contraseña en Configuración → Proveedores: el runner abre
+Chromium, completa el acceso automáticamente y captura el Bearer y el `cid` sin
+imprimir secretos. Si Microsoft solicita una verificación ocasional, el runner
+deja el navegador abierto y continúa en modo interactivo.
 
 No requiere variables adicionales: reutiliza `SR_API`, `SR_EMAIL` y
 `SR_PASSWORD` para autenticarse en StockRápido.
@@ -57,7 +58,7 @@ python juntosplus_sync_runner.py
 Flujo:
 
 ```text
-Login Juntos+ con OTP → captura Bearer/cid → catálogo completo paginado
+Login automático cliente + Azure B2C → captura Bearer/cid → catálogo completo paginado
 → normalización (card completo en raw) → POST /sync/connections/:id/push
 → mapeo e importación desde Configuración / Sincronizaciones
 ```

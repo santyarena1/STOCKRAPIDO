@@ -66,7 +66,10 @@ const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
     { key: 'phone', label: 'Teléfono Mi Tienda Mondelez' },
     { key: 'password', label: 'Contraseña', type: 'password' },
   ],
-  juntosplus: [{ key: 'cliente', label: 'Número de cliente' }],
+  juntosplus: [
+    { key: 'cliente', label: 'Número de cliente' },
+    { key: 'password', label: 'Contraseña', type: 'password' },
+  ],
   tokin: [
     { key: 'user', label: 'Usuario/Email Tokin' },
     { key: 'password', label: 'Contraseña', type: 'password' },
@@ -247,7 +250,7 @@ export default function ProveedoresConfigPage() {
     {connection && <>
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">
-          <div><h2 className="font-semibold text-fg">Credenciales de {PROVIDERS[connection.provider]?.label ?? connection.name}</h2><p className="text-sm text-fg-muted">Se guardan cifradas. Los valores existentes nunca se muestran en pantalla.</p><p className={`mt-2 text-sm ${connection.hasCredentials ? 'text-ok' : 'text-warn'}`}>{connection.hasCredentials ? 'Credenciales cargadas ✓' : 'Sin credenciales'}</p>{connection.provider === 'juntosplus' && <p className="mt-2 text-sm text-fg-muted">Juntos+ no usa contraseña. Ingresá tu número de cliente; el código (OTP) y la sesión los obtiene y guarda el runner automáticamente.</p>}</div>
+          <div><h2 className="font-semibold text-fg">Credenciales de {PROVIDERS[connection.provider]?.label ?? connection.name}</h2><p className="text-sm text-fg-muted">Se guardan cifradas. Los valores existentes nunca se muestran en pantalla.</p><p className={`mt-2 text-sm ${connection.hasCredentials ? 'text-ok' : 'text-warn'}`}>{connection.hasCredentials ? 'Credenciales cargadas ✓' : 'Sin credenciales'}</p>{connection.provider === 'juntosplus' && <p className="mt-2 text-sm text-fg-muted">Juntos+ usa login de Coca-Cola (Microsoft). Cargá tu número de cliente y contraseña; el runner se loguea solo y guarda la sesión. No hay OTP salvo verificación ocasional.</p>}</div>
           <form onSubmit={saveCredentials} className="grid gap-3 sm:grid-cols-2">
             {credentialFields.map((field) => <div key={field.key}><label className="mb-1 block text-xs text-fg-faint">{field.label}</label><input type={field.type ?? 'text'} value={credentials[field.key] ?? ''} onChange={(event) => setCredentials((current) => ({ ...current, [field.key]: event.target.value }))} placeholder={field.placeholder} autoComplete={field.type === 'password' ? 'new-password' : 'off'} className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" /></div>)}
             <button type="submit" disabled={busy === 'credentials'} className="btn-brand rounded-lg px-4 py-2 sm:col-span-2 sm:justify-self-start disabled:opacity-50">{busy === 'credentials' ? 'Guardando…' : connection.hasCredentials ? 'Reemplazar credenciales' : 'Guardar credenciales'}</button>

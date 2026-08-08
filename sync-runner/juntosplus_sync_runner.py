@@ -3,11 +3,12 @@
 """
 RUNNER Juntos+ (Coca-Cola FEMSA) -> StockRápido.
 
-Juntos+ requiere OTP y por eso el login es interactivo. El runner abre Chromium:
-logueate, entrá al catálogo y volvé a la terminal para presionar Enter. Mientras
-navegás captura el Bearer y el cid de las requests a api.juntosplus.com; nunca
-imprime el token. Después descarga el catálogo completo, conserva cada card
-original en `raw` y lo empuja a StockRápido.
+El runner usa el número de cliente y la contraseña guardados en StockRápido para
+completar el login de Coca-Cola y Microsoft Azure AD B2C. Si Microsoft solicita
+una verificación adicional o cambia el formulario, deja el navegador abierto y
+continúa en modo interactivo. Captura el Bearer y el cid sin imprimir secretos,
+descarga el catálogo completo, conserva cada card en `raw` y lo empuja a
+StockRápido.
 
 Requisitos:
     python -m pip install playwright
@@ -403,6 +404,130 @@ def normalize(card):
     return {key: value for key, value in item.items() if value is not None}
 
 
+def _fill_first(page, selectors, value, timeout=2500):
+    """Completa el primer input visible sin registrar su valor sensible."""
+    for selector in selectors:
+        try:
+            locator = page.locator(selector).first
+            locator.wait_for(state="visible", timeout=timeout)
+            locator.fill(str(value))
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def _click_first(page, selectors, timeout=2500):
+    for selector in selectors:
+        try:
+            locator = page.locator(selector).first
+            locator.wait_for(state="visible", timeout=timeout)
+            locator.click()
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def _has_mfa_step(page):
+    selectors = [
+        "input#verificationCode",
+        "input[name=verificationCode]",
+        "input[name=otp]",
+        "input[autocomplete=one-time-code]",
+        "input[data-testid*=otp]",
+    ]
+    for selector in selectors:
+        try:
+            if page.locator(selector).first.is_visible(timeout=400):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def automatic_b2c_login(page, credentials, captured):
+    """Intenta cliente + password; ante MFA/cambio de UI retorna False."""
+    customer = credentials.get("cliente")
+    password = credentials.get("password")
+    if not customer or not password:
+        print("  Faltan número de cliente o contraseña; sigo en modo interactivo.")
+        return False
+
+    try:
+        print("Intentando login automático de Juntos+…")
+        # Algunas versiones abren directamente el formulario de cliente; en
+        # otras primero hay que elegir el tipo de acceso.
+        _click_first(page, [
+            "button:has-text('Cliente')",
+            "[role=button]:has-text('Cliente')",
+            "label:has-text('Cliente')",
+            "text=Cliente",
+        ], timeout=1800)
+        customer_filled = _fill_first(page, [
+            "input#customerCode",
+            "input[name=customerCode]",
+            "input[name=cliente]",
+            "input[name=customer]",
+            "input[name=cid]",
+            "input[inputmode=numeric]",
+            "input[type=text]",
+        ], customer, timeout=5000)
+        if not customer_filled:
+            raise RuntimeError("no encontré el campo de número de cliente")
+        if not _click_first(page, [
+            "button:has-text('Continuar')",
+            "button:has-text('Continue')",
+            "button[type=submit]",
+            "input[type=submit]",
+        ], timeout=4000):
+            page.locator("input#customerCode, input[name=customerCode], input[name=cliente], input[type=text]").first.press("Enter")
+
+        # El authorize de Azure B2C puede tardar y atraviesa más de una
+        # redirección. Esperamos el formulario de password en el dominio B2C.
+        deadline = time.time() + 45
+        password_filled = False
+        while time.time() < deadline and not password_filled:
+            if _has_mfa_step(page):
+                print("  Microsoft solicitó verificación adicional; continúo en modo interactivo.")
+                return False
+            password_filled = _fill_first(page, [
+                "input#password",
+                "input[name=password]",
+                "input[type=password]",
+            ], password, timeout=900)
+            if not password_filled:
+                page.wait_for_timeout(500)
+        if not password_filled:
+            raise RuntimeError("no encontré el formulario de contraseña de Microsoft")
+
+        if not _click_first(page, [
+            "button#next",
+            "button#continue",
+            "button[type=submit]",
+            "input#next",
+            "input[type=submit]",
+        ], timeout=4000):
+            page.locator("input#password, input[name=password], input[type=password]").first.press("Enter")
+
+        # El code OAuth vuelve a la SPA; la sesión se considera lista recién
+        # cuando una request real a la API expone Bearer + cid.
+        deadline = time.time() + 75
+        while time.time() < deadline:
+            if captured.get("authorization") and captured.get("cid"):
+                print("  Login automático completado.")
+                return True
+            if _has_mfa_step(page):
+                print("  Microsoft solicitó verificación adicional; continúo en modo interactivo.")
+                return False
+            page.wait_for_timeout(750)
+        raise RuntimeError("la aplicación no generó una sesión API dentro del tiempo esperado")
+    except Exception as error:
+        print(f"  No se pudo completar el login automático ({str(error)[:120]}).")
+        print("  Continúo con el navegador abierto para completar el acceso manualmente.")
+        return False
+
+
 def main():
     # TODO: Juntos+ no expone por ahora una cuenta corriente estándar cosechable.
     print("Iniciando sesión en StockRápido…")
@@ -442,15 +567,10 @@ def main():
         page.on("response", capture_response)
         print("Abriendo Juntos+…")
         page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=90000)
-        if credentials.get("cliente") and not captured["authorization"]:
-            for selector in ["input[name=cliente]", "input[name=customer]", "input[name=cid]", "input[type=text]"]:
-                try:
-                    page.locator(selector).first.fill(str(credentials["cliente"]), timeout=1000)
-                    break
-                except Exception:
-                    pass
+        if not captured["authorization"] or not captured["cid"]:
+            automatic_b2c_login(page, credentials, captured)
         while not captured["authorization"] or not captured["cid"]:
-            input("Logueate y entrá al catálogo; presioná Enter cuando estés dentro: ")
+            input("Completá el login o la verificación en el navegador, entrá al catálogo y presioná Enter: ")
             page.wait_for_timeout(1500)
             if not captured["authorization"] or not captured["cid"]:
                 print("  Todavía no detecté la sesión. Navegá por el catálogo para generar una request de API.")
