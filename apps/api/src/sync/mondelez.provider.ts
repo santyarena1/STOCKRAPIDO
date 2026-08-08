@@ -5,12 +5,20 @@ export interface NormalizedItem {
   externalId: string;
   sku?: string;
   ean?: string;
+  supplierRef?: string;
+  eanUnit?: string;
+  eanBox?: string;
   name: string;
   brand?: string;
   category?: string;
   subcategory?: string;
   cost?: number; // precio real B2B (solo lo trae el runner autenticado)
   listPrice?: number;
+  ivaAlicuota?: number;
+  unitsPerDisplay?: string;
+  displaysPerBox?: string;
+  retornable?: boolean;
+  basePrice?: number;
   available: boolean;
   stock?: number;
   unitsPerBox?: string;
@@ -20,6 +28,21 @@ export interface NormalizedItem {
   presentation?: string;
   imageUrl?: string;
   link?: string;
+  variants?: Array<{
+    uom: string;
+    multiplier?: number;
+    skuId?: string;
+    refId?: string;
+    ean?: string;
+    listPrice?: number;
+    sellingPrice?: number;
+    priceWithTax?: number;
+    cost?: number;
+    stock?: number;
+    taxAlicuota?: number;
+    sellerId?: string;
+    erpStatus?: string;
+  }>;
   raw?: any;
 }
 

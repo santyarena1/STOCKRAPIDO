@@ -49,6 +49,7 @@ model Business {
   fiscalDocuments     FiscalDocument[]
   vendedores          Vendedor[]
   vendedorSessions    VendedorSession[]
+  dataBackups          DataBackup[]
 }
 
 model Promo {
@@ -127,7 +128,9 @@ model Product {
   presentation String?
   subcategory String?
   supplierSku String?
+  supplierRef String?
   externalId  String?
+  eanBox      String?
   sourceConnectionId String?
   sourceProvider String?
   createdAt   DateTime  @default(now())
@@ -194,6 +197,21 @@ model VendedorSession {
 
   @@index([businessId, endedAt])
   @@index([vendedorId, startedAt])
+}
+
+model DataBackup {
+  id         String   @id @default(cuid())
+  businessId String
+  category   String
+  payload    Json
+  rowCount   Int      @default(0)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, category])
+  @@index([expiresAt])
 }
 
 model FiscalConfig {
@@ -506,12 +524,20 @@ model SyncedProduct {
   externalId      String    // VTEX productId
   sku             String?   // VTEX skuId
   ean             String?
+  supplierRef     String?
+  eanUnit         String?
+  eanBox          String?
   name            String
   brand           String?
   category        String?
   subcategory     String?
   cost            Decimal?  // costo real del proveedor (B2B) si está disponible
   listPrice       Decimal?
+  ivaAlicuota     Decimal?
+  unitsPerDisplay String?
+  displaysPerBox  String?
+  retornable      Boolean?
+  basePrice       Decimal?
   available       Boolean   @default(true)
   stock           Int?
   unitsPerBox     String?
@@ -526,8 +552,31 @@ model SyncedProduct {
   syncedAt        DateTime  @default(now())
 
   connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  variants   SyncedVariant[]
 
   @@unique([connectionId, externalId])
+}
+
+model SyncedVariant {
+  id              String   @id @default(cuid())
+  syncedProductId String
+  uom             String
+  multiplier      Int      @default(1)
+  skuId           String?
+  refId           String?
+  ean             String?
+  listPrice       Decimal?
+  sellingPrice    Decimal?
+  priceWithTax    Decimal?
+  cost            Decimal?
+  stock           Int?
+  taxAlicuota     Decimal?
+  sellerId        String?
+  erpStatus       String?
+
+  syncedProduct SyncedProduct @relation(fields: [syncedProductId], references: [id], onDelete: Cascade)
+
+  @@index([syncedProductId])
 }
 
 model SyncRun {

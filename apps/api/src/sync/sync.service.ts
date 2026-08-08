@@ -220,6 +220,9 @@ export class SyncService {
         businessId,
         sku: it.sku,
         ean: it.ean,
+        supplierRef: it.supplierRef,
+        eanUnit: it.eanUnit,
+        eanBox: it.eanBox,
         name: it.name,
         brand: it.brand,
         category: it.category,
@@ -231,21 +234,55 @@ export class SyncService {
         format: it.format,
         flavor: it.flavor,
         presentation: it.presentation,
+        unitsPerDisplay: it.unitsPerDisplay,
+        displaysPerBox: it.displaysPerBox,
+        retornable: it.retornable,
         imageUrl: it.imageUrl,
         link: it.link,
         raw: it.raw ?? undefined,
         syncedAt: new Date(),
       };
+      if (it.ivaAlicuota !== undefined) {
+        base.ivaAlicuota = it.ivaAlicuota != null ? new Decimal(it.ivaAlicuota) : null;
+      }
+      if (it.basePrice !== undefined) {
+        base.basePrice = it.basePrice != null ? new Decimal(it.basePrice) : null;
+      }
       // El costo solo se escribe cuando viene del runner autenticado, para no
       // pisar un precio real con el placeholder del catálogo público.
       if (withCost) {
         base.cost = it.cost != null ? new Decimal(it.cost) : null;
         base.listPrice = it.listPrice != null ? new Decimal(it.listPrice) : null;
       }
-      await this.prisma.syncedProduct.upsert({
-        where: { connectionId_externalId: { connectionId, externalId: it.externalId } },
-        create: { connectionId, externalId: it.externalId, ...base },
-        update: base,
+      await this.prisma.$transaction(async (tx) => {
+        const syncedProduct = await tx.syncedProduct.upsert({
+          where: { connectionId_externalId: { connectionId, externalId: it.externalId } },
+          create: { connectionId, externalId: it.externalId, ...base },
+          update: base,
+        });
+        if (it.variants !== undefined) {
+          await tx.syncedVariant.deleteMany({ where: { syncedProductId: syncedProduct.id } });
+          if (it.variants.length > 0) {
+            await tx.syncedVariant.createMany({
+              data: it.variants.map((variant) => ({
+                syncedProductId: syncedProduct.id,
+                uom: variant.uom,
+                multiplier: variant.multiplier ?? 1,
+                skuId: variant.skuId ?? null,
+                refId: variant.refId ?? null,
+                ean: variant.ean ?? null,
+                listPrice: variant.listPrice != null ? new Decimal(variant.listPrice) : null,
+                sellingPrice: variant.sellingPrice != null ? new Decimal(variant.sellingPrice) : null,
+                priceWithTax: variant.priceWithTax != null ? new Decimal(variant.priceWithTax) : null,
+                cost: variant.cost != null ? new Decimal(variant.cost) : null,
+                stock: variant.stock ?? null,
+                taxAlicuota: variant.taxAlicuota != null ? new Decimal(variant.taxAlicuota) : null,
+                sellerId: variant.sellerId ?? null,
+                erpStatus: variant.erpStatus ?? null,
+              })),
+            });
+          }
+        }
       });
       n++;
     }
@@ -274,6 +311,7 @@ export class SyncService {
       },
       orderBy: { name: 'asc' },
       take: opts.limit ?? 1000,
+      include: { variants: true },
     });
     const markup = Number(conn.priceMarkup ?? 0);
     return rows.map((r) => decorateSyncedProductUnits(r, markup));
@@ -291,7 +329,8 @@ export class SyncService {
   // Campos del Producto que se llenan por copia directa (string) según el mapeo.
   private static STRING_FIELDS = [
     'barcode', 'brand', 'imageUrl', 'unitsPerBox', 'weight',
-    'format', 'flavor', 'presentation', 'subcategory', 'supplierSku', 'externalId',
+    'format', 'flavor', 'presentation', 'subcategory', 'supplierSku', 'supplierRef',
+    'eanBox', 'externalId',
   ];
   // Mapeo por defecto: campo del Producto -> campo del SyncedProduct.
   static DEFAULT_MAPPING: Record<string, string> = {
@@ -306,6 +345,8 @@ export class SyncService {
     presentation: 'presentation',
     subcategory: 'subcategory',
     supplierSku: 'sku',
+    supplierRef: 'supplierRef',
+    eanBox: 'eanBox',
     externalId: 'externalId',
     category: 'category',
     cost: 'cost',
@@ -320,7 +361,9 @@ export class SyncService {
   static SYNCED_FIELDS = [
     'name', 'ean', 'brand', 'category', 'subcategory', 'cost', 'listPrice',
     'available', 'stock', 'unitsPerBox', 'weight', 'format', 'flavor',
-    'presentation', 'imageUrl', 'link', 'sku', 'externalId',
+    'presentation', 'imageUrl', 'link', 'sku', 'externalId', 'supplierRef',
+    'eanUnit', 'eanBox', 'ivaAlicuota', 'unitsPerDisplay', 'displaysPerBox',
+    'retornable', 'basePrice',
   ];
 
   async getMappingInfo(id: string, businessId: string) {
@@ -381,6 +424,10 @@ export class SyncService {
         const v = src(s, f);
         if (v != null && v !== '') data[f] = String(v);
       }
+      const preferredUnitEan = s.eanUnit || s.ean;
+      if (preferredUnitEan) data.barcode = String(preferredUnitEan);
+      if (s.supplierRef) data.supplierRef = String(s.supplierRef);
+      if (s.eanBox) data.eanBox = String(s.eanBox);
       // nombre (requerido)
       const nameVal = src(s, 'name') ?? s.name;
       data.name = nameVal ? String(nameVal) : 'Sin nombre';
@@ -409,6 +456,7 @@ export class SyncService {
             price: price != null ? new Decimal(price) : existing.price,
             sourceConnectionId: conn.id,
             sourceProvider: conn.provider,
+            iva: s.ivaAlicuota != null ? new Decimal(s.ivaAlicuota) : existing.iva,
           },
         });
         await this.prisma.syncedProduct.update({ where: { id: s.id }, data: { linkedProductId: existing.id } });
@@ -426,6 +474,7 @@ export class SyncService {
             stockControl: true,
             sourceConnectionId: conn.id,
             sourceProvider: conn.provider,
+            iva: s.ivaAlicuota != null ? new Decimal(s.ivaAlicuota) : undefined,
           },
         });
         await this.prisma.syncedProduct.update({ where: { id: s.id }, data: { linkedProductId: prod.id } });
