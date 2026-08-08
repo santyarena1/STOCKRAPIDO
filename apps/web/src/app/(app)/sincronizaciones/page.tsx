@@ -72,6 +72,20 @@ type Synced = {
   }>;
 };
 
+type SupplierAccount = {
+  id: string;
+  clienteId?: string | null;
+  razonSocial?: string | null;
+  balance?: unknown;
+  creditLimit?: unknown;
+  availableCredit?: unknown;
+  currency?: string | null;
+  updatedAt: string;
+  invoices: Array<{ id: string; number?: string | null; date?: string | null; dueDate?: string | null; total?: unknown; saldoPendiente?: unknown; status?: string | null; pdfUrl?: string | null }>;
+  movements: Array<{ id: string; date?: string | null; type?: string | null; reference?: string | null; amount?: unknown; runningBalance?: unknown }>;
+  credits: Array<{ id: string; tipo?: string | null; montoDisponible?: unknown; montoUsado?: unknown; vencimiento?: string | null; condiciones?: string | null }>;
+};
+
 const PROVIDERS: Record<
   string,
   { label: string; description: string; accent: string; runnerNote: string }
@@ -127,6 +141,8 @@ export default function SincronizacionesPage() {
   const [onlyWithCost, setOnlyWithCost] = usePersistedState('sr-filters:sincronizaciones:only-with-cost', false);
   const [showInternal, setShowInternal] = usePersistedState('sr-filters:sincronizaciones:show-internal', false);
   const [detail, setDetail] = useState<Synced | null>(null);
+  const [account, setAccount] = useState<SupplierAccount | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
 
   const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
   const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
@@ -177,6 +193,18 @@ export default function SincronizacionesPage() {
     }
   }, [conn, q, onlyWithCost]);
 
+  const loadAccount = useCallback(async () => {
+    if (!conn) { setAccount(null); return; }
+    setAccountLoading(true);
+    try {
+      setAccount(await api<SupplierAccount | null>(`/sync/connections/${conn.id}/account`));
+    } catch {
+      setAccount(null);
+    } finally {
+      setAccountLoading(false);
+    }
+  }, [conn]);
+
   useEffect(() => {
     loadConnections();
   }, [loadConnections]);
@@ -184,6 +212,10 @@ export default function SincronizacionesPage() {
   useEffect(() => {
     loadItems();
   }, [loadItems]);
+
+  useEffect(() => {
+    loadAccount();
+  }, [loadAccount]);
 
   const withCost = items.filter((i) => i.costUnit != null).length;
   const linked = items.filter((i) => i.linkedProductId).length;
@@ -313,6 +345,20 @@ export default function SincronizacionesPage() {
               Ejecutá <code className="text-fg-muted">python {RUNNER_FILES[conn.provider] ?? `${conn.provider}_sync_runner.py`}</code> en tu PC o agendalo con Task Scheduler.
             </p>
           </div>
+
+          <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-fg">Cuenta corriente</h2><p className="text-sm text-fg-muted">Facturas, saldo y financiación informados por el proveedor.</p></div>{account && <span className="font-mono text-xs tabular-nums text-fg-faint">Actualizado {new Date(account.updatedAt).toLocaleString('es-AR')}</span>}</div>
+            {accountLoading ? <Loader size="sm" label="Cuenta corriente" /> : account ? <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div className="col-span-2 rounded-xl border border-[color:var(--brand-accent)] bg-brand-highlight-soft p-4 lg:col-span-1"><span className="text-xs uppercase tracking-wide text-fg-faint">Saldo</span><p className="mt-1 font-mono text-2xl font-bold tabular-nums text-brand">{formatOptionalMoney(account.balance)}</p></div>
+                <div className="rounded-xl border border-hair-soft bg-raised p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Límite</span><p className="mt-1 font-mono text-lg font-semibold tabular-nums text-fg">{formatOptionalMoney(account.creditLimit)}</p></div>
+                <div className="rounded-xl border border-hair-soft bg-raised p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Crédito disponible</span><p className="mt-1 font-mono text-lg font-semibold tabular-nums text-ok">{formatOptionalMoney(account.availableCredit)}</p></div>
+                <div className="rounded-xl border border-hair-soft bg-raised p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Cliente</span><p className="mt-1 text-sm font-medium text-fg">{account.razonSocial ?? '—'}</p><p className="font-mono text-xs text-fg-faint">{account.clienteId ?? account.currency ?? 'ARS'}</p></div>
+              </div>
+              <div><h3 className="mb-2 font-semibold text-fg">Facturas</h3>{account.invoices.length ? <div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[720px] text-sm"><thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3">Número</th><th className="p-3">Fecha</th><th className="p-3">Vencimiento</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Saldo pendiente</th><th className="p-3">Estado</th><th className="p-3">PDF</th></tr></thead><tbody className="divide-y divide-hair-soft">{account.invoices.map((invoice) => <tr key={invoice.id}><td className="p-3 font-mono text-fg">{invoice.number ?? '—'}</td><td className="p-3 font-mono text-fg-muted">{invoice.date ? new Date(invoice.date).toLocaleDateString('es-AR') : '—'}</td><td className="p-3 font-mono text-fg-muted">{invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('es-AR') : '—'}</td><td className="p-3 text-right font-mono tabular-nums text-fg">{formatOptionalMoney(invoice.total)}</td><td className="p-3 text-right font-mono tabular-nums text-warn">{formatOptionalMoney(invoice.saldoPendiente)}</td><td className="p-3"><span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">{invoice.status ?? '—'}</span></td><td className="p-3">{invoice.pdfUrl ? <a href={invoice.pdfUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">Ver PDF</a> : '—'}</td></tr>)}</tbody></table></div> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Sin facturas informadas.</p>}</div>
+              <div><h3 className="mb-2 font-semibold text-fg">Crédito y financiación</h3>{account.credits.length ? <div className="grid gap-3 sm:grid-cols-2">{account.credits.map((credit) => <div key={credit.id} className="rounded-xl border border-hair-soft bg-raised p-4"><div className="flex items-center justify-between gap-2"><span className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight-soft px-2 py-1 text-xs font-medium text-brand">{credit.tipo ?? 'Crédito'}</span>{credit.vencimiento && <span className="font-mono text-xs text-fg-faint">Vence {new Date(credit.vencimiento).toLocaleDateString('es-AR')}</span>}</div><div className="mt-3 grid grid-cols-2 gap-3"><div><span className="block text-xs text-fg-faint">Disponible</span><span className="font-mono font-semibold tabular-nums text-ok">{formatOptionalMoney(credit.montoDisponible)}</span></div><div><span className="block text-xs text-fg-faint">Usado</span><span className="font-mono tabular-nums text-fg">{formatOptionalMoney(credit.montoUsado)}</span></div></div>{credit.condiciones && <p className="mt-3 text-xs text-fg-muted">{credit.condiciones}</p>}</div>)}</div> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Sin líneas de financiación informadas.</p>}</div>
+            </> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-muted">{conn.provider === 'juntosplus' ? 'Juntos+ no ofrece una cuenta corriente estándar.' : conn.provider === 'mondelez' ? 'La cuenta corriente de Mondelez todavía no está integrada.' : 'Sin datos de cuenta — corré el runner para cosechar facturas y financiación.'}</p>}
+          </section>
 
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-full sm:min-w-[200px] sm:flex-1">

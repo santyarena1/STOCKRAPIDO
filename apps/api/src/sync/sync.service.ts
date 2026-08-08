@@ -22,6 +22,20 @@ type ConnInput = {
   columnsConfig?: Record<string, unknown> | null;
 };
 
+type SupplierAccountInput = {
+  account?: {
+    clienteId?: string;
+    razonSocial?: string;
+    balance?: number;
+    creditLimit?: number;
+    availableCredit?: number;
+    currency?: string;
+  };
+  invoices?: Array<Record<string, any>>;
+  movements?: Array<Record<string, any>>;
+  credits?: Array<Record<string, any>>;
+};
+
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger('SyncService');
@@ -164,6 +178,95 @@ export class SyncService {
       }
     }
     return { credentials, session, sessionExpiresAt: connection.sessionExpiresAt };
+  }
+
+  async upsertSupplierAccount(id: string, businessId: string, body: SupplierAccountInput) {
+    await this.getConnection(id, businessId);
+    if (!body?.account || typeof body.account !== 'object') {
+      throw new BadRequestException('Faltan los datos de la cuenta del proveedor.');
+    }
+    const decimal = (value: unknown) => {
+      if (value == null || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? new Decimal(parsed) : null;
+    };
+    const date = (value: unknown) => {
+      if (!value) return null;
+      const parsed = new Date(String(value));
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+    await this.prisma.$transaction(async (tx) => {
+      const account = await tx.supplierAccount.upsert({
+        where: { connectionId: id },
+        create: {
+          connectionId: id,
+          businessId,
+          clienteId: body.account?.clienteId ?? null,
+          razonSocial: body.account?.razonSocial ?? null,
+          balance: decimal(body.account?.balance),
+          creditLimit: decimal(body.account?.creditLimit),
+          availableCredit: decimal(body.account?.availableCredit),
+          currency: body.account?.currency || 'ARS',
+        },
+        update: {
+          clienteId: body.account?.clienteId,
+          razonSocial: body.account?.razonSocial,
+          balance: body.account?.balance !== undefined ? decimal(body.account.balance) : undefined,
+          creditLimit: body.account?.creditLimit !== undefined ? decimal(body.account.creditLimit) : undefined,
+          availableCredit: body.account?.availableCredit !== undefined ? decimal(body.account.availableCredit) : undefined,
+          currency: body.account?.currency,
+        },
+      });
+      if (body.invoices !== undefined) {
+        await tx.supplierInvoice.deleteMany({ where: { accountId: account.id } });
+        if (body.invoices.length) await tx.supplierInvoice.createMany({ data: body.invoices.map((invoice) => ({
+          accountId: account.id,
+          number: invoice.number != null ? String(invoice.number) : null,
+          date: date(invoice.date),
+          dueDate: date(invoice.dueDate),
+          total: decimal(invoice.total),
+          saldoPendiente: decimal(invoice.saldoPendiente),
+          status: invoice.status != null ? String(invoice.status) : null,
+          pdfUrl: invoice.pdfUrl != null ? String(invoice.pdfUrl) : null,
+          raw: invoice.raw ?? Prisma.JsonNull,
+        })) });
+      }
+      if (body.movements !== undefined) {
+        await tx.supplierAccountMovement.deleteMany({ where: { accountId: account.id } });
+        if (body.movements.length) await tx.supplierAccountMovement.createMany({ data: body.movements.map((movement) => ({
+          accountId: account.id,
+          date: date(movement.date),
+          type: movement.type != null ? String(movement.type) : null,
+          reference: movement.reference != null ? String(movement.reference) : null,
+          amount: decimal(movement.amount),
+          runningBalance: decimal(movement.runningBalance),
+        })) });
+      }
+      if (body.credits !== undefined) {
+        await tx.supplierCredit.deleteMany({ where: { accountId: account.id } });
+        if (body.credits.length) await tx.supplierCredit.createMany({ data: body.credits.map((credit) => ({
+          accountId: account.id,
+          tipo: credit.tipo != null ? String(credit.tipo) : null,
+          montoDisponible: decimal(credit.montoDisponible),
+          montoUsado: decimal(credit.montoUsado),
+          vencimiento: date(credit.vencimiento),
+          condiciones: credit.condiciones != null ? String(credit.condiciones) : null,
+        })) });
+      }
+    });
+    return { ok: true };
+  }
+
+  async getSupplierAccount(id: string, businessId: string) {
+    await this.getConnection(id, businessId);
+    return this.prisma.supplierAccount.findFirst({
+      where: { connectionId: id, businessId },
+      include: {
+        invoices: { orderBy: { date: 'desc' } },
+        movements: { orderBy: { date: 'desc' } },
+        credits: { orderBy: { vencimiento: 'desc' } },
+      },
+    });
   }
 
   private validateSchedule(data: ConnInput) {

@@ -80,6 +80,18 @@ export class SyncController {
     return this.sync.deleteSession(id, u.businessId);
   }
 
+  @Post('connections/:id/account')
+  @UseGuards(JwtAuthGuard)
+  upsertAccount(@CurrentUser() u: User, @Param('id') id: string, @Body() body: any) {
+    return this.sync.upsertSupplierAccount(id, u.businessId, body || {});
+  }
+
+  @Get('connections/:id/account')
+  @UseGuards(JwtAuthGuard)
+  account(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.getSupplierAccount(id, u.businessId);
+  }
+
   @Delete('connections/:id')
   @UseGuards(JwtAuthGuard)
   remove(@CurrentUser() u: User, @Param('id') id: string) {

@@ -330,6 +330,7 @@ def normalize(card):
 
 
 def main():
+    # TODO: Juntos+ no expone por ahora una cuenta corriente estándar cosechable.
     print("Iniciando sesión en StockRápido…")
     sr_token = sr_login()
     connection_id = sr_get_connection(sr_token)

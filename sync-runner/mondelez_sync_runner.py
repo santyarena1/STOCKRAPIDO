@@ -277,6 +277,7 @@ def mdlz_fetch_prices(rq, sku_ids, batch=50):
 
 
 def main():
+    # TODO: integrar cuenta corriente cuando esté disponible fuera de VTEX OMS.
     print("Login StockRápido…")
     token = sr_login()
     conn_id = sr_get_connection(token)

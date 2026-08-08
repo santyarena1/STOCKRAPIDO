@@ -106,6 +106,16 @@ def sr_push(token, connection_id, items):
     )
 
 
+def sr_push_account(token, connection_id, payload):
+    return _sr_json(
+        f"/sync/connections/{connection_id}/account",
+        token=token,
+        method="POST",
+        payload=payload,
+        timeout=120,
+    )
+
+
 def sr_get_secrets(token, connection_id):
     try:
         return _sr_json(f"/sync/connections/{connection_id}/credentials-secret", token=token)
@@ -196,6 +206,87 @@ def extract_products(payload):
 
     walk(payload)
     return products
+
+
+def dict_nodes(payload):
+    nodes = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            nodes.append(node)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(payload)
+    return nodes
+
+
+def pick(node, *keys):
+    lowered = {str(key).lower(): value for key, value in node.items()}
+    for key in keys:
+        value = lowered.get(key.lower())
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def normalize_account_payload(summary_payloads, microcredit_payloads, check_payloads):
+    summary_nodes = [node for payload in summary_payloads for node in dict_nodes(payload)]
+    all_nodes = summary_nodes + [node for payload in microcredit_payloads + check_payloads for node in dict_nodes(payload)]
+    account = {"currency": "ARS"}
+    for node in all_nodes:
+        account["clienteId"] = account.get("clienteId") or pick(node, "clienteId", "clientId", "customerId", "codigoCliente")
+        account["razonSocial"] = account.get("razonSocial") or pick(node, "razonSocial", "businessName", "customerName", "nombreCliente")
+        account["balance"] = account.get("balance") if account.get("balance") is not None else number(pick(node, "saldo", "balance", "currentBalance", "saldoTotal"))
+        account["creditLimit"] = account.get("creditLimit") if account.get("creditLimit") is not None else number(pick(node, "creditLimit", "limiteCredito", "limite"))
+        account["availableCredit"] = account.get("availableCredit") if account.get("availableCredit") is not None else number(pick(node, "availableCredit", "creditoDisponible", "disponible"))
+
+    invoices = []
+    seen_invoices = set()
+    for node in summary_nodes:
+        invoice_number = pick(node, "number", "numero", "invoiceNumber", "nroFactura", "comprobante")
+        invoice_date = pick(node, "date", "fecha", "invoiceDate", "fechaEmision")
+        due_date = pick(node, "dueDate", "vencimiento", "fechaVencimiento")
+        total = number(pick(node, "total", "importeTotal", "amount", "monto"))
+        pending = number(pick(node, "saldoPendiente", "pendingBalance", "saldo", "importePendiente"))
+        if invoice_number is None or (total is None and pending is None and invoice_date is None):
+            continue
+        key = str(invoice_number)
+        if key in seen_invoices:
+            continue
+        seen_invoices.add(key)
+        invoices.append({
+            "number": key,
+            "date": invoice_date,
+            "dueDate": due_date,
+            "total": total,
+            "saldoPendiente": pending,
+            "status": pick(node, "status", "estado"),
+            "pdfUrl": pick(node, "pdfUrl", "urlPdf", "downloadUrl"),
+            "raw": node,
+        })
+
+    credits = []
+    for credit_type, payloads in [("microcredito", microcredit_payloads), ("tokinchecks", check_payloads)]:
+        candidates = dict_nodes(payloads)
+        for node in candidates:
+            available = number(pick(node, "montoDisponible", "availableAmount", "disponible", "availableCredit"))
+            used = number(pick(node, "montoUsado", "usedAmount", "utilizado", "usedCredit"))
+            expiry = pick(node, "vencimiento", "dueDate", "expirationDate", "fechaVencimiento")
+            conditions = pick(node, "condiciones", "conditions", "description", "descripcion")
+            if available is None and used is None and expiry is None:
+                continue
+            credits.append({
+                "tipo": credit_type,
+                "montoDisponible": available,
+                "montoUsado": used,
+                "vencimiento": expiry,
+                "condiciones": str(conditions) if conditions is not None else None,
+            })
+    return {"account": account, "invoices": invoices, "credits": credits}
 
 
 def first_ref(product):
@@ -298,6 +389,7 @@ def main():
     secrets = sr_get_secrets(sr_token, connection_id)
     credentials = secrets.get("credentials") if isinstance(secrets.get("credentials"), dict) else {}
     products = {}
+    account_responses = {"summary": [], "microcredits": [], "checks": []}
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
@@ -311,12 +403,19 @@ def main():
         page = context.new_page()
 
         def capture_response(response):
-            if "/store/api/search" not in response.url or not response.ok:
+            if not response.ok:
                 return
             try:
-                for product in extract_products(response.json()):
-                    products[str(product["productId"])] = product
-                print(f"  capturados: {len(products)} productos", end="\r", flush=True)
+                if "/store/api/search" in response.url:
+                    for product in extract_products(response.json()):
+                        products[str(product["productId"])] = product
+                    print(f"  capturados: {len(products)} productos", end="\r", flush=True)
+                elif "getInvoiceSummary" in response.url:
+                    account_responses["summary"].append(response.json())
+                elif "getMicrocredits" in response.url:
+                    account_responses["microcredits"].append(response.json())
+                elif "getTokinChecks" in response.url:
+                    account_responses["checks"].append(response.json())
             except Exception:
                 pass
 
@@ -349,6 +448,26 @@ def main():
 
         input("Si faltan categorías, recorrelas en el navegador. Presioná Enter para finalizar y enviar: ")
         page.wait_for_timeout(1000)
+        print("Cosechando cuenta corriente Tokin…")
+        try:
+            account_links = page.locator("a[href]").evaluate_all(
+                "els => els.map(a => a.href).filter(h => /invoice-summary|resumen.*cuenta|account/i.test(h))"
+            )
+            targets = account_links or ["https://tokintienda.com.ar/store/invoice-summary"]
+            for target in targets[:10]:
+                page.goto(target, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(3500)
+                for label in ["Microcréditos", "Microcreditos", "TokinChecks", "Tokin Checks", "Resumen de Cuentas"]:
+                    try:
+                        control = page.get_by_text(label, exact=False).first
+                        if control.is_visible():
+                            control.click()
+                            page.wait_for_timeout(1800)
+                    except Exception:
+                        pass
+            page.wait_for_timeout(1500)
+        except Exception as error:
+            print(f"  No se pudo abrir la cuenta corriente: {str(error)[:100]}")
         browser.close()
 
     items = [normalize(product) for product in products.values()]
@@ -365,6 +484,19 @@ def main():
         print(f"  push {min(start + len(batch), len(items))}/{len(items)}")
         time.sleep(0.1)
     print(f"Listo. {pushed} productos Tokin sincronizados.")
+    if any(account_responses.values()):
+        try:
+            account_payload = normalize_account_payload(
+                account_responses["summary"],
+                account_responses["microcredits"],
+                account_responses["checks"],
+            )
+            sr_push_account(sr_token, connection_id, account_payload)
+            print(f"Cuenta corriente sincronizada: {len(account_payload['invoices'])} facturas y {len(account_payload['credits'])} líneas de crédito.")
+        except Exception as error:
+            print(f"No se pudo guardar la cuenta corriente; el catálogo quedó sincronizado: {str(error)[:120]}")
+    else:
+        print("Sin datos de cuenta corriente; el catálogo quedó sincronizado igualmente.")
 
 
 if __name__ == "__main__":

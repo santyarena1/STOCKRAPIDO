@@ -482,6 +482,70 @@ model SyncConnection {
   runs     SyncRun[]
   orders   MondelezOrder[]
   drafts   OrderDraft[]
+  account  SupplierAccount?
+}
+
+model SupplierAccount {
+  id              String   @id @default(cuid())
+  connectionId    String   @unique
+  businessId      String
+  clienteId       String?
+  razonSocial     String?
+  balance         Decimal?
+  creditLimit     Decimal?
+  availableCredit Decimal?
+  currency        String?  @default("ARS")
+  updatedAt       DateTime @updatedAt
+
+  connection SyncConnection           @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  invoices   SupplierInvoice[]
+  movements  SupplierAccountMovement[]
+  credits    SupplierCredit[]
+}
+
+model SupplierInvoice {
+  id               String    @id @default(cuid())
+  accountId        String
+  number           String?
+  date             DateTime?
+  dueDate          DateTime?
+  total            Decimal?
+  saldoPendiente   Decimal?
+  status           String?
+  pdfUrl           String?
+  raw              Json?
+
+  account SupplierAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model SupplierAccountMovement {
+  id             String    @id @default(cuid())
+  accountId      String
+  date           DateTime?
+  type           String?
+  reference      String?
+  amount         Decimal?
+  runningBalance Decimal?
+
+  account SupplierAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model SupplierCredit {
+  id              String    @id @default(cuid())
+  accountId       String
+  tipo            String?
+  montoDisponible Decimal?
+  montoUsado      Decimal?
+  vencimiento     DateTime?
+  condiciones     String?
+
+  account SupplierAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
 }
 
 model MondelezOrder {
