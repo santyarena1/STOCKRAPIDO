@@ -126,6 +126,13 @@ def spec(p, key):
     return v
 
 
+def ref_id(item):
+    for reference in item.get("referenceId") or []:
+        if isinstance(reference, dict) and reference.get("Key") == "RefId":
+            return reference.get("Value")
+    return item.get("RefId")
+
+
 def mdlz_fetch_catalog(rq):
     tree = rq.get(BASE + "/api/catalog_system/pub/category/tree/10").json()
     cat_ids = []
@@ -155,23 +162,41 @@ def mdlz_fetch_catalog(rq):
                 img = (it.get("images") or [{}])[0]
                 cats = (p.get("categories") or [""])[0].split("/")
                 cats = [c for c in cats if c]
+                reference = p.get("productReference") or ref_id(it)
+                units_per_display = spec(p, "Unidades por Display")
                 items.append({
                     "externalId": pid,
                     "sku": str(it.get("itemId")) if it.get("itemId") else None,
                     "ean": it.get("ean"),
+                    "eanUnit": it.get("ean"),
+                    "supplierRef": reference,
+                    "ivaAlicuota": None,
                     "name": p.get("productName"),
                     "brand": p.get("brand"),
                     "category": cats[0] if cats else None,
                     "subcategory": spec(p, "Subcategoría") or (cats[1] if len(cats) > 1 else None),
                     "available": bool(offer.get("IsAvailable")),
                     "stock": offer.get("AvailableQuantity"),
-                    "unitsPerBox": spec(p, "Unidades por Display"),
+                    "unitsPerBox": units_per_display,
+                    "unitsPerDisplay": units_per_display,
                     "weight": spec(p, "Peso"),
                     "format": spec(p, "Formato"),
                     "flavor": spec(p, "Sabor"),
                     "presentation": spec(p, "Presentación"),
                     "imageUrl": img.get("imageUrl"),
                     "link": p.get("link"),
+                    "raw": p,
+                    "variants": [{
+                        "uom": "UN",
+                        "multiplier": 1,
+                        "skuId": str(it.get("itemId")) if it.get("itemId") else None,
+                        "refId": reference,
+                        "ean": it.get("ean"),
+                        "listPrice": offer.get("ListPrice"),
+                        "sellingPrice": offer.get("Price"),
+                        "cost": None,
+                        "stock": offer.get("AvailableQuantity"),
+                    }],
                 })
             if len(batch) < PAGE:
                 break
@@ -234,6 +259,7 @@ def main():
             c = prices.get(it.get("sku"))
             if c is not None:
                 it["cost"] = c
+                it["variants"][0]["cost"] = c
         b.close()
 
     con_precio = sum(1 for it in items if it.get("cost") is not None)

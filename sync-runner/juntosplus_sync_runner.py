@@ -129,6 +129,20 @@ def _integer(value):
     return int(number) if number is not None else None
 
 
+def _boolean(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "si", "sí", "s", "yes"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    return None
+
+
 def extract_cards(payload):
     """Encuentra products_card aun si Juntos+ cambia el nivel de anidación."""
     cards = []
@@ -254,13 +268,20 @@ def normalize(card):
     category = categories[0] if categories and isinstance(categories[0], dict) else {}
     subcategory = categories[1] if len(categories) > 1 and isinstance(categories[1], dict) else {}
     minimum = _integer(card.get("min_sale_quantity"))
+    tax = _number(card.get("tax"))
+    tax_rate = tax if tax is not None and 0 <= tax <= 100 else None
+    base_price = _number(card.get("base_price"))
+    selling_price = _number(card.get("price"))
     external_id = card.get("id") or card.get("sku")
     item = {
         "externalId": str(external_id),
         "sku": str(card["sku"]) if card.get("sku") is not None else None,
+        "supplierRef": str(card["sku"]) if card.get("sku") is not None else None,
         "name": card.get("name") or f"Producto {external_id}",
-        "cost": _number(card.get("base_price")),
+        "cost": base_price,
+        "basePrice": base_price,
         "listPrice": _number(card.get("price")) or _number(card.get("unit_price")),
+        "ivaAlicuota": tax_rate,
         "category": category.get("category_name"),
         "subcategory": subcategory.get("category_name"),
         "brand": card.get("aggroupation_name"),
@@ -271,6 +292,18 @@ def normalize(card):
         "format": card.get("container_type"),
         "weight": str(card["measure"]) if card.get("measure") is not None else None,
         "unitsPerBox": str(minimum) if minimum is not None and minimum > 1 else None,
+        "retornable": _boolean(card.get("retornable")),
+        "variants": [{
+            "uom": "UN",
+            "multiplier": 1,
+            "skuId": str(card["sku"]) if card.get("sku") is not None else None,
+            "ean": None,
+            "listPrice": selling_price,
+            "sellingPrice": selling_price,
+            "cost": base_price,
+            "stock": _integer(card.get("available_quantity")),
+            "taxAlicuota": tax_rate,
+        }],
         "raw": card,
     }
     return {key: value for key, value in item.items() if value is not None}

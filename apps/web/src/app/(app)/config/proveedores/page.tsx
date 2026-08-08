@@ -30,6 +30,9 @@ const FIELD_LABELS: Record<string, string> = {
   presentation: 'Presentación', subcategory: 'Subcategoría', supplierSku: 'SKU proveedor',
   externalId: 'ID externo', category: 'Categoría', cost: 'Costo', ean: 'EAN',
   listPrice: 'Precio lista', available: 'Disponible', stock: 'Stock', sku: 'SKU', link: 'Link',
+  supplierRef: 'Referencia proveedor', eanUnit: 'EAN unidad', eanBox: 'EAN bulto',
+  ivaAlicuota: 'IVA alícuota', unitsPerDisplay: 'Unidades por display',
+  displaysPerBox: 'Displays por bulto', retornable: 'Retornable', basePrice: 'Precio base',
 };
 const FREQUENCIES: { value: SyncFrequency; label: string }[] = [
   { value: 'manual', label: 'Manual' },
@@ -41,7 +44,13 @@ const FREQUENCIES: { value: SyncFrequency; label: string }[] = [
 const DEFAULT_CONNECTIONS = [
   { provider: 'mondelez', name: 'Mondelez', priceMarkup: 40 },
   { provider: 'juntosplus', name: 'Juntos+', priceMarkup: 40 },
+  { provider: 'tokin', name: 'Tokin (Arcor)', priceMarkup: 40 },
 ];
+const PROVIDERS: Record<string, { label: string; description: string }> = {
+  mondelez: { label: 'Mondelez', description: 'Catálogo VTEX y precios B2B mediante runner.' },
+  juntosplus: { label: 'Juntos+', description: 'Catálogo Coca-Cola FEMSA vía runner local.' },
+  tokin: { label: 'Tokin (Arcor)', description: 'Catálogo Tokin con variantes UN/DI/BU vía runner local.' },
+};
 
 export default function ProveedoresConfigPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -174,7 +183,8 @@ export default function ProveedoresConfigPage() {
   return <div className="space-y-6">
     <PageHeader title="Proveedores y sincronización" subtitle="Configurá credenciales, mapeo de columnas y frecuencia de cada proveedor." />
     {message && <div className={`rounded-lg border px-4 py-3 text-sm ${message.type === 'ok' ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-crit/30 bg-[var(--crit-soft)] text-crit'}`}>{message.text}</div>}
-    <div className="flex flex-wrap gap-2">{connections.map((item) => <button key={item.id} type="button" onClick={() => setActiveId(item.id)} className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${item.id === activeId ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-fg' : 'border-hair text-fg-muted hover:bg-raised hover:text-fg'}`}>{item.name}<span className="ml-2 text-xs opacity-70">{item._count?.items ?? 0} ítems</span></button>)}</div>
+    <div className="flex flex-wrap gap-2">{connections.map((item) => <button key={item.id} type="button" onClick={() => setActiveId(item.id)} title={PROVIDERS[item.provider]?.description} className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${item.id === activeId ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-fg' : 'border-hair text-fg-muted hover:bg-raised hover:text-fg'}`}>{PROVIDERS[item.provider]?.label ?? item.name}<span className="ml-2 text-xs opacity-70">{item._count?.items ?? 0} ítems</span></button>)}</div>
+    {connection && PROVIDERS[connection.provider] && <p className="text-sm text-fg-muted">{PROVIDERS[connection.provider].description}</p>}
     {connections.length === 0 && <div className="rounded-xl border border-hair-soft bg-surface p-5 text-fg-muted">No hay conexiones configuradas.</div>}
     {connection && <>
       <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">

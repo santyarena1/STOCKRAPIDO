@@ -128,9 +128,10 @@ export class SyncService {
   // ---------- Sync de catálogo (público, server-side) ----------
   async runCatalogSync(id: string, businessId: string) {
     const conn = await this.getConnection(id, businessId);
-    if (conn.provider === 'juntosplus') {
+    if (conn.provider === 'juntosplus' || conn.provider === 'tokin') {
+      const providerName = conn.provider === 'tokin' ? 'Tokin' : 'Juntos+';
       throw new BadRequestException(
-        'Juntos+ se sincroniza con el runner local (no hay catálogo público en el servidor).',
+        `${providerName} se sincroniza con el runner local (no hay catálogo público en el servidor).`,
       );
     }
     if (conn.provider !== 'mondelez') {

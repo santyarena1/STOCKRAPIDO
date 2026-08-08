@@ -25,6 +25,14 @@ type Synced = {
   id: string;
   name?: string;
   ean?: string;
+  eanUnit?: string;
+  eanBox?: string;
+  supplierRef?: string;
+  ivaAlicuota?: unknown;
+  unitsPerDisplay?: string | null;
+  displaysPerBox?: string | null;
+  retornable?: boolean | null;
+  basePrice?: unknown;
   brand?: string;
   category?: string;
   subcategory?: string;
@@ -46,6 +54,22 @@ type Synced = {
   imageUrl?: string;
   link?: string;
   linkedProductId?: string | null;
+  variants?: Array<{
+    id: string;
+    uom: string;
+    multiplier: number;
+    skuId?: string | null;
+    refId?: string | null;
+    ean?: string | null;
+    listPrice?: unknown;
+    sellingPrice?: unknown;
+    priceWithTax?: unknown;
+    cost?: unknown;
+    stock?: number | null;
+    taxAlicuota?: unknown;
+    sellerId?: string | null;
+    erpStatus?: string | null;
+  }>;
 };
 
 const PROVIDERS: Record<
@@ -66,12 +90,31 @@ const PROVIDERS: Record<
     runnerNote:
       'Juntos+ requiere login interactivo con OTP. Ejecutá el runner local, iniciá sesión y entrá al catálogo para traer productos y precios B2B.',
   },
+  tokin: {
+    label: 'Tokin (Arcor)',
+    description: 'Catálogo Tokin con variantes UN/DI/BU vía runner local',
+    accent: 'border-warn/40 bg-[var(--warn-soft)]',
+    runnerNote:
+      'Tokin se obtiene navegando el catálogo con el runner local, que captura productos, códigos y variantes UN/DI/BU.',
+  },
 };
 
 const DEFAULT_CONNECTIONS = [
   { provider: 'mondelez', name: 'Mondelez', priceMarkup: 40 },
   { provider: 'juntosplus', name: 'Juntos+', priceMarkup: 40 },
+  { provider: 'tokin', name: 'Tokin (Arcor)', priceMarkup: 40 },
 ];
+
+const RUNNER_FILES: Record<string, string> = {
+  mondelez: 'mondelez_sync_runner.py',
+  juntosplus: 'juntosplus_sync_runner.py',
+  tokin: 'tokin_sync_runner.py',
+};
+
+function formatOptionalMoney(value: unknown) {
+  const amount = Number(value);
+  return value != null && Number.isFinite(amount) ? formatMoneyArs(amount) : '—';
+}
 
 export default function SincronizacionesPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -83,6 +126,7 @@ export default function SincronizacionesPage() {
   const [q, setQ] = usePersistedState('sr-filters:sincronizaciones:q', '');
   const [onlyWithCost, setOnlyWithCost] = usePersistedState('sr-filters:sincronizaciones:only-with-cost', false);
   const [showInternal, setShowInternal] = usePersistedState('sr-filters:sincronizaciones:show-internal', false);
+  const [detail, setDetail] = useState<Synced | null>(null);
 
   const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
   const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
@@ -244,9 +288,9 @@ export default function SincronizacionesPage() {
                 <div><h3 className="font-semibold text-fg">Sincronizar catálogo</h3><p className="text-sm text-fg-faint">{conn._count?.items ?? items.length} ítems en catálogo</p></div>
               </div>
               <button type="button" onClick={() => run('run')} disabled={!!busy || !conn || conn.provider !== 'mondelez'} className="w-full rounded-lg border border-hair bg-raised px-4 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50">
-                {conn.provider === 'juntosplus' ? 'Usá el runner local' : busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
+                {conn.provider !== 'mondelez' ? 'Usá el runner local' : busy === 'run' ? 'Sincronizando…' : 'Sync catálogo (servidor)'}
               </button>
-              {conn.provider === 'juntosplus' && <p className="mt-2 text-xs text-fg-faint">Juntos+ no ofrece un catálogo público para sincronizar desde el servidor.</p>}
+              {conn.provider !== 'mondelez' && <p className="mt-2 text-xs text-fg-faint">Este proveedor no ofrece un catálogo público para sincronizar desde el servidor.</p>}
             </div>
             <div className="rounded-xl border border-hair-soft bg-surface p-5">
               <div className="mb-4 flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-raised2 font-mono text-sm text-fg-muted">2</span><div><h3 className="font-semibold text-fg">Traer precio B2B</h3><p className="text-sm text-fg-faint">Precio disponible en <span className="font-mono tabular-nums text-ok">{withCost}</span> de <span className="font-mono tabular-nums">{conn._count?.items ?? items.length}</span></p></div></div>
@@ -266,7 +310,7 @@ export default function SincronizacionesPage() {
             <p className="text-xs text-fg-faint">
               En <code className="text-fg-muted">sync-runner/.env</code> configurá{' '}
               <code className="text-fg-muted">SR_API={apiBase || 'https://stockrapido-api.vercel.app'}</code> (proyecto API en Vercel — ver DEPLOY.md).
-              Ejecutá <code className="text-fg-muted">python {conn.provider === 'juntosplus' ? 'juntosplus_sync_runner.py' : 'mondelez_sync_runner.py'}</code> en tu PC o agendalo con Task Scheduler.
+              Ejecutá <code className="text-fg-muted">python {RUNNER_FILES[conn.provider] ?? `${conn.provider}_sync_runner.py`}</code> en tu PC o agendalo con Task Scheduler.
             </p>
           </div>
 
@@ -341,7 +385,7 @@ export default function SincronizacionesPage() {
                       <td className="p-3 text-center text-fg-muted text-xs">
                         {p.unitsPerBoxNum ?? p.unitsPerBox ?? '—'}
                       </td>
-                      <td className="p-3 text-fg-faint text-xs font-mono">{p.ean ?? '—'}</td>
+                      <td className="p-3 text-fg-faint text-xs font-mono">{p.eanUnit ?? p.ean ?? '—'}</td>
                       <td className="p-3">
                         {p.linkedProductId ? (
                           <span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Importado</span>
@@ -352,11 +396,10 @@ export default function SincronizacionesPage() {
                         )}
                       </td>
                       <td className="p-3">
-                        {p.link ? (
-                          <a href={p.link} target="_blank" rel="noreferrer" className="text-brand text-xs hover:underline">
-                            ↗
-                          </a>
-                        ) : null}
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => setDetail(p)} className="whitespace-nowrap text-xs text-brand hover:underline">Ver detalle</button>
+                          {p.link ? <a href={p.link} target="_blank" rel="noreferrer" className="text-brand text-xs hover:underline">↗</a> : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -374,14 +417,43 @@ export default function SincronizacionesPage() {
               {items.map((product) => (
                 <article key={product.id} className="rounded-xl border border-hair-soft bg-surface p-3">
                   <div className="flex items-start gap-3">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded bg-white/5 object-contain" /> : <div className="h-10 w-10 shrink-0 rounded bg-raised2" />}<div className="min-w-0 flex-1"><p className="font-medium text-fg">{product.name ?? '—'}</p><p className="text-xs text-fg-faint">{product.brand ?? 'Sin marca'} · {product.category ?? 'Sin categoría'}</p></div>{product.linkedProductId ? <span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Importado</span> : product.costUnit == null ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Falta precio</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin importar</span>}</div>
-                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Costo c/u</span><span className="font-mono tabular-nums text-fg-muted">{product.costUnit != null ? formatMoneyArs(product.costUnit) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Venta c/u (+{mk}%)</span><span className="font-mono font-medium tabular-nums text-brand">{product.saleUnit != null ? formatMoneyArs(product.saleUnit) : '—'}</span></div>{showInternal && <div><span className="block text-xs text-fg-faint">Costo bulto</span><span className="font-mono text-fg-muted">{product.costBulk != null ? formatMoneyArs(product.costBulk) : '—'}</span></div>}<div><span className="block text-xs text-fg-faint">U/bulto</span><span className="font-mono text-fg-muted">{product.unitsPerBoxNum ?? product.unitsPerBox ?? '—'}</span></div><div><span className="block text-xs text-fg-faint">EAN</span><span className="break-all font-mono text-fg-muted">{product.ean ?? '—'}</span></div></div>
-                  {product.link && <div className="mt-3 flex justify-end border-t border-hair-soft pt-3"><a href={product.link} target="_blank" rel="noreferrer" className="text-sm text-brand">Abrir producto ↗</a></div>}
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Costo c/u</span><span className="font-mono tabular-nums text-fg-muted">{product.costUnit != null ? formatMoneyArs(product.costUnit) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Venta c/u (+{mk}%)</span><span className="font-mono font-medium tabular-nums text-brand">{product.saleUnit != null ? formatMoneyArs(product.saleUnit) : '—'}</span></div>{showInternal && <div><span className="block text-xs text-fg-faint">Costo bulto</span><span className="font-mono text-fg-muted">{product.costBulk != null ? formatMoneyArs(product.costBulk) : '—'}</span></div>}<div><span className="block text-xs text-fg-faint">U/bulto</span><span className="font-mono text-fg-muted">{product.unitsPerBoxNum ?? product.unitsPerBox ?? '—'}</span></div><div><span className="block text-xs text-fg-faint">EAN</span><span className="break-all font-mono text-fg-muted">{product.eanUnit ?? product.ean ?? '—'}</span></div></div>
+                  <div className="mt-3 flex justify-end gap-3 border-t border-hair-soft pt-3"><button type="button" onClick={() => setDetail(product)} className="text-sm text-brand">Ver detalle</button>{product.link && <a href={product.link} target="_blank" rel="noreferrer" className="text-sm text-brand">Abrir producto ↗</a>}</div>
                 </article>
               ))}
               {items.length === 0 && <p className="p-6 text-center text-sm text-fg-faint">Sin productos. Sincronizá el catálogo o ejecutá el runner con precios B2B.</p>}
             </div>
           </div>
         </>
+      )}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setDetail(null)}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-hair bg-surface p-4 shadow-2xl sm:p-6" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div><h2 className="text-xl font-semibold text-fg">{detail.name ?? 'Producto sincronizado'}</h2><p className="text-sm text-fg-muted">Códigos, empaque y variantes del proveedor</p></div>
+              <button type="button" onClick={() => setDetail(null)} aria-label="Cerrar" className="rounded-lg border border-hair px-3 py-1.5 text-fg-muted hover:bg-raised">Cerrar</button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                ['EAN unidad', detail.eanUnit ?? detail.ean], ['EAN bulto', detail.eanBox],
+                ['Referencia proveedor', detail.supplierRef], ['SKU', detail.sku],
+                ['ID externo', detail.externalId], ['IVA', detail.ivaAlicuota != null ? `${Number(detail.ivaAlicuota)}%` : null],
+                ['Unidades por display', detail.unitsPerDisplay], ['Displays por bulto', detail.displaysPerBox],
+                ['Unidades por bulto', detail.unitsPerBox], ['Retornable', detail.retornable == null ? null : detail.retornable ? 'Sí' : 'No'],
+              ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-hair-soft bg-raised p-3"><span className="block text-[11px] uppercase tracking-wide text-fg-faint">{label}</span><span className="mt-1 block break-all font-mono text-sm text-fg">{value ?? '—'}</span></div>)}
+            </div>
+            <div className="mt-6">
+              <h3 className="font-semibold text-fg">Variantes por unidad de medida</h3>
+              {detail.variants?.length ? <div className="mt-3 space-y-3">{detail.variants.map((variant) => (
+                <div key={variant.id} className="rounded-xl border border-hair-soft bg-raised p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight-soft px-2 py-1 font-mono text-sm font-semibold text-brand">{variant.uom}</span><span className="font-mono text-xs text-fg-faint">× {variant.multiplier} UN</span></div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"><div><span className="block text-xs text-fg-faint">Costo</span><span className="font-mono tabular-nums text-fg">{formatOptionalMoney(variant.cost)}</span></div><div><span className="block text-xs text-fg-faint">Venta</span><span className="font-mono tabular-nums text-brand">{formatOptionalMoney(variant.sellingPrice)}</span></div><div><span className="block text-xs text-fg-faint">Con impuestos</span><span className="font-mono tabular-nums text-fg">{formatOptionalMoney(variant.priceWithTax)}</span></div><div><span className="block text-xs text-fg-faint">Stock</span><span className="font-mono tabular-nums text-fg">{variant.stock ?? '—'}</span></div></div>
+                  <p className="mt-3 break-all font-mono text-xs text-fg-faint">SKU {variant.skuId ?? '—'} · Ref {variant.refId ?? '—'} · EAN {variant.ean ?? '—'} · IVA {variant.taxAlicuota != null ? `${Number(variant.taxAlicuota)}%` : '—'}</p>
+                </div>
+              ))}</div> : <p className="mt-3 rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Este producto todavía no tiene variantes sincronizadas.</p>}
+            </div>
+          </div>
+        </div>
       )}
     </Container>
   );

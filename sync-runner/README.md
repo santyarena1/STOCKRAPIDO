@@ -1,6 +1,6 @@
 # Sync Runner — proveedores → StockRápido (Vercel + Neon)
 
-Trae catálogos y precios B2B de proveedores con sesión autenticada (Mondelez y Juntos+) y los empuja a la API en **Vercel**.
+Trae catálogos y precios B2B de proveedores con sesión autenticada (Mondelez, Juntos+ y Tokin) y los empuja a la API en **Vercel**.
 
 El runner corre **en tu PC** (Playwright). Vercel no ejecuta navegador, por eso los precios B2B los aporta este proceso local.
 
@@ -58,3 +58,20 @@ Login Juntos+ con OTP → captura Bearer/cid → catálogo completo paginado
 → normalización (card completo en raw) → POST /sync/connections/:id/push
 → mapeo e importación desde Configuración / Sincronizaciones
 ```
+
+## Tokin — Arcor
+
+Tokin se sincroniza mediante harvest del navegador porque su API interna entrega
+la estructura completa durante la navegación. El runner abre
+`https://tokintienda.com.ar/store/home`: iniciá sesión, entrá al catálogo y
+presioná Enter. Luego recorre las vistas detectadas, dispara el lazy-load y
+captura las respuestas de `/store/api/search` sin imprimir cookies ni tokens.
+
+```bash
+python -m pip install playwright
+python -m playwright install chromium
+python tokin_sync_runner.py
+```
+
+Cada producto conserva el payload original en `raw` y sus variantes UN/DI/BU,
+códigos, multiplicadores, impuestos, precios y stock se envían a StockRápido.
