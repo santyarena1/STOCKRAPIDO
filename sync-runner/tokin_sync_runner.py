@@ -25,6 +25,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import sync_playwright
@@ -103,6 +104,64 @@ def sr_push(token, connection_id, items):
         payload={"items": items},
         timeout=180,
     )
+
+
+def sr_get_secrets(token, connection_id):
+    try:
+        return _sr_json(f"/sync/connections/{connection_id}/credentials-secret", token=token)
+    except Exception as error:
+        print(f"No se pudieron leer credenciales guardadas; sigo en modo interactivo: {str(error)[:100]}")
+        return {"credentials": None, "session": None, "sessionExpiresAt": None}
+
+
+def sr_save_session(token, connection_id, session, expires_at=None):
+    payload = {"session": session}
+    if expires_at:
+        payload["expiresAt"] = expires_at
+    _sr_json(
+        f"/sync/connections/{connection_id}/session",
+        token=token,
+        method="PATCH",
+        payload=payload,
+    )
+
+
+def cookie_expiry_iso(cookies):
+    expiries = [cookie.get("expires") for cookie in cookies if (cookie.get("expires") or 0) > 0]
+    return datetime.fromtimestamp(max(expiries), timezone.utc).isoformat() if expiries else None
+
+
+def try_credential_login(page, credentials):
+    user = credentials.get("user") if isinstance(credentials, dict) else None
+    password = credentials.get("password") if isinstance(credentials, dict) else None
+    if not user or not password:
+        return False
+    user_filled = False
+    for selector in ["input[type=email]", "input[name=email]", "input[name=user]", "input[name=username]", "input[type=text]"]:
+        try:
+            field = page.locator(selector).first
+            if field.is_visible():
+                field.fill(str(user))
+                user_filled = True
+                break
+        except Exception:
+            pass
+    if not user_filled:
+        return False
+    try:
+        page.locator("input[type=password]").first.fill(str(password))
+    except Exception:
+        return False
+    for selector in ["button[type=submit]", "button:has-text('Ingresar')", "button:has-text('Iniciar sesión')"]:
+        try:
+            button = page.locator(selector).first
+            if button.is_visible():
+                button.click()
+                page.wait_for_timeout(5000)
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def number(value):
@@ -236,11 +295,19 @@ def main():
     sr_token = sr_login()
     connection_id = sr_get_connection(sr_token)
     print(f"  conexión Tokin: {connection_id}")
+    secrets = sr_get_secrets(sr_token, connection_id)
+    credentials = secrets.get("credentials") if isinstance(secrets.get("credentials"), dict) else {}
     products = {}
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
         context = browser.new_context()
+        stored_session = secrets.get("session")
+        if isinstance(stored_session, dict) and isinstance(stored_session.get("cookies"), list):
+            try:
+                context.add_cookies(stored_session["cookies"])
+            except Exception:
+                pass
         page = context.new_page()
 
         def capture_response(response):
@@ -255,7 +322,11 @@ def main():
 
         page.on("response", capture_response)
         page.goto(TOKIN_URL, wait_until="domcontentloaded", timeout=90000)
-        input("Logueate en Tokin y entrá al catálogo; presioná Enter cuando estés dentro: ")
+        try_credential_login(page, credentials)
+        input("Entrá al catálogo de Tokin (logueate si hace falta) y presioná Enter cuando estés dentro: ")
+        cookies = context.cookies()
+        sr_save_session(sr_token, connection_id, {"cookies": cookies}, cookie_expiry_iso(cookies))
+        print("  Sesión guardada de forma cifrada en StockRápido.")
         sweep_page(page)
 
         links = page.locator("a[href]").evaluate_all(

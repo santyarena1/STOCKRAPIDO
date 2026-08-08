@@ -14,12 +14,13 @@ Requisitos (una vez):
     python -m pip install playwright
     python -m playwright install chromium
 
-Config por variables de entorno (o editá los DEFAULT):
+Config por variables de entorno:
     SR_API        URL del backend StockRápido
     SR_EMAIL      tu email de StockRápido
     SR_PASSWORD   tu contraseña de StockRápido
-    MDLZ_PHONE    tu teléfono de Mondelez
-    MDLZ_PASSWORD tu contraseña de Mondelez
+
+El teléfono y la contraseña de Mondelez se cargan en Configuración →
+Proveedores dentro de StockRápido. Si faltan, el login queda interactivo.
 
 Uso:  python mondelez_sync_runner.py
 """
@@ -28,11 +29,12 @@ import json
 import os
 import time
 import urllib.request
+from datetime import datetime, timezone
 
 from playwright.sync_api import sync_playwright
 
-# Credenciales: SIEMPRE por variables de entorno (no hardcodear claves en el repo).
-# Cargá un archivo sync-runner/.env (gitignored) o exportá las variables.
+# El .env contiene solo el acceso a StockRápido. Las credenciales del proveedor
+# se leen cifradas desde Configuración → Proveedores.
 def _load_dotenv():
     here = os.path.join(os.path.dirname(__file__), ".env")
     if os.path.exists(here):
@@ -47,13 +49,10 @@ _load_dotenv()
 SR_API = os.environ.get("SR_API", "https://stockrapido-api.vercel.app")
 SR_EMAIL = os.environ.get("SR_EMAIL", "")
 SR_PASSWORD = os.environ.get("SR_PASSWORD", "")
-MDLZ_PHONE = os.environ.get("MDLZ_PHONE", "")
-MDLZ_PASSWORD = os.environ.get("MDLZ_PASSWORD", "")
-
-if not all([SR_EMAIL, SR_PASSWORD, MDLZ_PHONE, MDLZ_PASSWORD]):
+if not all([SR_EMAIL, SR_PASSWORD]):
     raise SystemExit(
         "Faltan credenciales. Creá sync-runner/.env con:\n"
-        "  SR_EMAIL=...\n  SR_PASSWORD=...\n  MDLZ_PHONE=...\n  MDLZ_PASSWORD=...\n"
+        "  SR_EMAIL=...\n  SR_PASSWORD=...\n"
     )
 
 BASE = "https://www.mitiendamondelez.com.ar"
@@ -93,30 +92,72 @@ def sr_push(token, conn_id, items):
     return json.loads(urllib.request.urlopen(req, timeout=120).read())
 
 
+def sr_get_secrets(token, conn_id):
+    try:
+        req = urllib.request.Request(
+            SR_API + f"/sync/connections/{conn_id}/credentials-secret",
+            headers={"Authorization": "Bearer " + token},
+        )
+        return json.loads(urllib.request.urlopen(req, timeout=40).read())
+    except Exception as error:
+        print("No se pudieron leer credenciales guardadas; sigo en modo interactivo:", str(error)[:100])
+        return {"credentials": None, "session": None, "sessionExpiresAt": None}
+
+
+def sr_save_session(token, conn_id, session, expires_at=None):
+    payload = {"session": session}
+    if expires_at:
+        payload["expiresAt"] = expires_at
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        SR_API + f"/sync/connections/{conn_id}/session",
+        data=body,
+        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+        method="PATCH",
+    )
+    urllib.request.urlopen(req, timeout=40).read()
+
+
 # ---------------- Mondelez (Playwright) ----------------
-def mdlz_login(ctx):
+def mdlz_login(ctx, credentials):
     pg = ctx.new_page()
     pg.goto(BASE + "/", wait_until="domcontentloaded", timeout=60000)
     pg.wait_for_timeout(2500)
+    if any("VtexIdclientAutCookie" in cookie["name"] for cookie in ctx.cookies()):
+        pg.close()
+        return True
     for t in ["Aceptar Cookies", "Aceptar", "ACEPTAR"]:
         try:
             pg.click(f"text={t}", timeout=1200); break
         except Exception:
             pass
-    pg.click("text=Ingresar", timeout=10000)
-    pg.wait_for_load_state("networkidle", timeout=30000)
-    pg.wait_for_timeout(3500)
-    pg.fill("input[name=celular]", MDLZ_PHONE)
-    pg.fill("input[name=password]", MDLZ_PASSWORD)
-    pg.click("text=INICIAR SESI")
+    phone = credentials.get("phone") if isinstance(credentials, dict) else None
+    password = credentials.get("password") if isinstance(credentials, dict) else None
+    if phone and password:
+        pg.click("text=Ingresar", timeout=10000)
+        pg.wait_for_load_state("networkidle", timeout=30000)
+        pg.wait_for_timeout(3500)
+        pg.fill("input[name=celular]", str(phone))
+        pg.fill("input[name=password]", str(password))
+        pg.click("text=INICIAR SESI")
+    else:
+        input("No hay credenciales Mondelez cargadas. Logueate en el navegador y presioná Enter: ")
     pg.wait_for_timeout(8000)
     try:
         pg.wait_for_load_state("networkidle", timeout=30000)
     except Exception:
         pass
     ok = any("VtexIdclientAutCookie" in c["name"] for c in ctx.cookies())
+    if not ok:
+        input("No pude validar la sesión automáticamente. Completá el login en el navegador y presioná Enter: ")
+        ok = any("VtexIdclientAutCookie" in cookie["name"] for cookie in ctx.cookies())
     pg.close()
     return ok
+
+
+def cookie_expiry_iso(cookies):
+    expiries = [cookie.get("expires") for cookie in cookies if (cookie.get("expires") or 0) > 0]
+    return datetime.fromtimestamp(max(expiries), timezone.utc).isoformat() if expiries else None
 
 
 def spec(p, key):
@@ -240,14 +281,25 @@ def main():
     token = sr_login()
     conn_id = sr_get_connection(token)
     print("  conexión:", conn_id)
+    secrets = sr_get_secrets(token, conn_id)
+    credentials = secrets.get("credentials") if isinstance(secrets.get("credentials"), dict) else {}
 
     with sync_playwright() as p:
-        b = p.chromium.launch(headless=True)
+        b = p.chromium.launch(headless=False)
         ctx = b.new_context(user_agent=UA)
+        stored_session = secrets.get("session")
+        if isinstance(stored_session, dict) and isinstance(stored_session.get("cookies"), list):
+            try:
+                ctx.add_cookies(stored_session["cookies"])
+            except Exception:
+                pass
         print("Login Mondelez (teléfono)…")
-        if not mdlz_login(ctx):
+        if not mdlz_login(ctx, credentials):
             print("  FALLO el login de Mondelez"); b.close(); return
         print("  OK")
+        cookies = ctx.cookies()
+        sr_save_session(token, conn_id, {"cookies": cookies}, cookie_expiry_iso(cookies))
+        print("  Sesión guardada de forma cifrada en StockRápido.")
         rq = ctx.request
         print("Bajando catálogo…")
         items = mdlz_fetch_catalog(rq)

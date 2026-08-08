@@ -113,6 +113,26 @@ def sr_push(token, connection_id, items):
     )
 
 
+def sr_get_secrets(token, connection_id):
+    try:
+        return _sr_json(f"/sync/connections/{connection_id}/credentials-secret", token=token)
+    except Exception as error:
+        print(f"No se pudieron leer credenciales guardadas; sigo en modo interactivo: {str(error)[:100]}")
+        return {"credentials": None, "session": None, "sessionExpiresAt": None}
+
+
+def sr_save_session(token, connection_id, session, expires_at=None):
+    payload = {"session": session}
+    if expires_at:
+        payload["expiresAt"] = expires_at
+    _sr_json(
+        f"/sync/connections/{connection_id}/session",
+        token=token,
+        method="PATCH",
+        payload=payload,
+    )
+
+
 def _number(value):
     if isinstance(value, (int, float)):
         return value
@@ -314,8 +334,14 @@ def main():
     sr_token = sr_login()
     connection_id = sr_get_connection(sr_token)
     print(f"  conexión Juntos+: {connection_id}")
+    secrets = sr_get_secrets(sr_token, connection_id)
+    credentials = secrets.get("credentials") if isinstance(secrets.get("credentials"), dict) else {}
+    stored_session = secrets.get("session")
 
     captured = {"authorization": None, "cid": None}
+    if isinstance(stored_session, dict):
+        captured["authorization"] = stored_session.get("authorization")
+        captured["cid"] = stored_session.get("cid") or credentials.get("cliente")
 
     def capture_request(request):
         if "api.juntosplus.com" not in request.url:
@@ -334,12 +360,26 @@ def main():
         page.on("request", capture_request)
         print("Abriendo Juntos+…")
         page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=90000)
+        if credentials.get("cliente") and not captured["authorization"]:
+            for selector in ["input[name=cliente]", "input[name=customer]", "input[name=cid]", "input[type=text]"]:
+                try:
+                    page.locator(selector).first.fill(str(credentials["cliente"]), timeout=1000)
+                    break
+                except Exception:
+                    pass
         while not captured["authorization"] or not captured["cid"]:
             input("Logueate y entrá al catálogo; presioná Enter cuando estés dentro: ")
             page.wait_for_timeout(1500)
             if not captured["authorization"] or not captured["cid"]:
                 print("  Todavía no detecté la sesión. Navegá por el catálogo para generar una request de API.")
         print("  Sesión capturada (token protegido; no se muestra).")
+        sr_save_session(
+            sr_token,
+            connection_id,
+            {"authorization": captured["authorization"], "cid": captured["cid"]},
+            secrets.get("sessionExpiresAt"),
+        )
+        print("  Sesión guardada de forma cifrada en StockRápido.")
         cards = fetch_catalog(context.request, captured["authorization"], captured["cid"])
         browser.close()
 

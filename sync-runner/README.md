@@ -14,8 +14,11 @@ El runner corre **en tu PC** (Playwright). Vercel no ejecuta navegador, por eso 
 | `SR_API` | `https://stockrapido-api.vercel.app` (tu proyecto API en Vercel) |
 | `SR_EMAIL` | Usuario StockRápido |
 | `SR_PASSWORD` | Contraseña StockRápido |
-| `MDLZ_PHONE` | Teléfono Mi Tienda Mondelez |
-| `MDLZ_PASSWORD` | Contraseña Mondelez |
+
+Las credenciales de cada proveedor se cargan en **Configuración → Proveedores**:
+Mondelez usa teléfono y contraseña, Tokin usuario y contraseña, y Juntos+ solo
+el número de cliente. Los runners las obtienen cifradas a través de tu sesión de
+StockRápido y guardan automáticamente las cookies o tokens capturados.
 
 ## Uso
 
