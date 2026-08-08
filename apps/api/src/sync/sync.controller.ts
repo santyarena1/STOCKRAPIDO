@@ -194,7 +194,7 @@ export class SyncController {
   import(
     @CurrentUser() u: User,
     @Param('id') id: string,
-    @Body() body: { onlyWithCost?: boolean; onlyAvailable?: boolean },
+    @Body() body: { onlyWithCost?: boolean; onlyAvailable?: boolean; ids?: string[] },
   ) {
     return this.sync.importToProducts(id, u.businessId, body || {});
   }

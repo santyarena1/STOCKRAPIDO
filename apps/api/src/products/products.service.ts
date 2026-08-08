@@ -25,7 +25,19 @@ export type ProductCatalogQuery = {
 
 export type ProductBulkInput = {
   ids: string[];
-  action: 'setPrice' | 'applyMarkup' | 'setCategory' | 'setStockControl' | 'setActive' | 'delete';
+  action:
+    | 'setPrice'
+    | 'applyMarkup'
+    | 'adjustPrice'
+    | 'setCategory'
+    | 'setBrand'
+    | 'setIva'
+    | 'setStock'
+    | 'adjustStock'
+    | 'setStockControl'
+    | 'setActive'
+    | 'stopSync'
+    | 'delete';
   value?: unknown;
 };
 
@@ -210,9 +222,15 @@ export class ProductsService {
     const actions: ProductBulkInput['action'][] = [
       'setPrice',
       'applyMarkup',
+      'adjustPrice',
       'setCategory',
+      'setBrand',
+      'setIva',
+      'setStock',
+      'adjustStock',
       'setStockControl',
       'setActive',
+      'stopSync',
       'delete',
     ];
     if (!actions.includes(input.action)) throw new BadRequestException('Acción masiva inválida.');
@@ -220,7 +238,7 @@ export class ProductsService {
     const ids = [...new Set(input.ids.filter((id): id is string => typeof id === 'string' && id.length > 0))];
     const products = await this.prisma.product.findMany({
       where: { businessId, id: { in: ids } },
-      select: { id: true, cost: true },
+      select: { id: true, cost: true, price: true, stock: true },
     });
     const allowedIds = products.map((product) => product.id);
     const foundIds = new Set(allowedIds);
@@ -244,6 +262,32 @@ export class ProductsService {
         updated++;
       }
       return { updated, skipped };
+    }
+
+    if (input.action === 'adjustPrice') {
+      const percentage = this.numericBulkValue(input.value, 'El porcentaje de ajuste');
+      if (percentage < -100) throw new BadRequestException('El ajuste no puede dejar el precio debajo de cero.');
+      await this.prisma.$transaction(
+        products.map((product) => {
+          const price = Math.round(Number(product.price) * (1 + percentage / 100) * 100) / 100;
+          return this.prisma.product.updateMany({
+            where: { id: product.id, businessId },
+            data: { price: new Decimal(price) },
+          });
+        }),
+      );
+      return { updated: products.length, skipped };
+    }
+
+    if (input.action === 'adjustStock') {
+      const delta = this.integerBulkValue(input.value, 'El ajuste de stock');
+      await this.prisma.$transaction(
+        products.map((product) => this.prisma.product.updateMany({
+          where: { id: product.id, businessId },
+          data: { stock: Math.max(0, product.stock + delta) },
+        })),
+      );
+      return { updated: products.length, skipped };
     }
 
     if (input.action === 'delete') {
@@ -274,6 +318,19 @@ export class ProductsService {
       });
       if (!category) throw new BadRequestException('La categoría no pertenece al negocio.');
       data = { categoryId: category.id };
+    } else if (input.action === 'setBrand') {
+      if (typeof input.value !== 'string' || !input.value.trim()) throw new BadRequestException('La marca es inválida.');
+      data = { brand: input.value.trim() };
+    } else if (input.action === 'setIva') {
+      const iva = this.numericBulkValue(input.value, 'El IVA');
+      if (iva < 0 || iva > 100) throw new BadRequestException('El IVA debe estar entre 0 y 100.');
+      data = { iva: new Decimal(iva) };
+    } else if (input.action === 'setStock') {
+      const stock = this.integerBulkValue(input.value, 'El stock');
+      if (stock < 0) throw new BadRequestException('El stock no puede ser negativo.');
+      data = { stock };
+    } else if (input.action === 'stopSync') {
+      data = { sourceConnectionId: null, sourceProvider: null };
     } else {
       if (typeof input.value !== 'boolean') throw new BadRequestException('El valor debe ser booleano.');
       data = input.action === 'setStockControl' ? { stockControl: input.value } : { isActive: input.value };
@@ -283,6 +340,28 @@ export class ProductsService {
       data,
     });
     return { updated: result.count, skipped };
+  }
+
+  async exportSelectedCsv(businessId: string, ids: string[]) {
+    if (!Array.isArray(ids) || ids.length === 0) throw new BadRequestException('Indicá al menos un producto.');
+    const uniqueIds = [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    const products = await this.prisma.product.findMany({
+      where: { businessId, id: { in: uniqueIds } },
+      include: { category: true },
+      orderBy: { name: 'asc' },
+    });
+    const cell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = products.map((product) => [
+      product.name,
+      product.category?.name ?? '',
+      product.brand ?? '',
+      product.barcode ?? '',
+      Number(product.price).toFixed(2),
+      product.cost == null ? '' : Number(product.cost).toFixed(2),
+      product.stock,
+      product.iva == null ? '' : Number(product.iva).toFixed(2),
+    ].map(cell).join(';'));
+    return `\uFEFF${['nombre', 'categoria', 'marca', 'EAN', 'precio', 'costo', 'stock', 'IVA'].map(cell).join(';')}\n${rows.join('\n')}`;
   }
 
   async duplicates(businessId: string) {
@@ -342,6 +421,12 @@ export class ProductsService {
       throw new BadRequestException(`${label} debe ser un número válido.`);
     }
     return value;
+  }
+
+  private integerBulkValue(value: unknown, label: string): number {
+    const number = this.numericBulkValue(value, label);
+    if (!Number.isInteger(number)) throw new BadRequestException(`${label} debe ser un número entero.`);
+    return number;
   }
 
   private catalogWhere(businessId: string, query: ProductCatalogQuery): Record<string, unknown> {

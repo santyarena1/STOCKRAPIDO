@@ -709,9 +709,15 @@ export class SyncService {
   async importToProducts(
     id: string,
     businessId: string,
-    opts: { onlyWithCost?: boolean; onlyAvailable?: boolean } = {},
+    opts: { onlyWithCost?: boolean; onlyAvailable?: boolean; ids?: string[] } = {},
   ) {
     const conn = await this.getConnection(id, businessId);
+    let selectedIds: string[] | undefined;
+    if (opts.ids !== undefined) {
+      if (!Array.isArray(opts.ids)) throw new BadRequestException('La selección de productos es inválida.');
+      selectedIds = [...new Set(opts.ids.filter((productId): productId is string => typeof productId === 'string' && productId.length > 0))];
+      if (selectedIds.length === 0) throw new BadRequestException('Seleccioná al menos un producto para importar.');
+    }
     const markup = Number(conn.priceMarkup) || 0;
     const minStock = conn.defaultMinStock || 0;
     const map = this.getMapping(conn);
@@ -719,6 +725,7 @@ export class SyncService {
     const synced = await this.prisma.syncedProduct.findMany({
       where: {
         connectionId: id,
+        id: selectedIds ? { in: selectedIds } : undefined,
         cost: opts.onlyWithCost ? { not: null } : undefined,
         available: opts.onlyAvailable ? true : undefined,
       },

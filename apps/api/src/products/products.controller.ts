@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -107,6 +107,13 @@ export class ProductsController {
   @Post('bulk')
   bulk(@CurrentUser() user: User, @Body() body: ProductBulkInput) {
     return this.products.bulk(user.businessId, body);
+  }
+
+  @Post('export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="productos-seleccionados.csv"')
+  exportSelected(@CurrentUser() user: User, @Body() body: { ids: string[] }) {
+    return this.products.exportSelectedCsv(user.businessId, body?.ids);
   }
 
   @Post('quick')

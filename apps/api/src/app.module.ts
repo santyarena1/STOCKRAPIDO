@@ -19,6 +19,7 @@ import { SyncModule } from './sync/sync.module';
 import { StickersModule } from './stickers/stickers.module';
 import { FiscalModule } from './fiscal/fiscal.module';
 import { VendedoresModule } from './vendedores/vendedores.module';
+import { DataAdminModule } from './data-admin/data-admin.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { VendedoresModule } from './vendedores/vendedores.module';
     StickersModule,
     FiscalModule,
     VendedoresModule,
+    DataAdminModule,
   ],
 })
 export class AppModule {}
