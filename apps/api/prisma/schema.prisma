@@ -467,6 +467,8 @@ model SyncConnection {
   defaultMinStock Int       @default(0)
   autoSync        Boolean   @default(false)
   credentialsEncrypted String?
+  sessionEncrypted String?
+  sessionExpiresAt DateTime?
   syncFrequency   String    @default("manual")
   syncHourLocal   Int?
   columnsConfig   Json?

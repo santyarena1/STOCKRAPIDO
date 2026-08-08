@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MondelezProvider, NormalizedItem } from './mondelez.provider';
 import { bulkCostToUnit, decorateSyncedProductUnits } from '../common/units';
-import { encryptSecret } from '../fiscal/fiscal-crypto';
+import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -32,8 +32,12 @@ export class SyncService {
 
   // ---------- Conexiones ----------
   private sanitizeConnection<T extends Record<string, any>>(connection: T) {
-    const { credentialsEncrypted, ...safe } = connection;
-    return { ...safe, hasCredentials: !!credentialsEncrypted };
+    const { credentialsEncrypted, sessionEncrypted, ...safe } = connection;
+    return {
+      ...safe,
+      hasCredentials: !!credentialsEncrypted,
+      hasSession: !!sessionEncrypted,
+    };
   }
 
   async listConnections(businessId: string) {
@@ -104,6 +108,62 @@ export class SyncService {
       data: { credentialsEncrypted: encryptSecret(JSON.stringify(normalized)) },
     });
     return this.sanitizeConnection(connection);
+  }
+
+  async updateSession(
+    id: string,
+    businessId: string,
+    session: string | Record<string, unknown> | undefined,
+    expiresAt?: string,
+  ) {
+    await this.getConnection(id, businessId);
+    if (
+      (typeof session !== 'string' || !session.trim()) &&
+      (!session || typeof session !== 'object' || Array.isArray(session))
+    ) {
+      throw new BadRequestException('Sesión inválida.');
+    }
+    const parsedExpiry = expiresAt ? new Date(expiresAt) : null;
+    if (parsedExpiry && Number.isNaN(parsedExpiry.getTime())) {
+      throw new BadRequestException('Fecha de vencimiento inválida.');
+    }
+    const serialized = typeof session === 'string' ? session : JSON.stringify(session);
+    const connection = await this.prisma.syncConnection.update({
+      where: { id },
+      data: {
+        sessionEncrypted: encryptSecret(serialized),
+        sessionExpiresAt: parsedExpiry,
+      },
+    });
+    return { hasSession: true, sessionExpiresAt: connection.sessionExpiresAt };
+  }
+
+  async deleteSession(id: string, businessId: string) {
+    await this.getConnection(id, businessId);
+    await this.prisma.syncConnection.update({
+      where: { id },
+      data: { sessionEncrypted: null, sessionExpiresAt: null },
+    });
+    return { hasSession: false, sessionExpiresAt: null };
+  }
+
+  /** Endpoint sensible para runners autenticados con el JWT del negocio dueño. */
+  async getCredentialsSecret(id: string, businessId: string) {
+    const connection = await this.prisma.syncConnection.findFirst({ where: { id, businessId } });
+    if (!connection) throw new NotFoundException('Conexión no encontrada');
+    const credentials = connection.credentialsEncrypted
+      ? JSON.parse(decryptSecret(connection.credentialsEncrypted))
+      : null;
+    let session: string | Record<string, unknown> | null = null;
+    if (connection.sessionEncrypted) {
+      const decrypted = decryptSecret(connection.sessionEncrypted);
+      try {
+        session = JSON.parse(decrypted);
+      } catch {
+        session = decrypted;
+      }
+    }
+    return { credentials, session, sessionExpiresAt: connection.sessionExpiresAt };
   }
 
   private validateSchedule(data: ConnInput) {

@@ -16,6 +16,8 @@ type Connection = {
   lastSyncAt?: string | null;
   lastStatus?: string | null;
   hasCredentials: boolean;
+  hasSession: boolean;
+  sessionExpiresAt?: string | null;
   syncFrequency: SyncFrequency;
   syncHourLocal?: number | null;
   columnsConfig?: unknown;
@@ -51,6 +53,22 @@ const PROVIDERS: Record<string, { label: string; description: string }> = {
   juntosplus: { label: 'Juntos+', description: 'Catálogo Coca-Cola FEMSA vía runner local.' },
   tokin: { label: 'Tokin (Arcor)', description: 'Catálogo Tokin con variantes UN/DI/BU vía runner local.' },
 };
+type CredentialField = { key: string; label: string; type?: 'text' | 'password'; placeholder?: string };
+const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
+  mondelez: [
+    { key: 'phone', label: 'Teléfono Mi Tienda Mondelez' },
+    { key: 'password', label: 'Contraseña', type: 'password' },
+  ],
+  juntosplus: [{ key: 'cliente', label: 'Número de cliente' }],
+  tokin: [
+    { key: 'user', label: 'Usuario/Email Tokin' },
+    { key: 'password', label: 'Contraseña', type: 'password' },
+  ],
+};
+const GENERIC_CREDENTIAL_FIELDS: CredentialField[] = [
+  { key: 'username', label: 'Usuario' },
+  { key: 'password', label: 'Contraseña', type: 'password' },
+];
 
 export default function ProveedoresConfigPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -60,7 +78,10 @@ export default function ProveedoresConfigPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
-  const [credentials, setCredentials] = useState({ username: '', password: '', extraKey: '', extraValue: '' });
+  const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [sessionValue, setSessionValue] = useState('');
+  const [sessionExpiresAt, setSessionExpiresAt] = useState('');
   const [frequency, setFrequency] = useState<SyncFrequency>('manual');
   const [syncHourLocal, setSyncHourLocal] = useState('');
   const [markup, setMarkup] = useState('0');
@@ -98,7 +119,10 @@ export default function ProveedoresConfigPage() {
       setFrequency(detail.syncFrequency ?? 'manual');
       setSyncHourLocal(detail.syncHourLocal == null ? '' : String(detail.syncHourLocal));
       setMarkup(String(detail.priceMarkup ?? 0));
-      setCredentials({ username: '', password: '', extraKey: '', extraValue: '' });
+      setCredentials({});
+      setShowSessionForm(false);
+      setSessionValue('');
+      setSessionExpiresAt('');
     } catch (error) {
       setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al cargar la conexión' });
     }
@@ -112,9 +136,10 @@ export default function ProveedoresConfigPage() {
   const saveCredentials = async (event: React.FormEvent) => {
     event.preventDefault(); if (!connection) return;
     const values: Record<string, string> = {};
-    if (credentials.username.trim()) values.username = credentials.username.trim();
-    if (credentials.password) values.password = credentials.password;
-    if (credentials.extraKey.trim() && credentials.extraValue) values[credentials.extraKey.trim()] = credentials.extraValue;
+    for (const field of CREDENTIAL_FIELDS[connection.provider] ?? GENERIC_CREDENTIAL_FIELDS) {
+      const value = credentials[field.key];
+      if (value?.trim()) values[field.key] = value.trim();
+    }
     if (Object.keys(values).length === 0) { setMessage({ type: 'err', text: 'Ingresá al menos una credencial.' }); return; }
     setBusy('credentials'); setMessage(null);
     try {
@@ -122,6 +147,31 @@ export default function ProveedoresConfigPage() {
       setMessage({ type: 'ok', text: 'Credenciales guardadas de forma cifrada.' });
       await refresh();
     } catch (error) { setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al guardar credenciales' }); }
+    finally { setBusy(null); }
+  };
+
+  const saveSession = async () => {
+    if (!connection || !sessionValue.trim()) return;
+    setBusy('session'); setMessage(null);
+    try {
+      await api(`/sync/connections/${connection.id}/session`, {
+        method: 'PATCH',
+        body: JSON.stringify({ session: sessionValue.trim(), expiresAt: sessionExpiresAt || undefined }),
+      });
+      setMessage({ type: 'ok', text: 'Sesión guardada de forma cifrada.' });
+      setSessionValue(''); setSessionExpiresAt(''); setShowSessionForm(false);
+      await refresh();
+    } catch (error) { setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al guardar la sesión' }); }
+    finally { setBusy(null); }
+  };
+
+  const deleteSession = async () => {
+    if (!connection || !confirm('¿Borrar la sesión guardada de este proveedor?')) return;
+    setBusy('delete-session'); setMessage(null);
+    try {
+      await api(`/sync/connections/${connection.id}/session`, { method: 'DELETE' });
+      setMessage({ type: 'ok', text: 'Sesión eliminada.' }); await refresh();
+    } catch (error) { setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al borrar la sesión' }); }
     finally { setBusy(null); }
   };
 
@@ -179,6 +229,7 @@ export default function ProveedoresConfigPage() {
   };
 
   if (loading) return <Loader full label="Proveedores" />;
+  const credentialFields = connection ? CREDENTIAL_FIELDS[connection.provider] ?? GENERIC_CREDENTIAL_FIELDS : GENERIC_CREDENTIAL_FIELDS;
 
   return <div className="space-y-6">
     <PageHeader title="Proveedores y sincronización" subtitle="Configurá credenciales, mapeo de columnas y frecuencia de cada proveedor." />
@@ -187,16 +238,20 @@ export default function ProveedoresConfigPage() {
     {connection && PROVIDERS[connection.provider] && <p className="text-sm text-fg-muted">{PROVIDERS[connection.provider].description}</p>}
     {connections.length === 0 && <div className="rounded-xl border border-hair-soft bg-surface p-5 text-fg-muted">No hay conexiones configuradas.</div>}
     {connection && <>
-      <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">
-        <div><h2 className="font-semibold text-fg">Credenciales</h2><p className="text-sm text-fg-muted">Se guardan cifradas y son utilizadas por el runner. Los valores existentes nunca se muestran.</p><p className={`mt-2 text-sm ${connection.hasCredentials ? 'text-ok' : 'text-warn'}`}>{connection.hasCredentials ? 'Credenciales cargadas ✓' : 'Sin credenciales'}</p></div>
-        <form onSubmit={saveCredentials} className="grid gap-3 sm:grid-cols-2">
-          <div><label className="mb-1 block text-xs text-fg-faint">Usuario</label><input value={credentials.username} onChange={(event) => setCredentials((current) => ({ ...current, username: event.target.value }))} autoComplete="username" className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" /></div>
-          <div><label className="mb-1 block text-xs text-fg-faint">Contraseña</label><input type="password" value={credentials.password} onChange={(event) => setCredentials((current) => ({ ...current, password: event.target.value }))} autoComplete="new-password" className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" /></div>
-          <div><label className="mb-1 block text-xs text-fg-faint">Clave extra (opcional)</label><input value={credentials.extraKey} onChange={(event) => setCredentials((current) => ({ ...current, extraKey: event.target.value }))} placeholder="token, accountId…" className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" /></div>
-          <div><label className="mb-1 block text-xs text-fg-faint">Valor extra</label><input type="password" value={credentials.extraValue} onChange={(event) => setCredentials((current) => ({ ...current, extraValue: event.target.value }))} className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" /></div>
-          <button type="submit" disabled={busy === 'credentials'} className="btn-brand rounded-lg px-4 py-2 sm:col-span-2 sm:justify-self-start disabled:opacity-50">{busy === 'credentials' ? 'Guardando…' : connection.hasCredentials ? 'Reemplazar credenciales' : 'Guardar credenciales'}</button>
-        </form>
-      </section>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">
+          <div><h2 className="font-semibold text-fg">Credenciales de {PROVIDERS[connection.provider]?.label ?? connection.name}</h2><p className="text-sm text-fg-muted">Se guardan cifradas. Los valores existentes nunca se muestran en pantalla.</p><p className={`mt-2 text-sm ${connection.hasCredentials ? 'text-ok' : 'text-warn'}`}>{connection.hasCredentials ? 'Credenciales cargadas ✓' : 'Sin credenciales'}</p>{connection.provider === 'juntosplus' && <p className="mt-2 text-xs text-fg-faint">El token obtenido mediante OTP se guarda por separado como sesión.</p>}</div>
+          <form onSubmit={saveCredentials} className="grid gap-3 sm:grid-cols-2">
+            {credentialFields.map((field) => <div key={field.key}><label className="mb-1 block text-xs text-fg-faint">{field.label}</label><input type={field.type ?? 'text'} value={credentials[field.key] ?? ''} onChange={(event) => setCredentials((current) => ({ ...current, [field.key]: event.target.value }))} placeholder={field.placeholder} autoComplete={field.type === 'password' ? 'new-password' : 'off'} className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" /></div>)}
+            <button type="submit" disabled={busy === 'credentials'} className="btn-brand rounded-lg px-4 py-2 sm:col-span-2 sm:justify-self-start disabled:opacity-50">{busy === 'credentials' ? 'Guardando…' : connection.hasCredentials ? 'Reemplazar credenciales' : 'Guardar credenciales'}</button>
+          </form>
+        </section>
+
+        <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">
+          <div><h2 className="font-semibold text-fg">Sesión / Token</h2><p className="text-sm text-fg-muted">El runner guarda la sesión automáticamente al loguearse. Esto permite traer catálogo y cuenta sin volver a iniciar sesión mientras siga vigente.</p><p className={`mt-2 text-sm ${connection.hasSession ? 'text-ok' : 'text-warn'}`}>{connection.hasSession ? `Sesión guardada${connection.sessionExpiresAt ? ` · vence ${new Date(connection.sessionExpiresAt).toLocaleString('es-AR')}` : ''}` : 'Sin sesión'}</p></div>
+          {!showSessionForm ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setShowSessionForm(true)} className="btn-brand rounded-lg px-4 py-2 text-sm">Pegar token/sesión</button>{connection.hasSession && <button type="button" onClick={deleteSession} disabled={busy === 'delete-session'} className="rounded-lg border border-crit/40 px-4 py-2 text-sm text-crit hover:bg-[var(--crit-soft)] disabled:opacity-50">{busy === 'delete-session' ? 'Borrando…' : 'Borrar sesión'}</button>}</div> : <div className="space-y-3"><div><label className="mb-1 block text-xs text-fg-faint">Token, Bearer, cookies o sesión</label><textarea rows={5} value={sessionValue} onChange={(event) => setSessionValue(event.target.value)} placeholder="Pegá acá el token o la sesión…" className="w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm text-fg" /></div><div><label className="mb-1 block text-xs text-fg-faint">Vencimiento (opcional)</label><input type="datetime-local" value={sessionExpiresAt} onChange={(event) => setSessionExpiresAt(event.target.value)} className="w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm text-fg sm:w-auto" /></div><div className="flex flex-wrap gap-2"><button type="button" onClick={saveSession} disabled={!sessionValue.trim() || busy === 'session'} className="btn-brand rounded-lg px-4 py-2 text-sm disabled:opacity-50">{busy === 'session' ? 'Guardando…' : 'Guardar sesión'}</button><button type="button" onClick={() => { setShowSessionForm(false); setSessionValue(''); setSessionExpiresAt(''); }} className="rounded-lg border border-hair px-4 py-2 text-sm text-fg-muted hover:bg-raised">Cancelar</button></div></div>}
+        </section>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">

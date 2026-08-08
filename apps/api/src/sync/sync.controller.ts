@@ -57,6 +57,29 @@ export class SyncController {
     return this.sync.updateCredentials(id, u.businessId, body?.credentials);
   }
 
+  /** Sensible: entrega secretos solo al dueño autenticado para uso del runner. */
+  @Get('connections/:id/credentials-secret')
+  @UseGuards(JwtAuthGuard)
+  credentialsSecret(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.getCredentialsSecret(id, u.businessId);
+  }
+
+  @Patch('connections/:id/session')
+  @UseGuards(JwtAuthGuard)
+  updateSession(
+    @CurrentUser() u: User,
+    @Param('id') id: string,
+    @Body() body: { session: string | Record<string, unknown>; expiresAt?: string },
+  ) {
+    return this.sync.updateSession(id, u.businessId, body?.session, body?.expiresAt);
+  }
+
+  @Delete('connections/:id/session')
+  @UseGuards(JwtAuthGuard)
+  deleteSession(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.deleteSession(id, u.businessId);
+  }
+
   @Delete('connections/:id')
   @UseGuards(JwtAuthGuard)
   remove(@CurrentUser() u: User, @Param('id') id: string) {
