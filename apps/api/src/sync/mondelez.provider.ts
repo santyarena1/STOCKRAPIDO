@@ -14,7 +14,7 @@ export interface NormalizedItem {
   subcategory?: string;
   cost?: number; // precio real B2B (solo lo trae el runner autenticado)
   listPrice?: number;
-  ivaAlicuota?: number;
+  ivaAlicuota?: number | null;
   unitsPerDisplay?: string;
   displaysPerBox?: string;
   retornable?: boolean;
@@ -107,26 +107,63 @@ export class MondelezProvider {
     const img = (item.images || [])[0] || {};
     const cat: string = (p.categories || [''])[0] || '';
     const parts = cat.split('/').filter(Boolean);
+    const referenceId = item.referenceId || item.referenceIds || {};
+    const refId =
+      referenceId.RefId ||
+      referenceId.refId ||
+      (Array.isArray(referenceId)
+        ? referenceId.find((reference: any) => reference?.Key === 'RefId')?.Value
+        : undefined) ||
+      item.RefId;
+    const listPrice =
+      typeof offer.ListPrice === 'number' ? offer.ListPrice : undefined;
+    const sellingPrice =
+      typeof offer.Price === 'number' ? offer.Price : undefined;
+    const availableQuantity =
+      typeof offer.AvailableQuantity === 'number'
+        ? offer.AvailableQuantity
+        : undefined;
+    const unitsPerDisplay = this.spec(p, 'Unidades por Display');
     return {
       externalId: String(p.productId),
       sku: item.itemId ? String(item.itemId) : undefined,
       ean: item.ean || undefined,
+      supplierRef:
+        p.productReference != null
+          ? String(p.productReference)
+          : refId != null
+            ? String(refId)
+            : undefined,
+      eanUnit: item.ean || undefined,
       name: p.productName,
       brand: p.brand || undefined,
       category: parts[0],
       subcategory: this.spec(p, 'Subcategoría') || parts[1],
       available: !!offer.IsAvailable,
-      stock:
-        typeof offer.AvailableQuantity === 'number'
-          ? offer.AvailableQuantity
-          : undefined,
-      unitsPerBox: this.spec(p, 'Unidades por Display'),
+      stock: availableQuantity,
+      unitsPerBox: unitsPerDisplay,
+      unitsPerDisplay,
+      ivaAlicuota: null,
+      basePrice: listPrice,
       weight: this.spec(p, 'Peso'),
       format: this.spec(p, 'Formato'),
       flavor: this.spec(p, 'Sabor'),
       presentation: this.spec(p, 'Presentación'),
       imageUrl: img.imageUrl || undefined,
       link: p.link || undefined,
+      variants: [
+        {
+          uom: 'UN',
+          multiplier: 1,
+          skuId: item.itemId ? String(item.itemId) : undefined,
+          refId: refId ? String(refId) : undefined,
+          ean: item.ean || undefined,
+          listPrice,
+          sellingPrice,
+          cost: undefined,
+          stock: availableQuantity,
+        },
+      ],
       raw: p,
     };
   }
