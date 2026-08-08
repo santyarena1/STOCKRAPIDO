@@ -92,6 +92,36 @@ export class SyncController {
     return this.sync.getSupplierAccount(id, u.businessId);
   }
 
+  @Post('connections/:id/orders')
+  @UseGuards(JwtAuthGuard)
+  replaceOrders(@CurrentUser() u: User, @Param('id') id: string, @Body() body: { orders: any[] }) {
+    return this.sync.replaceSupplierOrders(id, u.businessId, body?.orders);
+  }
+
+  @Get('connections/:id/orders')
+  @UseGuards(JwtAuthGuard)
+  orders(@CurrentUser() u: User, @Param('id') id: string, @Query('source') source?: string) {
+    return this.sync.listSupplierOrders(id, u.businessId, source || 'all');
+  }
+
+  @Post('connections/:id/orders/draft')
+  @UseGuards(JwtAuthGuard)
+  createOrderDraft(@CurrentUser() u: User, @Param('id') id: string, @Body() body: any) {
+    return this.sync.createSupplierOrderDraft(id, u.businessId, body || {});
+  }
+
+  @Delete('connections/:id/orders/:orderId')
+  @UseGuards(JwtAuthGuard)
+  deleteOrderDraft(@CurrentUser() u: User, @Param('id') id: string, @Param('orderId') orderId: string) {
+    return this.sync.deleteSupplierOrderDraft(id, u.businessId, orderId);
+  }
+
+  @Post('connections/:id/loyalty')
+  @UseGuards(JwtAuthGuard)
+  loyalty(@CurrentUser() u: User, @Param('id') id: string, @Body() body: { loyaltyPoints: number }) {
+    return this.sync.updateSupplierLoyalty(id, u.businessId, body?.loyaltyPoints);
+  }
+
   @Delete('connections/:id')
   @UseGuards(JwtAuthGuard)
   remove(@CurrentUser() u: User, @Param('id') id: string) {

@@ -116,6 +116,10 @@ def sr_push_account(token, connection_id, payload):
     )
 
 
+def sr_push_orders(token, connection_id, orders):
+    return _sr_json(f"/sync/connections/{connection_id}/orders", token=token, method="POST", payload={"orders": orders}, timeout=120)
+
+
 def sr_get_secrets(token, connection_id):
     try:
         return _sr_json(f"/sync/connections/{connection_id}/credentials-secret", token=token)
@@ -289,6 +293,30 @@ def normalize_account_payload(summary_payloads, microcredit_payloads, check_payl
     return {"account": account, "invoices": invoices, "credits": credits}
 
 
+def normalize_order_payloads(payloads):
+    orders, seen = [], set()
+    for payload in payloads:
+        for node in dict_nodes(payload):
+            order_id = pick(node, "externalOrderId", "orderId", "id", "numeroPedido", "orderNumber")
+            status = pick(node, "status", "estado", "orderStatus")
+            total = number(pick(node, "total", "amount", "importeTotal", "monto"))
+            placed_at = pick(node, "placedAt", "createdAt", "date", "fecha", "orderDate")
+            if order_id is None or (status is None and total is None and placed_at is None): continue
+            key = str(order_id)
+            if key in seen: continue
+            seen.add(key)
+            raw_items = pick(node, "items", "products", "orderItems") or []
+            items = []
+            if isinstance(raw_items, list):
+                for item in raw_items:
+                    if not isinstance(item, dict): continue
+                    qty = integer(pick(item, "qty", "quantity", "cantidad")) or 1
+                    price = number(pick(item, "unitPrice", "price", "precio"))
+                    items.append({"name": pick(item, "name", "productName", "nombre"), "uom": pick(item, "uom", "unit"), "qty": qty, "unitPrice": price, "total": number(pick(item, "total", "subtotal")) or (price * qty if price is not None else None)})
+            orders.append({"externalOrderId": key, "status": status, "total": total, "deliveryDate": pick(node, "deliveryDate", "fechaEntrega"), "tracking": pick(node, "tracking", "trackingNumber", "seguimiento"), "placedAt": placed_at, "raw": node, "items": items})
+    return orders
+
+
 def first_ref(product):
     skus = product.get("skus") or []
     if isinstance(skus, dict):
@@ -390,6 +418,7 @@ def main():
     credentials = secrets.get("credentials") if isinstance(secrets.get("credentials"), dict) else {}
     products = {}
     account_responses = {"summary": [], "microcredits": [], "checks": []}
+    order_responses = []
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
@@ -416,6 +445,8 @@ def main():
                     account_responses["microcredits"].append(response.json())
                 elif "getTokinChecks" in response.url:
                     account_responses["checks"].append(response.json())
+                elif any(word in response.url.lower() for word in ["orderhistory", "getorders", "/orders", "/order/"]):
+                    order_responses.append(response.json())
             except Exception:
                 pass
 
@@ -468,6 +499,15 @@ def main():
             page.wait_for_timeout(1500)
         except Exception as error:
             print(f"  No se pudo abrir la cuenta corriente: {str(error)[:100]}")
+        print("Cosechando historial de pedidos Tokin…")
+        try:
+            order_links = page.locator("a[href]").evaluate_all("els => els.map(a => a.href).filter(h => /orders|pedidos|historial/i.test(h))")
+            for target in (order_links or ["https://tokintienda.com.ar/store/orders"])[:10]:
+                page.goto(target, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(3500)
+                sweep_page(page)
+        except Exception as error:
+            print(f"  No se pudo abrir el historial de pedidos: {str(error)[:100]}")
         browser.close()
 
     items = [normalize(product) for product in products.values()]
@@ -497,6 +537,13 @@ def main():
             print(f"No se pudo guardar la cuenta corriente; el catálogo quedó sincronizado: {str(error)[:120]}")
     else:
         print("Sin datos de cuenta corriente; el catálogo quedó sincronizado igualmente.")
+    if order_responses:
+        try:
+            orders = normalize_order_payloads(order_responses)
+            sr_push_orders(sr_token, connection_id, orders)
+            print(f"Historial sincronizado: {len(orders)} pedidos Tokin.")
+        except Exception as error:
+            print(f"No se pudo guardar el historial de pedidos: {str(error)[:120]}")
 
 
 if __name__ == "__main__":

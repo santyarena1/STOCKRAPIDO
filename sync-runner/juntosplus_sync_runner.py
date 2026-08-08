@@ -113,6 +113,14 @@ def sr_push(token, connection_id, items):
     )
 
 
+def sr_push_orders(token, connection_id, orders):
+    return _sr_json(f"/sync/connections/{connection_id}/orders", token=token, method="POST", payload={"orders": orders}, timeout=120)
+
+
+def sr_push_loyalty(token, connection_id, points):
+    return _sr_json(f"/sync/connections/{connection_id}/loyalty", token=token, method="POST", payload={"loyaltyPoints": points})
+
+
 def sr_get_secrets(token, connection_id):
     try:
         return _sr_json(f"/sync/connections/{connection_id}/credentials-secret", token=token)
@@ -199,6 +207,72 @@ def category_names(payload):
 
     walk(payload)
     return sorted(names)
+
+
+def _dict_nodes(payload):
+    nodes = []
+    def walk(node):
+        if isinstance(node, dict):
+            nodes.append(node)
+            for value in node.values(): walk(value)
+        elif isinstance(node, list):
+            for value in node: walk(value)
+    walk(payload)
+    return nodes
+
+
+def _pick(node, *keys):
+    lowered = {str(key).lower(): value for key, value in node.items()}
+    for key in keys:
+        if lowered.get(key.lower()) not in (None, ""):
+            return lowered[key.lower()]
+    return None
+
+
+def normalize_orders(payload, tracking_by_id):
+    orders, seen = [], set()
+    for node in _dict_nodes(payload):
+        order_id = _pick(node, "externalOrderId", "orderId", "id", "order_number", "orderNumber")
+        status = _pick(node, "status", "orderStatus", "estado")
+        total = _number(_pick(node, "total", "totalAmount", "amount", "importe"))
+        placed = _pick(node, "placedAt", "createdAt", "date", "orderDate", "fecha")
+        if order_id is None or (status is None and total is None and placed is None):
+            continue
+        key = str(order_id)
+        if key in seen: continue
+        seen.add(key)
+        raw_items = _pick(node, "items", "products", "orderItems") or []
+        items = []
+        if isinstance(raw_items, list):
+            for item in raw_items:
+                if not isinstance(item, dict): continue
+                qty = _integer(_pick(item, "qty", "quantity", "cantidad")) or 1
+                unit_price = _number(_pick(item, "unitPrice", "price", "precio"))
+                items.append({"name": _pick(item, "name", "productName", "nombre"), "uom": _pick(item, "uom", "unit"), "qty": qty, "unitPrice": unit_price, "total": _number(_pick(item, "total", "subtotal")) or (unit_price * qty if unit_price is not None else None)})
+        tracking = tracking_by_id.get(key, {})
+        orders.append({"externalOrderId": key, "status": status, "total": total, "deliveryDate": _pick(node, "deliveryDate", "estimatedDeliveryDate", "fechaEntrega"), "tracking": _pick(tracking, "tracking", "trackingNumber", "status", "estado") or _pick(node, "tracking", "trackingNumber"), "placedAt": placed, "raw": node, "items": items})
+    return orders
+
+
+def harvest_orders(request_context, auth, cid):
+    history = api_get(request_context, "/v1/orders/getOrderHistory", auth, cid, offset=0, limit=9999)
+    tracking = {}
+    for node in _dict_nodes(history):
+        order_id = _pick(node, "externalOrderId", "orderId", "id", "order_number", "orderNumber")
+        if order_id is None: continue
+        try:
+            tracking[str(order_id)] = api_get(request_context, "/v1/orders/getOrderTracking", auth, cid, orderId=order_id)
+        except Exception:
+            pass
+    return normalize_orders(history, tracking)
+
+
+def find_loyalty_points(payloads):
+    for payload in payloads:
+        for node in _dict_nodes(payload):
+            points = _integer(_pick(node, "loyaltyPoints", "points", "premiaPoints", "puntos", "saldoPuntos"))
+            if points is not None and points >= 0: return points
+    return None
 
 
 def api_get(request_context, path, auth, cid, **params):
@@ -340,6 +414,7 @@ def main():
     stored_session = secrets.get("session")
 
     captured = {"authorization": None, "cid": None}
+    loyalty_payloads = []
     if isinstance(stored_session, dict):
         captured["authorization"] = stored_session.get("authorization")
         captured["cid"] = stored_session.get("cid") or credentials.get("cliente")
@@ -354,11 +429,17 @@ def main():
         if cid_values and cid_values[0]:
             captured["cid"] = cid_values[0]
 
+    def capture_response(response):
+        if not response.ok or not any(word in response.url.lower() for word in ["loyalty", "premia", "profile"]): return
+        try: loyalty_payloads.append(response.json())
+        except Exception: pass
+
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
         context = browser.new_context()
         page = context.new_page()
         page.on("request", capture_request)
+        page.on("response", capture_response)
         print("Abriendo Juntos+…")
         page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=90000)
         if credentials.get("cliente") and not captured["authorization"]:
@@ -382,6 +463,18 @@ def main():
         )
         print("  Sesión guardada de forma cifrada en StockRápido.")
         cards = fetch_catalog(context.request, captured["authorization"], captured["cid"])
+        try:
+            harvested_orders = harvest_orders(context.request, captured["authorization"], captured["cid"])
+        except Exception as error:
+            print(f"No se pudo cosechar el historial de pedidos: {str(error)[:110]}")
+            harvested_orders = None
+        loyalty_points = find_loyalty_points(loyalty_payloads)
+        if loyalty_points is None:
+            for path in ["/v1/loyalty", "/v1/profile", "/loyalty/api/points"]:
+                try:
+                    loyalty_points = find_loyalty_points([api_get(context.request, path, captured["authorization"], captured["cid"] )])
+                    if loyalty_points is not None: break
+                except Exception: pass
         browser.close()
 
     items = [normalize(card) for card in cards]
@@ -398,6 +491,16 @@ def main():
         pushed += int(result.get("itemsUpserted", 0))
         print(f"  lote {start // PUSH_BATCH + 1}: {min(start + len(batch), len(items))}/{len(items)}")
     print(f"Listo. {pushed} productos sincronizados en StockRápido.")
+    if harvested_orders is not None:
+        try:
+            sr_push_orders(sr_token, connection_id, harvested_orders)
+            print(f"Historial sincronizado: {len(harvested_orders)} pedidos.")
+        except Exception as error: print(f"No se pudo guardar el historial: {str(error)[:110]}")
+    if loyalty_points is not None:
+        try:
+            sr_push_loyalty(sr_token, connection_id, loyalty_points)
+            print("Puntos Premia sincronizados.")
+        except Exception as error: print(f"No se pudieron guardar los puntos: {str(error)[:110]}")
 
 
 if __name__ == "__main__":

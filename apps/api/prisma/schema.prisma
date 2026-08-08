@@ -480,7 +480,8 @@ model SyncConnection {
   business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   items    SyncedProduct[]
   runs     SyncRun[]
-  orders   MondelezOrder[]
+  mondelezOrders MondelezOrder[]
+  orders   SupplierOrder[]
   drafts   OrderDraft[]
   account  SupplierAccount?
 }
@@ -494,6 +495,7 @@ model SupplierAccount {
   balance         Decimal?
   creditLimit     Decimal?
   availableCredit Decimal?
+  loyaltyPoints   Int?
   currency        String?  @default("ARS")
   updatedAt       DateTime @updatedAt
 
@@ -501,6 +503,41 @@ model SupplierAccount {
   invoices   SupplierInvoice[]
   movements  SupplierAccountMovement[]
   credits    SupplierCredit[]
+}
+
+model SupplierOrder {
+  id              String    @id @default(cuid())
+  connectionId    String
+  businessId      String
+  source          String    @default("harvested")
+  externalOrderId String?
+  status          String?
+  total           Decimal?
+  deliveryDate    DateTime?
+  tracking        String?
+  placedAt        DateTime?
+  raw             Json?
+  createdAt       DateTime  @default(now())
+
+  connection SyncConnection      @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  items      SupplierOrderItem[]
+
+  @@index([connectionId, source])
+}
+
+model SupplierOrderItem {
+  id               String   @id @default(cuid())
+  orderId          String
+  syncedProductId  String?
+  name             String?
+  uom              String?
+  qty              Int      @default(1)
+  unitPrice        Decimal?
+  total            Decimal?
+
+  order SupplierOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }
 
 model SupplierInvoice {

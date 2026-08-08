@@ -269,6 +269,100 @@ export class SyncService {
     });
   }
 
+  async replaceSupplierOrders(id: string, businessId: string, orders: any[]) {
+    await this.getConnection(id, businessId);
+    if (!Array.isArray(orders)) throw new BadRequestException('Pedidos inválidos.');
+    const decimal = (value: unknown) => value == null || value === '' || !Number.isFinite(Number(value)) ? null : new Decimal(Number(value));
+    const date = (value: unknown) => { const parsed = value ? new Date(String(value)) : null; return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null; };
+    await this.prisma.$transaction(async (tx) => {
+      await tx.supplierOrder.deleteMany({ where: { connectionId: id, businessId, source: 'harvested' } });
+      for (const order of orders) {
+        await tx.supplierOrder.create({
+          data: {
+            connectionId: id,
+            businessId,
+            source: 'harvested',
+            externalOrderId: order.externalOrderId != null ? String(order.externalOrderId) : null,
+            status: order.status != null ? String(order.status) : null,
+            total: decimal(order.total),
+            deliveryDate: date(order.deliveryDate),
+            tracking: order.tracking != null ? String(order.tracking) : null,
+            placedAt: date(order.placedAt),
+            raw: order.raw ?? Prisma.JsonNull,
+            items: { create: (Array.isArray(order.items) ? order.items : []).map((item: any) => ({
+              name: item.name != null ? String(item.name) : null,
+              uom: item.uom != null ? String(item.uom) : null,
+              qty: Math.max(1, Math.trunc(Number(item.qty) || 1)),
+              unitPrice: decimal(item.unitPrice),
+              total: decimal(item.total),
+            })) },
+          },
+        });
+      }
+    });
+    return { ok: true, imported: orders.length };
+  }
+
+  async listSupplierOrders(id: string, businessId: string, source = 'all') {
+    await this.getConnection(id, businessId);
+    if (!['all', 'harvested', 'draft'].includes(source)) throw new BadRequestException('Origen de pedidos inválido.');
+    return this.prisma.supplierOrder.findMany({
+      where: { connectionId: id, businessId, source: source === 'all' ? undefined : source },
+      include: { items: true },
+      orderBy: [{ placedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createSupplierOrderDraft(
+    id: string,
+    businessId: string,
+    body: { items?: Array<{ syncedProductId: string; uom?: string; qty: number; unitPrice: number }>; deliveryDate?: string },
+  ) {
+    await this.getConnection(id, businessId);
+    if (!Array.isArray(body?.items) || body.items.length === 0) throw new BadRequestException('Agregá productos al pedido.');
+    const productIds = [...new Set(body.items.map((item) => item.syncedProductId).filter(Boolean))];
+    const products = await this.prisma.syncedProduct.findMany({ where: { id: { in: productIds }, connectionId: id, businessId } });
+    const byId = new Map(products.map((product) => [product.id, product]));
+    if (products.length !== productIds.length) throw new BadRequestException('Hay productos que no pertenecen a esta conexión.');
+    const items = body.items.map((item) => {
+      const qty = Math.trunc(Number(item.qty));
+      const unitPrice = Number(item.unitPrice);
+      if (!Number.isInteger(qty) || qty < 1 || !Number.isFinite(unitPrice) || unitPrice < 0) throw new BadRequestException('Cantidad o precio inválido.');
+      return { syncedProductId: item.syncedProductId, name: byId.get(item.syncedProductId)?.name, uom: item.uom || 'UN', qty, unitPrice, total: Math.round(qty * unitPrice * 100) / 100 };
+    });
+    const total = Math.round(items.reduce((sum, item) => sum + item.total, 0) * 100) / 100;
+    const deliveryDate = body.deliveryDate ? new Date(body.deliveryDate) : null;
+    if (deliveryDate && Number.isNaN(deliveryDate.getTime())) throw new BadRequestException('Fecha de entrega inválida.');
+    return this.prisma.supplierOrder.create({
+      data: {
+        connectionId: id, businessId, source: 'draft', status: 'borrador', total: new Decimal(total), deliveryDate,
+        items: { create: items.map((item) => ({ ...item, unitPrice: new Decimal(item.unitPrice), total: new Decimal(item.total) })) },
+      },
+      include: { items: true },
+    });
+  }
+
+  async deleteSupplierOrderDraft(id: string, businessId: string, orderId: string) {
+    await this.getConnection(id, businessId);
+    const order = await this.prisma.supplierOrder.findFirst({ where: { id: orderId, connectionId: id, businessId } });
+    if (!order) throw new NotFoundException('Pedido no encontrado.');
+    if (order.source !== 'draft') throw new BadRequestException('Solo se pueden borrar borradores.');
+    await this.prisma.supplierOrder.delete({ where: { id: order.id } });
+    return { ok: true };
+  }
+
+  async updateSupplierLoyalty(id: string, businessId: string, loyaltyPoints: unknown) {
+    await this.getConnection(id, businessId);
+    const points = Number(loyaltyPoints);
+    if (!Number.isInteger(points) || points < 0) throw new BadRequestException('Puntos inválidos.');
+    const account = await this.prisma.supplierAccount.upsert({
+      where: { connectionId: id },
+      create: { connectionId: id, businessId, loyaltyPoints: points, currency: 'ARS' },
+      update: { loyaltyPoints: points },
+    });
+    return { ok: true, loyaltyPoints: account.loyaltyPoints };
+  }
+
   private validateSchedule(data: ConnInput) {
     if (data.syncFrequency !== undefined && !SYNC_FREQUENCIES.includes(data.syncFrequency)) {
       throw new BadRequestException('Frecuencia de sincronización inválida.');

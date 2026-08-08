@@ -79,12 +79,15 @@ type SupplierAccount = {
   balance?: unknown;
   creditLimit?: unknown;
   availableCredit?: unknown;
+  loyaltyPoints?: number | null;
   currency?: string | null;
   updatedAt: string;
   invoices: Array<{ id: string; number?: string | null; date?: string | null; dueDate?: string | null; total?: unknown; saldoPendiente?: unknown; status?: string | null; pdfUrl?: string | null }>;
   movements: Array<{ id: string; date?: string | null; type?: string | null; reference?: string | null; amount?: unknown; runningBalance?: unknown }>;
   credits: Array<{ id: string; tipo?: string | null; montoDisponible?: unknown; montoUsado?: unknown; vencimiento?: string | null; condiciones?: string | null }>;
 };
+type SupplierOrder = { id: string; source: 'harvested' | 'draft'; externalOrderId?: string | null; status?: string | null; total?: unknown; deliveryDate?: string | null; tracking?: string | null; placedAt?: string | null; createdAt: string; items: Array<{ id: string; syncedProductId?: string | null; name?: string | null; uom?: string | null; qty: number; unitPrice?: unknown; total?: unknown }> };
+type DraftLine = { syncedProductId: string; name: string; uom: string; qty: number; unitPrice: number; variants: Array<{ uom: string; sellingPrice?: unknown; cost?: unknown }> };
 
 const PROVIDERS: Record<
   string,
@@ -143,6 +146,13 @@ export default function SincronizacionesPage() {
   const [detail, setDetail] = useState<Synced | null>(null);
   const [account, setAccount] = useState<SupplierAccount | null>(null);
   const [accountLoading, setAccountLoading] = useState(false);
+  const [historyOrders, setHistoryOrders] = useState<SupplierOrder[]>([]);
+  const [draftOrders, setDraftOrders] = useState<SupplierOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [draftLines, setDraftLines] = useState<DraftLine[]>([]);
+  const [draftDeliveryDate, setDraftDeliveryDate] = useState('');
 
   const conn = connections.find((c) => c.id === activeId) ?? connections[0] ?? null;
   const providerMeta = PROVIDERS[conn?.provider ?? ''] ?? {
@@ -205,6 +215,19 @@ export default function SincronizacionesPage() {
     }
   }, [conn]);
 
+  const loadOrders = useCallback(async () => {
+    if (!conn) { setHistoryOrders([]); setDraftOrders([]); return; }
+    setOrdersLoading(true);
+    try {
+      const [history, drafts] = await Promise.all([
+        api<SupplierOrder[]>(`/sync/connections/${conn.id}/orders`, { params: { source: 'harvested' } }),
+        api<SupplierOrder[]>(`/sync/connections/${conn.id}/orders`, { params: { source: 'draft' } }),
+      ]);
+      setHistoryOrders(history); setDraftOrders(drafts);
+    } catch { setHistoryOrders([]); setDraftOrders([]); }
+    finally { setOrdersLoading(false); }
+  }, [conn]);
+
   useEffect(() => {
     loadConnections();
   }, [loadConnections]);
@@ -216,6 +239,7 @@ export default function SincronizacionesPage() {
   useEffect(() => {
     loadAccount();
   }, [loadAccount]);
+  useEffect(() => { loadOrders(); setDraftLines([]); }, [loadOrders]);
 
   const withCost = items.filter((i) => i.costUnit != null).length;
   const linked = items.filter((i) => i.linkedProductId).length;
@@ -247,6 +271,28 @@ export default function SincronizacionesPage() {
       setBusy(null);
     }
   };
+
+  const addDraftProduct = (product: Synced) => {
+    if (draftLines.some((line) => line.syncedProductId === product.id)) return;
+    const variants = (product.variants ?? []).map((variant) => ({ uom: variant.uom, sellingPrice: variant.sellingPrice, cost: variant.cost }));
+    const first = variants[0];
+    setDraftLines((current) => [...current, { syncedProductId: product.id, name: product.name ?? 'Producto', uom: first?.uom ?? 'UN', qty: 1, unitPrice: Number(first?.sellingPrice ?? product.costUnit ?? 0), variants }]);
+  };
+  const saveDraft = async () => {
+    if (!conn || !draftLines.length) return;
+    setBusy('draft'); setMsg(null);
+    try {
+      await api(`/sync/connections/${conn.id}/orders/draft`, { method: 'POST', body: JSON.stringify({ deliveryDate: draftDeliveryDate || undefined, items: draftLines.map(({ syncedProductId, uom, qty, unitPrice }) => ({ syncedProductId, uom, qty, unitPrice })) }) });
+      setDraftLines([]); setDraftDeliveryDate(''); setMsg({ type: 'ok', text: 'Borrador de pedido guardado.' }); await loadOrders();
+    } catch (error) { setMsg({ type: 'err', text: (error as Error).message }); }
+    finally { setBusy(null); }
+  };
+  const deleteDraft = async (orderId: string) => {
+    if (!conn || !confirm('¿Borrar este borrador de pedido?')) return;
+    try { await api(`/sync/connections/${conn.id}/orders/${orderId}`, { method: 'DELETE' }); await loadOrders(); }
+    catch (error) { alert((error as Error).message); }
+  };
+  const orderProducts = items.filter((product) => !orderSearch.trim() || `${product.name ?? ''} ${product.eanUnit ?? product.ean ?? ''} ${product.sku ?? ''}`.toLowerCase().includes(orderSearch.toLowerCase())).slice(0, 8);
 
   if (loading) {
     return <Loader full label="Sincronizaciones" />;
@@ -354,10 +400,23 @@ export default function SincronizacionesPage() {
                 <div className="rounded-xl border border-hair-soft bg-raised p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Límite</span><p className="mt-1 font-mono text-lg font-semibold tabular-nums text-fg">{formatOptionalMoney(account.creditLimit)}</p></div>
                 <div className="rounded-xl border border-hair-soft bg-raised p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Crédito disponible</span><p className="mt-1 font-mono text-lg font-semibold tabular-nums text-ok">{formatOptionalMoney(account.availableCredit)}</p></div>
                 <div className="rounded-xl border border-hair-soft bg-raised p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Cliente</span><p className="mt-1 text-sm font-medium text-fg">{account.razonSocial ?? '—'}</p><p className="font-mono text-xs text-fg-faint">{account.clienteId ?? account.currency ?? 'ARS'}</p></div>
+                {account.loyaltyPoints != null && <div className="rounded-xl border border-warn/40 bg-[var(--warn-soft)] p-4"><span className="text-xs uppercase tracking-wide text-fg-faint">Puntos / fidelidad</span><p className="mt-1 font-mono text-2xl font-bold tabular-nums text-warn">{account.loyaltyPoints.toLocaleString('es-AR')}</p></div>}
               </div>
               <div><h3 className="mb-2 font-semibold text-fg">Facturas</h3>{account.invoices.length ? <div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[720px] text-sm"><thead className="bg-raised text-left text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3">Número</th><th className="p-3">Fecha</th><th className="p-3">Vencimiento</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Saldo pendiente</th><th className="p-3">Estado</th><th className="p-3">PDF</th></tr></thead><tbody className="divide-y divide-hair-soft">{account.invoices.map((invoice) => <tr key={invoice.id}><td className="p-3 font-mono text-fg">{invoice.number ?? '—'}</td><td className="p-3 font-mono text-fg-muted">{invoice.date ? new Date(invoice.date).toLocaleDateString('es-AR') : '—'}</td><td className="p-3 font-mono text-fg-muted">{invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('es-AR') : '—'}</td><td className="p-3 text-right font-mono tabular-nums text-fg">{formatOptionalMoney(invoice.total)}</td><td className="p-3 text-right font-mono tabular-nums text-warn">{formatOptionalMoney(invoice.saldoPendiente)}</td><td className="p-3"><span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">{invoice.status ?? '—'}</span></td><td className="p-3">{invoice.pdfUrl ? <a href={invoice.pdfUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">Ver PDF</a> : '—'}</td></tr>)}</tbody></table></div> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Sin facturas informadas.</p>}</div>
               <div><h3 className="mb-2 font-semibold text-fg">Crédito y financiación</h3>{account.credits.length ? <div className="grid gap-3 sm:grid-cols-2">{account.credits.map((credit) => <div key={credit.id} className="rounded-xl border border-hair-soft bg-raised p-4"><div className="flex items-center justify-between gap-2"><span className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight-soft px-2 py-1 text-xs font-medium text-brand">{credit.tipo ?? 'Crédito'}</span>{credit.vencimiento && <span className="font-mono text-xs text-fg-faint">Vence {new Date(credit.vencimiento).toLocaleDateString('es-AR')}</span>}</div><div className="mt-3 grid grid-cols-2 gap-3"><div><span className="block text-xs text-fg-faint">Disponible</span><span className="font-mono font-semibold tabular-nums text-ok">{formatOptionalMoney(credit.montoDisponible)}</span></div><div><span className="block text-xs text-fg-faint">Usado</span><span className="font-mono tabular-nums text-fg">{formatOptionalMoney(credit.montoUsado)}</span></div></div>{credit.condiciones && <p className="mt-3 text-xs text-fg-muted">{credit.condiciones}</p>}</div>)}</div> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Sin líneas de financiación informadas.</p>}</div>
             </> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-muted">{conn.provider === 'juntosplus' ? 'Juntos+ no ofrece una cuenta corriente estándar.' : conn.provider === 'mondelez' ? 'La cuenta corriente de Mondelez todavía no está integrada.' : 'Sin datos de cuenta — corré el runner para cosechar facturas y financiación.'}</p>}
+          </section>
+
+          <section className="space-y-5 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+            <div><h2 className="text-lg font-semibold text-fg">Pedidos</h2><p className="text-sm text-fg-muted">Historial cosechado y borradores preparados dentro de StockRápido.</p></div>
+            <div className="rounded-xl border border-warn/40 bg-[var(--warn-soft)] p-3 text-sm text-warn">El envío del pedido al proveedor se habilita más adelante.</div>
+            {ordersLoading ? <Loader size="sm" label="Pedidos" /> : <>
+              <div><h3 className="mb-2 font-semibold text-fg">Historial</h3>{historyOrders.length ? <div className="space-y-2">{historyOrders.map((order) => <div key={order.id} className="rounded-xl border border-hair-soft bg-raised p-3"><button type="button" onClick={() => setExpandedOrder((current) => current === order.id ? null : order.id)} className="grid w-full grid-cols-2 gap-2 text-left sm:grid-cols-5"><span><span className="block text-xs text-fg-faint">Fecha</span><span className="font-mono text-sm text-fg">{new Date(order.placedAt ?? order.createdAt).toLocaleDateString('es-AR')}</span></span><span><span className="block text-xs text-fg-faint">Número</span><span className="font-mono text-sm text-fg">{order.externalOrderId ?? '—'}</span></span><span><span className="block text-xs text-fg-faint">Estado</span><span className="inline-block rounded-md border border-hair bg-surface px-2 py-0.5 text-xs text-fg-muted">{order.status ?? '—'}</span></span><span><span className="block text-xs text-fg-faint">Total</span><span className="font-mono font-semibold tabular-nums text-brand">{formatOptionalMoney(order.total)}</span></span><span><span className="block text-xs text-fg-faint">Tracking</span><span className="font-mono text-xs text-fg-muted">{order.tracking ?? '—'}</span></span></button>{expandedOrder === order.id && <div className="mt-3 space-y-2 border-t border-hair-soft pt-3">{order.items.length ? order.items.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 text-sm"><span className="text-fg-muted">{item.qty} × {item.name ?? 'Producto'} <span className="font-mono text-xs text-fg-faint">({item.uom ?? 'UN'})</span></span><span className="font-mono tabular-nums text-fg">{formatOptionalMoney(item.total)}</span></div>) : <p className="text-sm text-fg-faint">Sin detalle de ítems.</p>}</div>}</div>)}</div> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Sin pedidos — corré el runner.</p>}</div>
+
+              <div className="grid gap-4 lg:grid-cols-2"><div className="space-y-3"><h3 className="font-semibold text-fg">Armar pedido</h3><input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Buscar producto sincronizado…" className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg" /><div className="max-h-64 space-y-2 overflow-y-auto">{orderProducts.map((product) => <button key={product.id} type="button" onClick={() => addDraftProduct(product)} className="flex w-full items-center justify-between gap-3 rounded-lg border border-hair-soft bg-raised p-3 text-left hover:border-[color:var(--brand-accent)]"><span className="min-w-0"><span className="block truncate text-sm font-medium text-fg">{product.name}</span><span className="font-mono text-xs text-fg-faint">{product.eanUnit ?? product.ean ?? product.sku ?? '—'}</span></span><span className="text-sm text-brand">Agregar</span></button>)}</div></div><div className="space-y-3"><h3 className="font-semibold text-fg">Borrador actual</h3>{draftLines.length ? <>{draftLines.map((line, index) => <div key={line.syncedProductId} className="rounded-lg border border-hair-soft bg-raised p-3"><div className="flex justify-between gap-2"><span className="text-sm font-medium text-fg">{line.name}</span><button type="button" onClick={() => setDraftLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="text-xs text-crit">Quitar</button></div><div className="mt-2 grid grid-cols-3 gap-2"><select value={line.uom} onChange={(event) => setDraftLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, uom: event.target.value, unitPrice: Number(line.variants.find((variant) => variant.uom === event.target.value)?.sellingPrice ?? item.unitPrice) } : item))} className="rounded-lg border border-hair bg-surface px-2 py-1.5 text-sm text-fg"><option value="UN">Unidad</option>{line.variants.filter((variant) => variant.uom !== 'UN').map((variant) => <option key={variant.uom} value={variant.uom}>{variant.uom === 'DI' ? 'Display' : variant.uom === 'BU' ? 'Bulto' : variant.uom}</option>)}</select><input type="number" min={1} value={line.qty} onChange={(event) => setDraftLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value)) } : item))} className="min-w-0 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg" /><input type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => setDraftLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, unitPrice: Number(event.target.value) } : item))} className="min-w-0 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg" /></div></div>)}<input type="date" value={draftDeliveryDate} onChange={(event) => setDraftDeliveryDate(event.target.value)} className="rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm text-fg" /><div className="flex items-center justify-between"><span className="font-mono font-semibold text-fg">Total {formatMoneyArs(draftLines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0))}</span><button type="button" onClick={saveDraft} disabled={busy === 'draft'} className="btn-brand rounded-lg px-4 py-2 text-sm disabled:opacity-50">{busy === 'draft' ? 'Guardando…' : 'Guardar borrador'}</button></div></> : <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">Agregá productos desde el buscador.</p>}</div></div>
+
+              <div><h3 className="mb-2 font-semibold text-fg">Borradores guardados</h3>{draftOrders.length ? <div className="space-y-2">{draftOrders.map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair-soft bg-raised p-3"><div><p className="text-sm text-fg">{order.items.length} ítems · <span className="font-mono font-semibold text-brand">{formatOptionalMoney(order.total)}</span></p><p className="font-mono text-xs text-fg-faint">Creado {new Date(order.createdAt).toLocaleString('es-AR')}{order.deliveryDate ? ` · entrega ${new Date(order.deliveryDate).toLocaleDateString('es-AR')}` : ''}</p></div><button type="button" onClick={() => deleteDraft(order.id)} className="rounded-lg border border-crit/40 px-3 py-1.5 text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>)}</div> : <p className="text-sm text-fg-faint">No hay borradores guardados.</p>}</div>
+            </>}
           </section>
 
           <div className="flex flex-wrap items-end gap-4">
