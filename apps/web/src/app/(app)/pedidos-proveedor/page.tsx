@@ -16,7 +16,7 @@ type Order = {
   items: Array<{ id: string; name?: string | null; uom?: string | null; qty: number; unitPrice?: unknown; total?: unknown }>;
 };
 type Variant = { uom: string; sellingPrice?: unknown; cost?: unknown };
-type Product = { id: string; name?: string; ean?: string; eanUnit?: string; sku?: string; costUnit?: number | null; variants?: Variant[] };
+type Product = { id: string; name?: string; ean?: string; eanUnit?: string; sku?: string; cost?: unknown; costUnit?: number | null; basePrice?: unknown; variants?: Variant[] };
 type DraftLine = { syncedProductId: string; name: string; uom: string; qty: number; unitPrice: number; variants: Variant[] };
 
 const money = (value: unknown) => value != null && Number.isFinite(Number(value)) ? formatMoneyArs(Number(value)) : '—';
@@ -42,6 +42,8 @@ function OrdersScreen() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [deliveryDate, setDeliveryDate] = useState('');
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!connection) return;
@@ -57,7 +59,7 @@ function OrdersScreen() {
       setHistory([]); setDrafts([]); setProducts([]);
     } finally { setLoading(false); }
   }, [connection]);
-  useEffect(() => { void load(); setLines([]); setSearch(''); }, [load]);
+  useEffect(() => { void load(); setLines([]); setSearch(''); setErrorMessage(null); setDeleteConfirmId(null); }, [load]);
 
   const addProduct = (product: Product) => {
     if (lines.some((line) => line.syncedProductId === product.id)) return;
@@ -68,7 +70,7 @@ function OrdersScreen() {
       name: product.name ?? 'Producto',
       uom: first?.uom ?? 'UN',
       qty: 1,
-      unitPrice: Number(first?.sellingPrice ?? product.costUnit ?? 0),
+      unitPrice: Number(first?.cost ?? product.costUnit ?? product.cost ?? product.basePrice ?? 0),
       variants,
     }]);
     setSearch('');
@@ -76,20 +78,21 @@ function OrdersScreen() {
   const updateLine = (index: number, patch: Partial<DraftLine>) => setLines((current) => current.map((line, row) => row === index ? { ...line, ...patch } : line));
   const saveDraft = async () => {
     if (!connection || !lines.length) return;
-    setSaving(true);
+    setSaving(true); setErrorMessage(null);
     try {
       await api(`/sync/connections/${connection.id}/orders/draft`, {
         method: 'POST',
         body: JSON.stringify({ deliveryDate: deliveryDate || undefined, items: lines.map(({ syncedProductId, uom, qty, unitPrice }) => ({ syncedProductId, uom, qty, unitPrice })) }),
       });
       setLines([]); setDeliveryDate(''); await load();
-    } catch (error) { alert((error as Error).message); }
+    } catch (error) { setErrorMessage((error as Error).message); }
     finally { setSaving(false); }
   };
   const deleteDraft = async (id: string) => {
-    if (!connection || !confirm('¿Borrar este borrador de pedido?')) return;
-    try { await api(`/sync/connections/${connection.id}/orders/${id}`, { method: 'DELETE' }); await load(); }
-    catch (error) { alert((error as Error).message); }
+    if (!connection) return;
+    setErrorMessage(null);
+    try { await api(`/sync/connections/${connection.id}/orders/${id}`, { method: 'DELETE' }); setDeleteConfirmId(null); await load(); }
+    catch (error) { setErrorMessage((error as Error).message); }
   };
   const choices = search.trim() ? products.filter((product) => `${product.name ?? ''} ${product.eanUnit ?? product.ean ?? ''} ${product.sku ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 10) : [];
   const draftTotal = lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
@@ -98,6 +101,7 @@ function OrdersScreen() {
   return <Container className="max-w-7xl space-y-8">
     <PageHeader title="Pedidos" subtitle="Armá un pedido con los productos y presentaciones del proveedor." />
     <ProviderTabs />
+    {errorMessage && <div role="alert" className="rounded-xl border border-crit/30 bg-[var(--crit-soft)] px-4 py-3 text-sm text-crit">{errorMessage}</div>}
 
     <section className="rounded-2xl border border-[color:var(--brand-accent)] bg-surface p-4 shadow-sm sm:p-6">
       <div><h2 className="text-xl font-bold text-fg">Armar pedido</h2><p className="mt-1 text-sm text-fg-muted">Buscá un producto y agregalo a la lista.</p></div>
@@ -113,7 +117,7 @@ function OrdersScreen() {
           return <article key={line.syncedProductId} className="rounded-2xl border border-hair-soft bg-raised p-4">
             <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-fg">{line.name}</h3><p className="mt-1 font-mono text-sm text-brand">Subtotal {money(line.qty * line.unitPrice)}</p></div><button type="button" onClick={() => setLines((current) => current.filter((_, row) => row !== index))} aria-label={`Quitar ${line.name}`} className="rounded-lg p-2 text-crit hover:bg-[var(--crit-soft)]"><Trash2 className="h-5 w-5" /></button></div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(150px,1fr)_auto_minmax(150px,1fr)] sm:items-end">
-              <label className="text-xs font-medium text-fg-muted">Presentación<select value={line.uom} onChange={(event) => { const variant = line.variants.find((item) => item.uom === event.target.value); updateLine(index, { uom: event.target.value, unitPrice: Number(variant?.sellingPrice ?? line.unitPrice) }); }} className="mt-1.5 h-12 w-full rounded-xl border border-hair bg-surface px-3 text-base text-fg">{uoms.map((uom) => <option key={uom} value={uom}>{uomLabel(uom)}</option>)}</select></label>
+              <label className="text-xs font-medium text-fg-muted">Presentación<select value={line.uom} onChange={(event) => { const variant = line.variants.find((item) => item.uom === event.target.value); updateLine(index, { uom: event.target.value, unitPrice: Number(variant?.cost ?? line.unitPrice) }); }} className="mt-1.5 h-12 w-full rounded-xl border border-hair bg-surface px-3 text-base text-fg">{uoms.map((uom) => <option key={uom} value={uom}>{uomLabel(uom)}</option>)}</select></label>
               <div><span className="mb-1.5 block text-center text-xs font-medium text-fg-muted">Cantidad</span><div className="flex h-12 items-center rounded-xl border border-hair bg-surface"><button type="button" onClick={() => updateLine(index, { qty: Math.max(1, line.qty - 1) })} className="flex h-full w-12 items-center justify-center rounded-l-xl text-fg hover:bg-raised2" aria-label="Restar cantidad"><Minus className="h-5 w-5" /></button><strong className="min-w-12 text-center font-mono text-xl tabular-nums text-fg">{line.qty}</strong><button type="button" onClick={() => updateLine(index, { qty: line.qty + 1 })} className="flex h-full w-12 items-center justify-center rounded-r-xl text-fg hover:bg-raised2" aria-label="Sumar cantidad"><Plus className="h-5 w-5" /></button></div></div>
               <label className="text-xs font-medium text-fg-muted">Precio unitario<input type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => updateLine(index, { unitPrice: Math.max(0, Number(event.target.value) || 0) })} className="mt-1.5 h-12 w-full rounded-xl border border-hair bg-surface px-3 font-mono text-base tabular-nums text-fg" /></label>
             </div>
@@ -126,7 +130,7 @@ function OrdersScreen() {
       <p className="mt-3 text-center text-xs text-fg-faint">El envío al proveedor se habilita más adelante.</p>
     </section>
 
-    <section className="space-y-3"><div><h2 className="text-xl font-bold text-fg">Borradores guardados</h2><p className="text-sm text-fg-muted">Pedidos preparados que todavía no fueron enviados.</p></div>{loading ? <Loader /> : drafts.length ? <div className="grid gap-3 sm:grid-cols-2">{drafts.map((order) => <article key={order.id} className="rounded-2xl border border-hair-soft bg-surface p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-fg">Borrador · {order.items.length} productos</p><p className="mt-1 font-mono text-xs text-fg-faint">Creado {new Date(order.createdAt).toLocaleString('es-AR')}</p></div><button type="button" onClick={() => deleteDraft(order.id)} className="rounded-xl border border-crit/30 px-3 py-2 text-sm font-medium text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div><p className="mt-4 font-mono text-2xl font-bold tabular-nums text-brand">{money(order.total)}</p>{order.deliveryDate && <p className="mt-1 text-sm text-fg-muted">Entrega deseada: <span className="font-mono">{new Date(order.deliveryDate).toLocaleDateString('es-AR')}</span></p>}</article>)}</div> : <p className="rounded-2xl border border-hair-soft bg-surface p-6 text-sm text-fg-faint">No hay borradores guardados.</p>}</section>
+    <section className="space-y-3"><div><h2 className="text-xl font-bold text-fg">Borradores guardados</h2><p className="text-sm text-fg-muted">Pedidos preparados que todavía no fueron enviados.</p></div>{loading ? <Loader /> : drafts.length ? <div className="grid gap-3 sm:grid-cols-2">{drafts.map((order) => <article key={order.id} className="rounded-2xl border border-hair-soft bg-surface p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-fg">Borrador · {order.items.length} productos</p><p className="mt-1 font-mono text-xs text-fg-faint">Creado {new Date(order.createdAt).toLocaleString('es-AR')}</p></div>{deleteConfirmId === order.id ? <div className="flex items-center gap-2 rounded-xl border border-crit/30 bg-[var(--crit-soft)] p-1.5"><span className="px-1 text-xs text-crit">¿Seguro?</span><button type="button" onClick={() => void deleteDraft(order.id)} className="rounded-lg bg-crit px-3 py-1.5 text-xs font-semibold text-white">Sí</button><button type="button" onClick={() => setDeleteConfirmId(null)} className="rounded-lg border border-hair bg-surface px-3 py-1.5 text-xs text-fg-muted">No</button></div> : <button type="button" onClick={() => setDeleteConfirmId(order.id)} className="rounded-xl border border-crit/30 px-3 py-2 text-sm font-medium text-crit hover:bg-[var(--crit-soft)]">Eliminar</button>}</div><p className="mt-4 font-mono text-2xl font-bold tabular-nums text-brand">{money(order.total)}</p>{order.deliveryDate && <p className="mt-1 text-sm text-fg-muted">Entrega deseada: <span className="font-mono">{new Date(order.deliveryDate).toLocaleDateString('es-AR')}</span></p>}</article>)}</div> : <p className="rounded-2xl border border-hair-soft bg-surface p-6 text-sm text-fg-faint">No hay borradores guardados.</p>}</section>
 
     <section className="space-y-4 border-t border-hair-soft pt-8"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-xl font-bold text-fg">Historial de pedidos</h2><p className="text-sm text-fg-muted">Pedidos anteriores traídos desde el proveedor.</p></div><div className="inline-flex self-start rounded-xl border border-hair bg-surface p-1 sm:self-auto"><button type="button" onClick={() => setView('cards')} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${view === 'cards' ? 'bg-raised2 font-semibold text-fg' : 'text-fg-faint'}`}><Grid2X2 className="h-4 w-4" />Tarjetas</button><button type="button" onClick={() => setView('list')} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${view === 'list' ? 'bg-raised2 font-semibold text-fg' : 'text-fg-faint'}`}><List className="h-4 w-4" />Lista</button></div></div>
       {loading ? <Loader /> : history.length ? view === 'cards' ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{history.map((order) => <article key={order.id} className="rounded-2xl border border-hair-soft bg-surface p-5"><div className="flex items-start justify-between gap-3"><div><span className="text-xs uppercase text-fg-faint">Pedido</span><h3 className="font-mono text-lg font-semibold text-fg">{order.externalOrderId ?? 'Sin número'}</h3></div><span className={`rounded-md border px-2 py-1 text-xs ${statusClass(order.status)}`}>{order.status ?? 'Sin estado'}</span></div><p className="mt-5 font-mono text-3xl font-bold tabular-nums text-brand">{money(order.total)}</p><div className="mt-4 grid grid-cols-2 gap-3 text-sm"><p className="text-fg-faint">Fecha <span className="block font-mono text-fg-muted">{new Date(order.placedAt ?? order.createdAt).toLocaleDateString('es-AR')}</span></p><p className="text-fg-faint">Tracking <span className="block break-all font-mono text-fg-muted">{order.tracking ?? '—'}</span></p></div><button type="button" onClick={() => setExpanded((current) => current === order.id ? null : order.id)} className="mt-5 min-h-11 w-full rounded-xl border border-hair bg-raised px-3 py-2 text-sm font-semibold text-fg-muted hover:bg-raised2">{expanded === order.id ? 'Ocultar productos' : `Ver productos (${order.items.length})`}</button>{orderDetail(order)}</article>)}</div> : <div className="overflow-x-auto rounded-xl border border-hair-soft bg-surface"><table className="w-full min-w-[760px] text-sm"><thead className="bg-raised text-left text-xs uppercase text-fg-faint"><tr><th className="p-3">Fecha</th><th className="p-3">Número</th><th className="p-3">Estado</th><th className="p-3 text-right">Total</th><th className="p-3">Tracking</th><th className="p-3">Productos</th></tr></thead><tbody className="divide-y divide-hair-soft">{history.map((order) => <tr key={order.id}><td className="p-3 font-mono text-fg-muted">{new Date(order.placedAt ?? order.createdAt).toLocaleDateString('es-AR')}</td><td className="p-3 font-mono text-fg">{order.externalOrderId ?? '—'}</td><td className="p-3"><span className={`rounded-md border px-2 py-1 text-xs ${statusClass(order.status)}`}>{order.status ?? '—'}</span></td><td className="p-3 text-right font-mono font-semibold text-brand">{money(order.total)}</td><td className="p-3 font-mono text-xs text-fg-muted">{order.tracking ?? '—'}</td><td className="p-3"><button type="button" onClick={() => setExpanded((current) => current === order.id ? null : order.id)} className="text-brand">{expanded === order.id ? 'Ocultar' : `Ver (${order.items.length})`}</button>{orderDetail(order)}</td></tr>)}</tbody></table></div> : <p className="rounded-2xl border border-hair-soft bg-surface p-8 text-center text-fg-faint">Sin pedidos — corré el runner para traer el historial.</p>}

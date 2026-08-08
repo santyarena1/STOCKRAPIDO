@@ -116,11 +116,16 @@ export class MondelezProvider {
         : undefined) ||
       item.RefId;
     const listPrice =
-      typeof offer.ListPrice === 'number' ? offer.ListPrice : undefined;
+      typeof offer.ListPrice === 'number' && offer.ListPrice < 999999
+        ? offer.ListPrice
+        : undefined;
     const sellingPrice =
-      typeof offer.Price === 'number' ? offer.Price : undefined;
+      typeof offer.Price === 'number' && offer.Price < 999999
+        ? offer.Price
+        : undefined;
     const availableQuantity =
-      typeof offer.AvailableQuantity === 'number'
+      typeof offer.AvailableQuantity === 'number' &&
+      offer.AvailableQuantity < 99999
         ? offer.AvailableQuantity
         : undefined;
     const unitsPerDisplay = this.spec(p, 'Unidades por Display');
