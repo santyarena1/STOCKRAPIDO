@@ -254,7 +254,39 @@ export class ProductsService {
   }
 
   async catalog(businessId: string, query: ProductCatalogQuery) {
-    const where = this.catalogWhere(businessId, query);
+    let where: Record<string, unknown>;
+    const tokens = query.q?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (tokens.length) {
+      try {
+        const tokenConditions = tokens.map((token) => {
+          const contains = `%${token}%`;
+          return Prisma.sql`(
+            unaccent(lower(p."name")) LIKE unaccent(lower(${contains}))
+            OR unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${contains}))
+            OR COALESCE(p."barcode", '') ILIKE ${contains}
+            OR COALESCE(p."eanBox", '') ILIKE ${contains}
+            OR COALESCE(p."supplierSku", '') ILIKE ${contains}
+            OR COALESCE(p."supplierRef", '') ILIKE ${contains}
+            OR COALESCE(p."externalId", '') ILIKE ${contains}
+          )`;
+        });
+        const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT p."id"
+          FROM "Product" p
+          WHERE p."businessId" = ${businessId}
+            AND ${Prisma.join(tokenConditions, ' AND ')}
+        `);
+        where = this.catalogWhere(businessId, { ...query, q: undefined });
+        where.id = { in: matches.map((match) => match.id) };
+      } catch (error) {
+        this.logger.warn(
+          `Búsqueda avanzada del catálogo no disponible; se usa fallback Prisma: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        where = this.catalogWhere(businessId, query);
+      }
+    } else {
+      where = this.catalogWhere(businessId, query);
+    }
     const skip = (query.page - 1) * query.pageSize;
     const orderBy =
       query.sort === 'category'
@@ -543,8 +575,10 @@ export class ProductsService {
       OR: [
         { name: { contains: token, mode: 'insensitive' } },
         { barcode: { contains: token } },
+        { eanBox: { contains: token } },
         { brand: { contains: token, mode: 'insensitive' } },
         { supplierSku: { contains: token, mode: 'insensitive' } },
+        { supplierRef: { contains: token, mode: 'insensitive' } },
         { externalId: { contains: token, mode: 'insensitive' } },
       ],
     }));

@@ -581,17 +581,59 @@ export class SyncService {
     opts: { q?: string; onlyAvailable?: boolean; onlyWithCost?: boolean; limit?: number } = {},
   ) {
     const conn = await this.getConnection(id, businessId);
+    const tokens = opts.q?.trim().split(/\s+/).filter(Boolean) ?? [];
+    let matchedIds: string[] | undefined;
+    let usePrismaFallback = false;
+    if (tokens.length) {
+      try {
+        const tokenConditions = tokens.map((token) => {
+          const contains = `%${token}%`;
+          return Prisma.sql`(
+            unaccent(lower(sp."name")) LIKE unaccent(lower(${contains}))
+            OR unaccent(lower(COALESCE(sp."brand", ''))) LIKE unaccent(lower(${contains}))
+            OR COALESCE(sp."ean", '') ILIKE ${contains}
+            OR COALESCE(sp."eanUnit", '') ILIKE ${contains}
+            OR COALESCE(sp."eanBox", '') ILIKE ${contains}
+            OR COALESCE(sp."sku", '') ILIKE ${contains}
+            OR COALESCE(sp."supplierRef", '') ILIKE ${contains}
+            OR COALESCE(sp."externalId", '') ILIKE ${contains}
+          )`;
+        });
+        const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT sp."id"
+          FROM "SyncedProduct" sp
+          WHERE sp."connectionId" = ${id}
+            AND sp."businessId" = ${businessId}
+            AND ${Prisma.join(tokenConditions, ' AND ')}
+        `);
+        matchedIds = matches.map((match) => match.id);
+      } catch (error) {
+        usePrismaFallback = true;
+        this.logger.warn(
+          `Búsqueda avanzada de productos sincronizados no disponible; se usa fallback Prisma: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     const rows = await this.prisma.syncedProduct.findMany({
       where: {
         connectionId: id,
+        businessId,
         available: opts.onlyAvailable ? true : undefined,
         cost: opts.onlyWithCost ? { not: null } : undefined,
-        OR: opts.q
-          ? [
-              { name: { contains: opts.q, mode: 'insensitive' } },
-              { ean: { contains: opts.q } },
-              { brand: { contains: opts.q, mode: 'insensitive' } },
-            ]
+        id: matchedIds ? { in: matchedIds } : undefined,
+        AND: usePrismaFallback
+          ? tokens.map((token) => ({
+              OR: [
+                { name: { contains: token, mode: 'insensitive' as const } },
+                { brand: { contains: token, mode: 'insensitive' as const } },
+                { ean: { contains: token } },
+                { eanUnit: { contains: token } },
+                { eanBox: { contains: token } },
+                { sku: { contains: token, mode: 'insensitive' as const } },
+                { supplierRef: { contains: token, mode: 'insensitive' as const } },
+                { externalId: { contains: token, mode: 'insensitive' as const } },
+              ],
+            }))
           : undefined,
       },
       orderBy: { name: 'asc' },
