@@ -243,6 +243,29 @@ export default function ProveedoresConfigPage() {
 
   return <div className="space-y-6">
     <PageHeader title="Proveedores y sincronización" subtitle="Configurá credenciales, mapeo de columnas y frecuencia de cada proveedor." />
+    <section className="overflow-hidden rounded-2xl border border-hair-soft bg-surface">
+      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] lg:items-start">
+        <div>
+          <span className="inline-flex rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight-soft px-2 py-1 text-xs font-semibold text-brand">Chrome / Edge</span>
+          <h2 className="mt-3 text-xl font-bold text-fg">Extensión de sincronización</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-muted">Para proveedores que requieren tu navegador (ej. Tokin/Arcor). Sincronizá su catálogo directo desde Chrome.</p>
+          <a href="/stockrapido-extension.zip" download className="btn-brand mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-xl px-6 py-3 text-base font-semibold sm:w-auto">Descargar extensión (.zip)</a>
+          <p className="mt-4 rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-3 text-sm text-warn">Necesitás estar logueado en la web del proveedor en el mismo navegador.</p>
+        </div>
+        <div className="rounded-xl border border-hair-soft bg-raised p-4 sm:p-5">
+          <h3 className="font-semibold text-fg">Cómo instalarla</h3>
+          <ol className="mt-4 space-y-3">
+            {[
+              <>Descomprimí el archivo <span className="font-mono text-fg">.zip</span>.</>,
+              <>Abrí <span className="rounded bg-raised2 px-1.5 py-0.5 font-mono text-xs text-fg">chrome://extensions</span>.</>,
+              <>Activá <strong className="font-semibold text-fg">Modo de desarrollador</strong>, arriba a la derecha.</>,
+              <>Hacé clic en <strong className="font-semibold text-fg">Cargar descomprimida</strong> y elegí la carpeta <span className="font-mono text-xs text-fg">stockrapido-extension</span>.</>,
+              <>Fijala en la barra. Abrila, iniciá sesión con tu cuenta de StockRápido y usá <strong className="font-semibold text-fg">Sincronizar Tokin</strong>.</>,
+            ].map((step, index) => <li key={index} className="flex gap-3 text-sm leading-5 text-fg-muted"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-highlight-soft font-mono text-xs font-bold text-brand">{index + 1}</span><span className="pt-0.5">{step}</span></li>)}
+          </ol>
+        </div>
+      </div>
+    </section>
     {message && <div className={`rounded-lg border px-4 py-3 text-sm ${message.type === 'ok' ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-crit/30 bg-[var(--crit-soft)] text-crit'}`}>{message.text}</div>}
     <div className="flex flex-wrap gap-2">{connections.map((item) => <button key={item.id} type="button" onClick={() => setActiveId(item.id)} title={PROVIDERS[item.provider]?.description} className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${item.id === activeId ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-fg' : 'border-hair text-fg-muted hover:bg-raised hover:text-fg'}`}>{PROVIDERS[item.provider]?.label ?? item.name}<span className="ml-2 text-xs opacity-70">{item._count?.items ?? 0} ítems</span></button>)}</div>
     {connection && PROVIDERS[connection.provider] && <p className="text-sm text-fg-muted">{PROVIDERS[connection.provider].description}</p>}
