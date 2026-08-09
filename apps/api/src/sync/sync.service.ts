@@ -203,8 +203,10 @@ export class SyncService {
   async getMappingSuggestions(businessId: string) {
     const overview = await this.getRawColumnsOverview(businessId);
     const groups = new Map<string, { key: string; canonical: string | null; members: typeof overview }>();
+    const NOISE = /installment|paymentoption|teaser|highlight|promotion|\.quota\.|blacklist|clusterhighlights|specification/i;
     for (const col of overview) {
       if (col.path.startsWith('synced.')) continue; // ya normalizadas
+      if (NOISE.test(col.path)) continue; // descartar campos anidados de ruido
       const norm = this.normalizeLeaf(col.path);
       const canonical = SyncService.CANON_RULES.find(([re]) => re.test(norm))?.[1] ?? null;
       const key = canonical ? `@${canonical}` : norm;
