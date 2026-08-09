@@ -172,22 +172,50 @@ export class SyncService {
     return this.sanitizeConnection(updated);
   }
 
-  private static CANON_RULES: Array<[RegExp, string]> = [
-    [/^(product ?id|id producto|id)$/, 'externalId'],
-    [/^(sku|sku id|codigo interno|item ?id)$/, 'sku'],
-    [/^(ean|barcode|codigo de barras|ean unit|gtin|ean 13)$/, 'ean'],
-    [/^(ref ?id|reference ?id|referencia|supplier ?ref|product ?reference)$/, 'supplierRef'],
-    [/^(name|product ?name|nombre|descripcion|titulo|title)$/, 'name'],
-    [/^(brand|brand ?name|marca)$/, 'brand'],
-    [/^(category|categoria|department|departamento)$/, 'category'],
-    [/^(subcategory|subcategoria|sub department)$/, 'subcategory'],
-    [/^(stock|available ?quantity|existencia|cantidad|disponible)$/, 'stock'],
-    [/^(list ?price|precio ?lista|price|precio)$/, 'listPrice'],
-    [/^(cost|costo|selling ?price|precio venta)$/, 'cost'],
-    [/^(iva|iva ?alicuota|tax|alicuota|impuesto)$/, 'ivaAlicuota'],
-    [/^(image|image ?url|imagen|thumbnail|foto)$/, 'imageUrl'],
-    [/^(link|url|permalink|detail url)$/, 'link'],
-    [/^(weight|peso|net ?weight)$/, 'weight'],
+  private static MAP_NOISE = /installment|paymentoption|teaser|highlight|promotion|\.quota\.|blacklist|clusterhighlights|specification|metatag|releasedate|cacheid/i;
+
+  private static toNums(samples: string[]): number[] {
+    return samples
+      .map((x) => Number(String(x).replace(/[^0-9.\-]/g, '')))
+      .filter((n) => Number.isFinite(n));
+  }
+  private static half(samples: string[], predicate: (v: string) => boolean): boolean {
+    return samples.length > 0 && samples.filter((v) => predicate(String(v))).length >= Math.ceil(samples.length / 2);
+  }
+  private static V = {
+    ean: (s: string[]) => SyncService.half(s, (v) => /^\d{8,14}$/.test(v.trim()) && v.trim().length >= 12),
+    iva: (s: string[]) => { const n = SyncService.toNums(s); return n.length > 0 && n.every((x) => [0, 2.5, 5, 10.5, 21, 27].includes(x)); },
+    stock: (s: string[]) => { const n = SyncService.toNums(s); return n.length > 0 && n.every((x) => Number.isInteger(x) && x >= 0 && x < 100000); },
+    price: (s: string[]) => { const n = SyncService.toNums(s); return n.length > 0 && n.every((x) => x > 0) && n.some((x) => x >= 10 || !Number.isInteger(x)); },
+    int: (s: string[]) => { const n = SyncService.toNums(s); return n.length > 0 && n.every((x) => Number.isInteger(x) && x >= 0); },
+    img: (s: string[]) => SyncService.half(s, (v) => /^https?:\/\/\S+(assets|tokincms|\.(jpe?g|png|webp|gif|svg))/i.test(v)),
+    url: (s: string[]) => SyncService.half(s, (v) => /^https?:\/\//i.test(v)),
+    bool: (s: string[], t: RawColumnType[]) => t.includes('boolean') || SyncService.half(s, (v) => /^(true|false|si|sí|no|1|0)$/i.test(v.trim())),
+    name: (s: string[]) => SyncService.half(s, (v) => /[a-záéíóúñ]/i.test(v) && v.trim().length >= 6),
+  };
+
+  private static TARGET_DETECTORS: Array<{ field: string; name: RegExp; value?: (s: string[], t: RawColumnType[]) => boolean; paths?: RegExp }> = [
+    { field: 'ean', name: /^(ean|barcode|gtin|codigo de barras|ean ?13|ean ?unit)$/, value: (s) => SyncService.V.ean(s), paths: /(^|\.)ean(\[\]|$)/i },
+    { field: 'externalId', name: /^(product ?id|id producto|id externo|external ?id|id)$/ },
+    { field: 'sku', name: /^(sku|sku id|item ?id|codigo interno|internal ?code|cod ?articulo)$/ },
+    { field: 'supplierRef', name: /^(ref ?id|reference ?id|referencia|supplier ?ref|product ?reference|cod ?proveedor)$/ },
+    { field: 'eanBox', name: /(ean).*(bulto|box|bu)$|ean ?box/ },
+    { field: 'ivaAlicuota', name: /(iva|tax|alicuota|impuesto|vat)/, value: (s) => SyncService.V.iva(s) },
+    { field: 'listPrice', name: /(list ?price|precio ?lista|price ?from|pvp)/, value: (s) => SyncService.V.price(s) },
+    { field: 'cost', name: /(selling ?price|^price$|precio$|costo|cost|price ?with ?tax|precio ?venta)/, value: (s) => SyncService.V.price(s) },
+    { field: 'stock', name: /(stock|available ?quantity|existencia|cantidad|disponible|on ?hand)/, value: (s) => SyncService.V.stock(s) },
+    { field: 'imageUrl', name: /(image|imagen|thumbnail|foto|picture)/, value: (s) => SyncService.V.img(s) },
+    { field: 'link', name: /(link|url|permalink|detail ?url|slug)/, value: (s) => SyncService.V.url(s) },
+    { field: 'brand', name: /^(brand|brand ?name|marca)$/ },
+    { field: 'category', name: /^(category|categoria|department|departamento|rubro)$/ },
+    { field: 'subcategory', name: /^(subcategory|subcategoria|sub ?department|sub ?rubro)$/ },
+    { field: 'name', name: /^(name|product ?name|nombre|descripcion|titulo|title)$/, value: (s) => SyncService.V.name(s) },
+    { field: 'weight', name: /(weight|peso|net ?weight)/ },
+    { field: 'unitsPerBox', name: /(units ?per ?box|unidades ?por ?bulto|units ?un ?per ?bu|per ?bulto)/, value: (s) => SyncService.V.int(s) },
+    { field: 'unitsPerDisplay', name: /(units ?per ?display|unidades ?por ?display|units ?un ?per ?di)/, value: (s) => SyncService.V.int(s) },
+    { field: 'displaysPerBox', name: /(displays ?per ?box|display.*bulto|units ?di ?per ?bu)/, value: (s) => SyncService.V.int(s) },
+    { field: 'retornable', name: /(retornable|returnable|retorno)/, value: (s, t) => SyncService.V.bool(s, t) },
+    { field: 'available', name: /(available|activo|enabled|is ?active|habilitado)/, value: (s, t) => SyncService.V.bool(s, t) },
   ];
 
   private normalizeLeaf(path: string): string {
@@ -200,47 +228,72 @@ export class SyncService {
       .trim();
   }
 
+  private detectTarget(path: string, samples: string[], types: RawColumnType[]): { field: string; confidence: string } | null {
+    const leaf = this.normalizeLeaf(path);
+    let best = { field: '', score: 0 };
+    for (const det of SyncService.TARGET_DETECTORS) {
+      let score = 0;
+      if (det.name.test(leaf)) score += 2;
+      if (det.paths && det.paths.test(path)) score += 4;
+      if (det.value && det.value(samples, types)) score += 3;
+      if (score > best.score) best = { field: det.field, score };
+    }
+    // Señales de valor inequívocas, aun sin coincidencia de nombre.
+    if (best.score < 2) {
+      if (SyncService.V.ean(samples)) best = { field: 'ean', score: 3 };
+      else if (SyncService.V.img(samples)) best = { field: 'imageUrl', score: 3 };
+    }
+    if (best.score < 2) return null;
+    const confidence = best.score >= 5 ? 'alta' : best.score >= 3 ? 'media' : 'baja';
+    return { field: best.field, confidence };
+  }
+
   async getMappingSuggestions(businessId: string) {
-    const overview = await this.getRawColumnsOverview(businessId);
-    const groups = new Map<string, { key: string; canonical: string | null; members: typeof overview }>();
-    const NOISE = /installment|paymentoption|teaser|highlight|promotion|\.quota\.|blacklist|clusterhighlights|specification/i;
-    for (const col of overview) {
-      if (col.path.startsWith('synced.')) continue; // ya normalizadas
-      if (NOISE.test(col.path)) continue; // descartar campos anidados de ruido
-      const norm = this.normalizeLeaf(col.path);
-      const canonical = SyncService.CANON_RULES.find(([re]) => re.test(norm))?.[1] ?? null;
-      const key = canonical ? `@${canonical}` : norm;
-      const group = groups.get(key) ?? { key, canonical, members: [] as typeof overview };
-      group.members.push(col);
-      groups.set(key, group);
-    }
     const rank = (c: string) => (c === 'alta' ? 3 : c === 'media' ? 2 : 1);
-    const suggestions: Array<{
-      suggestedField: string | null;
-      label: string;
-      confidence: string;
-      providers: string[];
-      columns: Array<{ path: string; type: RawColumnType; providers: Array<{ provider: string; connectionId: string; sample: string | null }> }>;
-    }> = [];
-    for (const group of groups.values()) {
-      const providerSet = new Set(group.members.flatMap((m) => m.providers.map((p) => p.provider)));
-      if (providerSet.size < 2 && !group.canonical) continue; // solo lo que vale la pena sugerir
-      const confidence = providerSet.size >= 2 && group.canonical ? 'alta' : providerSet.size >= 2 ? 'media' : 'baja';
-      suggestions.push({
-        suggestedField: group.canonical,
-        label: group.canonical ?? group.key,
-        confidence,
-        providers: [...providerSet],
-        columns: group.members.map((m) => ({
-          path: m.path,
-          type: m.type,
-          providers: m.providers.map((p) => ({ provider: p.provider, connectionId: p.connectionId, sample: p.sample })),
-        })),
-      });
+    const connections = await this.prisma.syncConnection.findMany({
+      where: { businessId },
+      select: { id: true, provider: true, name: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const discoveries = await Promise.all(connections.map((c) => this.rawColumnsForConnection(c.id, businessId, false)));
+    const union = new Map<string, { types: Set<RawColumnType>; providers: Array<{ provider: string; connectionId: string; sample: string | null }>; samples: string[] }>();
+    for (const discovery of discoveries) {
+      for (const col of discovery.columns) {
+        if (col.path.startsWith('synced.')) continue;
+        if (SyncService.MAP_NOISE.test(col.path)) continue;
+        const entry = union.get(col.path) ?? { types: new Set<RawColumnType>(), providers: [], samples: [] };
+        entry.types.add(col.type);
+        entry.providers.push({ provider: discovery.connection.provider, connectionId: discovery.connection.id, sample: col.samples[0] ?? null });
+        entry.samples.push(...col.samples);
+        union.set(col.path, entry);
+      }
     }
-    return suggestions.sort(
-      (a, b) => rank(b.confidence) - rank(a.confidence) || b.providers.length - a.providers.length || a.label.localeCompare(b.label),
-    );
+    const groups = new Map<string, {
+      field: string; confidence: string;
+      members: Array<{ path: string; type: RawColumnType; confidence: string; providers: Array<{ provider: string; connectionId: string; sample: string | null }> }>;
+    }>();
+    for (const [path, entry] of union) {
+      const detection = this.detectTarget(path, entry.samples, [...entry.types]);
+      if (!detection) continue;
+      const group = groups.get(detection.field) ?? { field: detection.field, confidence: 'baja', members: [] };
+      if (rank(detection.confidence) > rank(group.confidence)) group.confidence = detection.confidence;
+      group.members.push({
+        path,
+        type: entry.types.size === 1 ? [...entry.types][0] : 'mixed',
+        confidence: detection.confidence,
+        providers: entry.providers,
+      });
+      groups.set(detection.field, group);
+    }
+    return [...groups.values()]
+      .map((group) => ({
+        suggestedField: group.field,
+        label: group.field,
+        confidence: group.confidence,
+        providers: [...new Set(group.members.flatMap((m) => m.providers.map((p) => p.provider)))],
+        columns: group.members.sort((a, b) => rank(b.confidence) - rank(a.confidence)),
+      }))
+      .sort((a, b) => rank(b.confidence) - rank(a.confidence) || b.providers.length - a.providers.length || a.label.localeCompare(b.label));
   }
 
   async approveMappingSuggestion(
