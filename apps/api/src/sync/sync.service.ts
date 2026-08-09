@@ -204,8 +204,8 @@ export class SyncService {
     { field: 'listPrice', name: /(list ?price|precio ?lista|price ?from|pvp)/, value: (s) => SyncService.V.price(s) },
     { field: 'cost', name: /(selling ?price|^price$|precio$|costo|cost|price ?with ?tax|precio ?venta)/, value: (s) => SyncService.V.price(s) },
     { field: 'stock', name: /(stock|available ?quantity|existencia|cantidad|disponible|on ?hand)/, value: (s) => SyncService.V.stock(s) },
-    { field: 'imageUrl', name: /(image|imagen|thumbnail|foto|picture)/, value: (s) => SyncService.V.img(s) },
-    { field: 'link', name: /(link|url|permalink|detail ?url|slug)/, value: (s) => SyncService.V.url(s) },
+    { field: 'imageUrl', name: /(image|imagen|thumbnail|foto|picture)/, value: (s) => SyncService.V.img(s) || SyncService.V.url(s) },
+    { field: 'link', name: /(link|permalink|slug|detail ?url|product ?url)/, value: (s) => SyncService.V.url(s) },
     { field: 'brand', name: /^(brand|brand ?name|marca)$/ },
     { field: 'category', name: /^(category|categoria|department|departamento|rubro)$/ },
     { field: 'subcategory', name: /^(subcategory|subcategoria|sub ?department|sub ?rubro)$/ },
@@ -232,10 +232,9 @@ export class SyncService {
     const leaf = this.normalizeLeaf(path);
     let best = { field: '', score: 0 };
     for (const det of SyncService.TARGET_DETECTORS) {
-      let score = 0;
-      if (det.name.test(leaf)) score += 2;
-      if (det.paths && det.paths.test(path)) score += 4;
-      if (det.value && det.value(samples, types)) score += 3;
+      const nameScore = (det.name.test(leaf) ? 2 : 0) + (det.paths && det.paths.test(path) ? 4 : 0);
+      if (nameScore === 0) continue; // el valor solo CONFIRMA un match de nombre, no matchea solo
+      const score = nameScore + (det.value && det.value(samples, types) ? 3 : 0);
       if (score > best.score) best = { field: det.field, score };
     }
     // Señales de valor inequívocas, aun sin coincidencia de nombre.
