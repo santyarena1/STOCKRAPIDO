@@ -14,6 +14,7 @@ export type SyncConnection = {
   lastSyncAt?: string | null;
   lastStatus?: string | null;
   _count?: { items: number };
+  viewConfig?: { tableColumns: string[]; filterColumns: string[] };
 };
 
 export const SYNC_PROVIDERS: Record<string, { label: string; description: string; runnerNote: string; runnerFile: string }> = {

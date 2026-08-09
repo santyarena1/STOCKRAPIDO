@@ -60,13 +60,23 @@ function Coverage({ coverage, total, sample }: { coverage: number; total: number
 }
 
 function ColumnsPageContent() {
-  const { connections, connection } = useSyncProvider();
+  const { connections, connection, refetch } = useSyncProvider();
   const [mode, setMode] = useState<'overview' | 'provider'>('overview');
   const [query, setQuery] = useState('');
   const [overview, setOverview] = useState<OverviewColumn[]>([]);
   const [columns, setColumns] = useState<RawColumn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [tableColumns, setTableColumns] = useState<string[]>([]);
+  const [filterColumns, setFilterColumns] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setTableColumns(connection?.viewConfig?.tableColumns ?? []);
+    setFilterColumns(connection?.viewConfig?.filterColumns ?? []);
+    setSaved(false);
+  }, [connection?.id, connection?.viewConfig]);
 
   useEffect(() => {
     if (mode !== 'overview') return;
@@ -100,6 +110,23 @@ function ColumnsPageContent() {
     [columns, normalizedQuery],
   );
 
+  const togglePath = (path: string, current: string[], setter: (value: string[]) => void) =>
+    setter(current.includes(path) ? current.filter((item) => item !== path) : [...current, path]);
+  const saveViewConfig = async () => {
+    if (!connection) return;
+    setSaving(true); setSaved(false); setError('');
+    try {
+      await api(`/sync/connections/${connection.id}/view-config`, {
+        method: 'PATCH',
+        body: JSON.stringify({ tableColumns, filterColumns }),
+      });
+      setSaved(true);
+      await refetch();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo guardar la selección.');
+    } finally { setSaving(false); }
+  };
+
   return (
     <Container className="max-w-[1600px] space-y-6 overflow-x-hidden">
       <PageHeader title="Columnas de proveedores" subtitle="Explorá la información disponible antes de decidir cómo mapearla." />
@@ -115,7 +142,7 @@ function ColumnsPageContent() {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar una columna..." className="w-full rounded-xl border border-hair bg-raised py-2.5 pl-9 pr-3 text-sm text-fg outline-none placeholder:text-fg-faint focus-brand" />
           </label>
         </div>
-        {mode === 'provider' && <ProviderTabs />}
+        {mode === 'provider' && <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><ProviderTabs /><div className="flex items-center gap-3">{saved && <span className="text-sm text-ok">Selección guardada</span>}<button type="button" disabled={saving || !connection} onClick={() => void saveViewConfig()} className="btn-brand rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar columnas'}</button></div></div>}
       </Card>
 
       {error && <div className="rounded-xl border border-[color:var(--crit)] bg-[var(--crit-soft)] p-4 text-sm text-crit">{error}</div>}
@@ -135,10 +162,10 @@ function ColumnsPageContent() {
         <Card className="p-0 sm:p-0">
           <div className="overflow-x-auto rounded-xl">
             <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="px-4 py-3">Path</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Cobertura</th><th className="px-4 py-3">Muestras</th><th className="px-4 py-3">¿Ya mapeado?</th></tr></thead>
+              <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="px-4 py-3">Path</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Cobertura</th><th className="px-4 py-3">Muestras</th><th className="px-4 py-3">¿Ya mapeado?</th><th className="px-4 py-3 text-center">Mostrar en tabla</th><th className="px-4 py-3 text-center">Usar como filtro</th></tr></thead>
               <tbody className="divide-y divide-[color:var(--hair-soft)]">
-                {visibleColumns.map((row) => <tr key={row.path} className="hover:bg-raised/60"><td className="px-4 py-3 font-mono text-xs text-fg">{row.path}</td><td className="px-4 py-3 text-fg-muted">{TYPE_LABELS[row.type]}</td><td className="px-4 py-3"><Coverage coverage={row.coverage} total={row.total} /></td><td className="max-w-sm px-4 py-3 text-xs text-fg-muted">{row.samples.length ? row.samples.join(' · ') : '—'}</td><td className="px-4 py-3">{row.mapped ? <span className="inline-flex rounded-md border border-[color:var(--ok)] bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Sí · {row.mappedTo}</span> : <span className="inline-flex rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-faint">Crudo</span>}</td></tr>)}
-                {!visibleColumns.length && <tr><td colSpan={5} className="px-4 py-10 text-center text-fg-muted">No hay columnas que coincidan con la búsqueda.</td></tr>}
+                {visibleColumns.map((row) => <tr key={row.path} className="hover:bg-raised/60"><td className="px-4 py-3 font-mono text-xs text-fg">{row.path}</td><td className="px-4 py-3 text-fg-muted">{TYPE_LABELS[row.type]}</td><td className="px-4 py-3"><Coverage coverage={row.coverage} total={row.total} /></td><td className="max-w-sm px-4 py-3 text-xs text-fg-muted">{row.samples.length ? row.samples.join(' · ') : '—'}</td><td className="px-4 py-3">{row.mapped ? <span className="inline-flex rounded-md border border-[color:var(--ok)] bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Sí · {row.mappedTo}</span> : <span className="inline-flex rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-faint">Crudo</span>}</td><td className="px-4 py-3 text-center"><input type="checkbox" aria-label={`Mostrar ${row.path} en tabla`} disabled={row.mapped} checked={!row.mapped && tableColumns.includes(row.path)} onChange={() => togglePath(row.path, tableColumns, setTableColumns)} /></td><td className="px-4 py-3 text-center"><input type="checkbox" aria-label={`Usar ${row.path} como filtro`} disabled={row.mapped} checked={!row.mapped && filterColumns.includes(row.path)} onChange={() => togglePath(row.path, filterColumns, setFilterColumns)} /></td></tr>)}
+                {!visibleColumns.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-fg-muted">No hay columnas que coincidan con la búsqueda.</td></tr>}
               </tbody>
             </table>
           </div>

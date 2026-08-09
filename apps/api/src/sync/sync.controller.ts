@@ -48,6 +48,16 @@ export class SyncController {
     return this.sync.getRawColumns(id, u.businessId);
   }
 
+  @Patch('connections/:id/view-config')
+  @UseGuards(JwtAuthGuard)
+  updateViewConfig(
+    @CurrentUser() u: User,
+    @Param('id') id: string,
+    @Body() body: { tableColumns?: string[]; filterColumns?: string[] },
+  ) {
+    return this.sync.updateViewConfig(id, u.businessId, body || {});
+  }
+
   @Get('connections/:id')
   @UseGuards(JwtAuthGuard)
   detail(@CurrentUser() u: User, @Param('id') id: string) {

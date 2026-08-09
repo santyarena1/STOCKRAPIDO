@@ -58,10 +58,17 @@ export class SyncService {
   // ---------- Conexiones ----------
   private sanitizeConnection<T extends Record<string, any>>(connection: T) {
     const { credentialsEncrypted, sessionEncrypted, ...safe } = connection;
+    const columnsConfig = safe.columnsConfig && typeof safe.columnsConfig === 'object' && !Array.isArray(safe.columnsConfig)
+      ? safe.columnsConfig as Record<string, any>
+      : {};
     return {
       ...safe,
       hasCredentials: !!credentialsEncrypted,
       hasSession: !!sessionEncrypted,
+      viewConfig: {
+        tableColumns: Array.isArray(columnsConfig.view?.tableColumns) ? columnsConfig.view.tableColumns : [],
+        filterColumns: Array.isArray(columnsConfig.view?.filterColumns) ? columnsConfig.view.filterColumns : [],
+      },
     };
   }
 
@@ -137,6 +144,32 @@ export class SyncService {
         coincidence: new Set(info.providers.map((provider) => provider.provider)).size,
       }))
       .sort((a, b) => b.coincidence - a.coincidence || a.path.localeCompare(b.path));
+  }
+
+  async updateViewConfig(
+    id: string,
+    businessId: string,
+    input: { tableColumns?: unknown; filterColumns?: unknown },
+  ) {
+    const connection = await this.prisma.syncConnection.findFirst({ where: { id, businessId } });
+    if (!connection) throw new NotFoundException('Conexión no encontrada');
+    const normalize = (value: unknown, label: string) => {
+      if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+        throw new BadRequestException(`${label} debe ser una lista de paths.`);
+      }
+      return [...new Set(value.map((item) => String(item).trim()).filter(Boolean))].slice(0, 200);
+    };
+    const tableColumns = normalize(input?.tableColumns ?? [], 'tableColumns');
+    const filterColumns = normalize(input?.filterColumns ?? [], 'filterColumns');
+    const current = connection.columnsConfig && typeof connection.columnsConfig === 'object' && !Array.isArray(connection.columnsConfig)
+      ? connection.columnsConfig as Record<string, unknown>
+      : {};
+    const columnsConfig = { ...current, view: { tableColumns, filterColumns } };
+    const updated = await this.prisma.syncConnection.update({
+      where: { id },
+      data: { columnsConfig: columnsConfig as Prisma.InputJsonValue },
+    });
+    return this.sanitizeConnection(updated);
   }
 
   async createConnection(businessId: string, data: ConnInput) {
