@@ -16,13 +16,20 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { SyncService } from './sync.service';
 import { NormalizedItem } from './mondelez.provider';
 
-type User = { businessId: string };
+type User = { businessId: string; role?: string };
 
 @Controller('sync')
 export class SyncController {
   constructor(private sync: SyncService) {}
 
   // ----- Conexiones (requieren login) -----
+  @Get('proxy-check')
+  @UseGuards(JwtAuthGuard)
+  proxyCheck(@CurrentUser() u: User) {
+    if (u.role !== 'OWNER' && u.role !== 'ADMIN') throw new ForbiddenException('Solo administradores pueden verificar el proxy.');
+    return this.sync.proxyCheck();
+  }
+
   @Get('connections')
   @UseGuards(JwtAuthGuard)
   list(@CurrentUser() u: User) {

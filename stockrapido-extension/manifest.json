@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Sincronizador StockRápido",
+  "version": "0.1.0",
+  "description": "Sincroniza Tokin con StockRápido usando la sesión del navegador.",
+  "permissions": ["tabs", "scripting", "storage"],
+  "host_permissions": [
+    "https://tokintienda.com.ar/*",
+    "https://tokintienda.cl/*",
+    "https://stockrapido-api.vercel.app/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" },
+  "content_scripts": [{
+    "matches": ["https://tokintienda.com.ar/*", "https://tokintienda.cl/*"],
+    "js": ["content.js"],
+    "run_at": "document_start",
+    "all_frames": false
+  }],
+  "web_accessible_resources": [{
+    "resources": ["inject.js"],
+    "matches": ["https://tokintienda.com.ar/*", "https://tokintienda.cl/*"]
+  }]
+}

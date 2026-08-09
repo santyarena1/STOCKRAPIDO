@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MondelezProvider, NormalizedItem } from './mondelez.provider';
 import { bulkCostToUnit, decorateSyncedProductUnits } from '../common/units';
 import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
+import { TokinProvider } from './tokin.provider';
+import { proxiedFetch } from './proxied-fetch';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -42,6 +44,7 @@ export class SyncService {
   constructor(
     private prisma: PrismaService,
     private mondelez: MondelezProvider,
+    private tokin: TokinProvider,
   ) {}
 
   // ---------- Conexiones ----------
@@ -383,25 +386,55 @@ export class SyncService {
   }
 
   // ---------- Sync de catálogo (público, server-side) ----------
+  async proxyCheck() {
+    try {
+      const [site, ipResponse] = await Promise.all([
+        proxiedFetch('https://tokintienda.com.ar/', { redirect: 'follow' }),
+        proxiedFetch('https://api.ipify.org?format=json', { headers: { Accept: 'application/json' } }),
+      ]);
+      const ipPayload: any = ipResponse.ok ? await ipResponse.json() : null;
+      return { ok: site.ok && ipResponse.ok, status: site.status, ip: typeof ipPayload?.ip === 'string' ? ipPayload.ip : null };
+    } catch {
+      return { ok: false, status: 0, ip: null };
+    }
+  }
+
   async runCatalogSync(id: string, businessId: string) {
     const conn = await this.getConnection(id, businessId);
-    if (conn.provider === 'juntosplus' || conn.provider === 'tokin') {
-      const providerName = conn.provider === 'tokin' ? 'Tokin' : 'Juntos+';
+    if (conn.provider === 'juntosplus') {
       throw new BadRequestException(
-        `${providerName} se sincroniza con el runner local (no hay catálogo público en el servidor).`,
+        'Juntos+ se sincroniza con el runner local (no hay catálogo público en el servidor).',
       );
     }
-    if (conn.provider !== 'mondelez') {
+    if (conn.provider !== 'mondelez' && conn.provider !== 'tokin') {
       throw new BadRequestException(
         `El proveedor ${conn.provider} no ofrece sincronización pública en el servidor. Usá su runner local.`,
       );
+    }
+    if (conn.provider === 'tokin' && !process.env.PROXY_URL_AR?.trim()) {
+      throw new BadRequestException('Falta configurar el proxy residencial (PROXY_URL_AR) para sincronizar Tokin.');
     }
     const run = await this.prisma.syncRun.create({
       data: { connectionId: id, status: 'running' },
     });
     try {
-      const items = await this.mondelez.fetchCatalog();
-      const upserted = await this.upsertItems(businessId, id, items, false);
+      let items: NormalizedItem[];
+      let withCost = false;
+      if (conn.provider === 'tokin') {
+        const secret = await this.prisma.syncConnection.findFirst({ where: { id, businessId }, select: { credentialsEncrypted: true } });
+        let credentials: Record<string, string> | null = null;
+        if (secret?.credentialsEncrypted) {
+          try { credentials = JSON.parse(decryptSecret(secret.credentialsEncrypted)); }
+          catch (error) { this.logger.warn(`No se pudieron descifrar las credenciales Tokin: ${error instanceof Error ? error.message : String(error)}`); }
+        }
+        const result = await this.tokin.fetchCatalog(credentials);
+        items = result.items;
+        withCost = result.authenticated;
+      } else {
+        items = await this.mondelez.fetchCatalog();
+      }
+      const upserted = await this.upsertItems(businessId, id, items, withCost);
+      const withPrice = items.filter((item) => item.cost != null).length;
       const finished = await this.prisma.syncRun.update({
         where: { id: run.id },
         data: {
@@ -409,7 +442,9 @@ export class SyncService {
           itemsFetched: items.length,
           itemsUpserted: upserted,
           finishedAt: new Date(),
-          message: 'Catálogo sincronizado (sin precio real)',
+          message: withCost
+            ? `Catálogo Tokin autenticado: ${withPrice} con costo B2B`
+            : 'Catálogo sincronizado sin costo autenticado; se preservaron costos existentes',
         },
       });
       await this.prisma.syncConnection.update({
@@ -878,7 +913,7 @@ export class SyncService {
   // ---------- Cron: sync automático de catálogo ----------
   async runAllAuto() {
     const conns = await this.prisma.syncConnection.findMany({
-      where: { autoSync: true, enabled: true, provider: 'mondelez' },
+      where: { autoSync: true, enabled: true, provider: { in: ['mondelez', 'tokin'] } },
     });
     const results: any[] = [];
     for (const c of conns) {

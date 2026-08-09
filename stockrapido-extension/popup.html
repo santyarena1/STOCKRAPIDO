@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sincronizador StockRápido</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <main>
+    <header><span class="logo">SR</span><div><h1>Sincronizador</h1><p>StockRápido · Tokin</p></div></header>
+    <section id="login-view" hidden>
+      <h2>Ingresá a StockRápido</h2>
+      <form id="login-form"><label>Email<input id="email" type="email" autocomplete="username" required></label><label>Contraseña<input id="password" type="password" autocomplete="current-password" required></label><button type="submit">Conectar</button></form>
+    </section>
+    <section id="connected-view" hidden>
+      <p class="connected">Conectado como <strong id="connected-email"></strong></p>
+      <button id="sync" class="primary">Sincronizar Tokin ahora</button>
+      <div id="progress" class="progress">Listo para sincronizar.</div>
+      <button id="logout" class="secondary">Cerrar sesión</button>
+    </section>
+    <p id="error" class="error" hidden></p>
+  </main><script src="popup.js"></script>
+</body>
+</html>

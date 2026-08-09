@@ -14,8 +14,10 @@ Configuración en sync-runner/.env:
 
 Uso:
     python tokin_sync_runner.py
+    TOKIN_AUTO=1 python tokin_sync_runner.py  # headless, sin intervención
 
-El login de Tokin es interactivo. El runner escucha las respuestas de
+Por defecto el login de Tokin es interactivo. Con TOKIN_AUTO=1 usa la sesión
+y las credenciales guardadas en StockRápido sin llamar a input(). El runner escucha las respuestas de
 `/store/api/search`, recorre las vistas de catálogo que encuentra y conserva
 el producto original completo en `raw`. No imprime cookies ni tokens.
 """
@@ -49,6 +51,9 @@ SR_EMAIL = os.environ.get("SR_EMAIL", "")
 SR_PASSWORD = os.environ.get("SR_PASSWORD", "")
 TOKIN_URL = "https://tokintienda.com.ar/store/home"
 PUSH_BATCH = 100
+TOKIN_AUTO = os.environ.get("TOKIN_AUTO", "").strip() == "1"
+AUTO_CATALOG_LIMIT = 5000
+AUTO_PAGE_SIZE = 50
 
 if not SR_EMAIL or not SR_PASSWORD:
     raise SystemExit("Faltan SR_EMAIL/SR_PASSWORD en sync-runner/.env.")
@@ -199,7 +204,7 @@ def extract_products(payload):
 
     def walk(node):
         if isinstance(node, dict):
-            if node.get("productId") is not None and node.get("name") is not None:
+            if node.get("productId") is not None and (node.get("name") is not None or node.get("productName") is not None):
                 products.append(node)
                 return
             for value in node.values():
@@ -365,7 +370,7 @@ def normalize(product):
         "sku": str(sku_id) if sku_id is not None else None,
         "ean": str(unit_variant.get("ean")) if unit_variant.get("ean") else None,
         "eanUnit": str(unit_variant.get("ean")) if unit_variant.get("ean") else None,
-        "name": product.get("name") or f"Producto {product.get('productId')}",
+        "name": product.get("name") or product.get("productName") or f"Producto {product.get('productId')}",
         "ivaAlicuota": number(product.get("ivaAlicuota")),
         "unitsPerBox": str(units_per_box) if units_per_box and units_per_box > 1 else None,
         "basePrice": price_un,
@@ -409,6 +414,49 @@ def sweep_page(page):
             break
 
 
+def harvest_api_catalog(page, products):
+    """Pagina la búsqueda usando el request context del navegador (comparte cookies)."""
+    endpoints = [
+        "https://tokintienda.com.ar/store/api/search?_from={start}&_to={end}",
+        "https://tokintienda.com.ar/store/api/search?from={start}&to={end}",
+        "https://tokintienda.com.ar/api/catalog_system/pub/products/search?_from={start}&_to={end}",
+    ]
+    for start in range(0, AUTO_CATALOG_LIMIT, AUTO_PAGE_SIZE):
+        end = start + AUTO_PAGE_SIZE - 1
+        page_products = []
+        for endpoint in endpoints:
+            try:
+                response = page.context.request.get(endpoint.format(start=start, end=end), timeout=60000)
+                if not response.ok:
+                    continue
+                extracted = extract_products(response.json())
+                if extracted:
+                    page_products = extracted
+                    break
+            except Exception:
+                continue
+        if not page_products:
+            print(f"  página _from={start} · sin productos; fin de paginación")
+            break
+        for product in page_products:
+            products[str(product["productId"])] = product
+        print(f"  página _from={start} · total {len(products)}")
+        if len(page_products) < AUTO_PAGE_SIZE:
+            break
+
+
+def appears_logged_in(page):
+    if "/login" in page.url.lower():
+        return False
+    try:
+        password = page.locator("input[type=password]").first
+        if password.is_visible():
+            return False
+    except Exception:
+        pass
+    return True
+
+
 def main():
     print("Iniciando sesión en StockRápido…")
     sr_token = sr_login()
@@ -421,9 +469,10 @@ def main():
     order_responses = []
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
+        browser = playwright.chromium.launch(headless=TOKIN_AUTO)
         context = browser.new_context()
         stored_session = secrets.get("session")
+        had_stored_cookies = isinstance(stored_session, dict) and bool(stored_session.get("cookies"))
         if isinstance(stored_session, dict) and isinstance(stored_session.get("cookies"), list):
             try:
                 context.add_cookies(stored_session["cookies"])
@@ -452,8 +501,17 @@ def main():
 
         page.on("response", capture_response)
         page.goto(TOKIN_URL, wait_until="domcontentloaded", timeout=90000)
-        try_credential_login(page, credentials)
-        input("Entrá al catálogo de Tokin (logueate si hace falta) y presioná Enter cuando estés dentro: ")
+        login_attempted = try_credential_login(page, credentials)
+        if login_attempted:
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=30000)
+            except Exception:
+                pass
+            page.wait_for_timeout(3000)
+        if not TOKIN_AUTO:
+            input("Entrá al catálogo de Tokin (logueate si hace falta) y presioná Enter cuando estés dentro: ")
+        logged_in = appears_logged_in(page) and (had_stored_cookies or login_attempted)
+        print(f"  sesión Tokin: {'logueada' if logged_in else 'no confirmada'}")
         cookies = context.cookies()
         sr_save_session(sr_token, connection_id, {"cookies": cookies}, cookie_expiry_iso(cookies))
         print("  Sesión guardada de forma cifrada en StockRápido.")
@@ -477,7 +535,11 @@ def main():
             except Exception as error:
                 print(f"  vista {index}: {str(error)[:90]}")
 
-        input("Si faltan categorías, recorrelas en el navegador. Presioná Enter para finalizar y enviar: ")
+        if TOKIN_AUTO:
+            print("Paginando API de catálogo Tokin…")
+            harvest_api_catalog(page, products)
+        else:
+            input("Si faltan categorías, recorrelas en el navegador. Presioná Enter para finalizar y enviar: ")
         page.wait_for_timeout(1000)
         print("Cosechando cuenta corriente Tokin…")
         try:
@@ -508,13 +570,26 @@ def main():
                 sweep_page(page)
         except Exception as error:
             print(f"  No se pudo abrir el historial de pedidos: {str(error)[:100]}")
+        logged_in = logged_in or (appears_logged_in(page) and (had_stored_cookies or login_attempted))
         browser.close()
 
     items = [normalize(product) for product in products.values()]
     with_variants = sum(1 for item in items if item.get("variants"))
-    print(f"\nCatálogo Tokin: {len(items)} productos; {with_variants} con variantes.")
+    account_payload = normalize_account_payload(
+        account_responses["summary"],
+        account_responses["microcredits"],
+        account_responses["checks"],
+    ) if any(account_responses.values()) else None
+    orders = normalize_order_payloads(order_responses) if order_responses else []
+    print("\nResumen Tokin")
+    print(f"  sesión: {'logueada' if logged_in else 'no confirmada'}")
+    print(f"  productos: {len(items)} ({with_variants} con variantes)")
+    print(f"  facturas: {len(account_payload['invoices']) if account_payload else 0}")
+    print(f"  pedidos: {len(orders)}")
     if not items:
-        raise SystemExit("No se capturaron productos. Navegá el catálogo antes de finalizar.")
+        if TOKIN_AUTO and not logged_in:
+            raise SystemExit("No hay sesión válida ni credenciales de Tokin cargadas; cargalas en Configuración → Proveedores")
+        raise SystemExit("No se capturaron productos del catálogo Tokin.")
 
     pushed = 0
     for start in range(0, len(items), PUSH_BATCH):
@@ -524,13 +599,8 @@ def main():
         print(f"  push {min(start + len(batch), len(items))}/{len(items)}")
         time.sleep(0.1)
     print(f"Listo. {pushed} productos Tokin sincronizados.")
-    if any(account_responses.values()):
+    if account_payload:
         try:
-            account_payload = normalize_account_payload(
-                account_responses["summary"],
-                account_responses["microcredits"],
-                account_responses["checks"],
-            )
             sr_push_account(sr_token, connection_id, account_payload)
             print(f"Cuenta corriente sincronizada: {len(account_payload['invoices'])} facturas y {len(account_payload['credits'])} líneas de crédito.")
         except Exception as error:
@@ -539,7 +609,6 @@ def main():
         print("Sin datos de cuenta corriente; el catálogo quedó sincronizado igualmente.")
     if order_responses:
         try:
-            orders = normalize_order_payloads(order_responses)
             sr_push_orders(sr_token, connection_id, orders)
             print(f"Historial sincronizado: {len(orders)} pedidos Tokin.")
         except Exception as error:
