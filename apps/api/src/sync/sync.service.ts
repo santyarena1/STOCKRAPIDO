@@ -285,13 +285,18 @@ export class SyncService {
       groups.set(detection.field, group);
     }
     return [...groups.values()]
-      .map((group) => ({
-        suggestedField: group.field,
-        label: group.field,
-        confidence: group.confidence,
-        providers: [...new Set(group.members.flatMap((m) => m.providers.map((p) => p.provider)))],
-        columns: group.members.sort((a, b) => rank(b.confidence) - rank(a.confidence)),
-      }))
+      .map((group) => {
+        const providers = [...new Set(group.members.flatMap((m) => m.providers.map((p) => p.provider)))];
+        // El acuerdo entre 2+ proveedores es señal fuerte: sube la confianza un escalón.
+        const confidence = providers.length >= 2 ? (group.confidence === 'baja' ? 'media' : 'alta') : group.confidence;
+        return {
+          suggestedField: group.field,
+          label: group.field,
+          confidence,
+          providers,
+          columns: group.members.sort((a, b) => rank(b.confidence) - rank(a.confidence)),
+        };
+      })
       .sort((a, b) => rank(b.confidence) - rank(a.confidence) || b.providers.length - a.providers.length || a.label.localeCompare(b.label));
   }
 
