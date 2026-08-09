@@ -38,11 +38,25 @@ type OverviewColumn = {
   providers: ProviderColumn[];
 };
 
+type SuggestionColumn = { path: string; type: ColumnType; providers: { provider: string; connectionId: string; sample: string | null }[] };
+type Suggestion = { suggestedField: string | null; label: string; confidence: 'alta' | 'media' | 'baja'; providers: string[]; columns: SuggestionColumn[] };
+
 const TYPE_LABELS: Record<ColumnType, string> = {
   string: 'Texto',
   number: 'Número',
   boolean: 'Sí/No',
   mixed: 'Mixto',
+};
+
+const TARGET_FIELDS = [
+  'name', 'brand', 'category', 'subcategory', 'ean', 'eanUnit', 'eanBox', 'sku',
+  'supplierRef', 'externalId', 'cost', 'basePrice', 'listPrice', 'ivaAlicuota',
+  'stock', 'imageUrl', 'link', 'weight', 'unitsPerBox', 'unitsPerDisplay', 'displaysPerBox',
+];
+const CONF_STYLE: Record<string, string> = {
+  alta: 'border-[color:var(--ok)] bg-[var(--ok-soft)] text-ok',
+  media: 'border-[color:var(--warn)] bg-[var(--warn-soft)] text-warn',
+  baja: 'border-hair bg-raised2 text-fg-muted',
 };
 
 function Coverage({ coverage, total, sample }: { coverage: number; total: number; sample?: string | null }) {
@@ -71,6 +85,11 @@ function ColumnsPageContent() {
   const [filterColumns, setFilterColumns] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [loadingSug, setLoadingSug] = useState(false);
+  const [targets, setTargets] = useState<Record<number, string>>({});
+  const [approved, setApproved] = useState<Record<number, boolean>>({});
+  const [approving, setApproving] = useState<number | null>(null);
 
   useEffect(() => {
     setTableColumns(connection?.viewConfig?.tableColumns ?? []);
@@ -110,6 +129,31 @@ function ColumnsPageContent() {
     [columns, normalizedQuery],
   );
 
+  const loadSuggestions = async () => {
+    setLoadingSug(true); setError('');
+    try {
+      const data = await api('/sync/mapping-suggestions') as Suggestion[];
+      setSuggestions(data);
+      const initial: Record<number, string> = {};
+      data.forEach((item, index) => { if (item.suggestedField) initial[index] = item.suggestedField; });
+      setTargets(initial); setApproved({});
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudieron traer las sugerencias.');
+    } finally { setLoadingSug(false); }
+  };
+  const approveSuggestion = async (index: number, suggestion: Suggestion) => {
+    const field = targets[index];
+    if (!field) return;
+    setApproving(index); setError('');
+    try {
+      const members = suggestion.columns.flatMap((col) => col.providers.map((p) => ({ connectionId: p.connectionId, path: col.path })));
+      await api('/sync/mapping-suggestions/approve', { method: 'POST', body: JSON.stringify({ field, members }) });
+      setApproved((prev) => ({ ...prev, [index]: true }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo aprobar el mapeo.');
+    } finally { setApproving(null); }
+  };
+
   const togglePath = (path: string, current: string[], setter: (value: string[]) => void) =>
     setter(current.includes(path) ? current.filter((item) => item !== path) : [...current, path]);
   const saveViewConfig = async () => {
@@ -131,7 +175,10 @@ function ColumnsPageContent() {
     <Container className="max-w-[1600px] space-y-6 overflow-x-hidden">
       <PageHeader title="Columnas de proveedores" subtitle="Explorá la información disponible antes de decidir cómo mapearla." />
       <Card className="space-y-4">
-        <p className="text-sm leading-6 text-fg-muted">Estas son todas las columnas que trae cada proveedor. Después vas a poder elegir cuáles usar y a qué campo mapearlas.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-fg-muted sm:max-w-2xl">Estas son todas las columnas que trae cada proveedor. Después vas a poder elegir cuáles usar y a qué campo mapearlas.</p>
+          <button type="button" disabled={loadingSug} onClick={() => void loadSuggestions()} className="btn-brand shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loadingSug ? 'Analizando…' : '✨ Sugerir mapeo'}</button>
+        </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex w-full rounded-xl border border-hair bg-raised p-1 sm:w-auto">
             <button type="button" onClick={() => setMode('overview')} className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${mode === 'overview' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}>Comparación (todos)</button>
@@ -146,6 +193,52 @@ function ColumnsPageContent() {
       </Card>
 
       {error && <div className="rounded-xl border border-[color:var(--crit)] bg-[var(--crit-soft)] p-4 text-sm text-crit">{error}</div>}
+
+      {suggestions && (
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-fg">Sugerencias de mapeo</h3>
+              <p className="text-sm text-fg-muted">Columnas que parecen la misma información. Revisá el campo destino y aprobá lo que corresponda.</p>
+            </div>
+            <button type="button" onClick={() => setSuggestions(null)} className="rounded-lg border border-hair px-3 py-1.5 text-xs text-fg-muted hover:text-fg">Cerrar</button>
+          </div>
+          {!suggestions.length && <p className="py-6 text-center text-sm text-fg-muted">No se encontraron columnas equivalentes para sugerir.</p>}
+          <div className="space-y-3">
+            {suggestions.map((suggestion, index) => (
+              <div key={index} className="rounded-xl border border-hair-soft bg-raised p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium capitalize ${CONF_STYLE[suggestion.confidence]}`}>Confianza {suggestion.confidence}</span>
+                    <span className="text-xs text-fg-faint">{suggestion.providers.join(' + ')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-fg-muted">Mapear a:</span>
+                    <select value={targets[index] ?? ''} onChange={(event) => setTargets((prev) => ({ ...prev, [index]: event.target.value }))} className="rounded-lg border border-hair bg-surface px-2.5 py-1.5 text-sm text-fg outline-none focus-brand">
+                      <option value="">— elegir —</option>
+                      {TARGET_FIELDS.map((field) => <option key={field} value={field}>{field}</option>)}
+                    </select>
+                    {approved[index] ? (
+                      <span className="inline-flex items-center rounded-lg border border-[color:var(--ok)] bg-[var(--ok-soft)] px-3 py-1.5 text-sm font-medium text-ok">✓ Aprobado</span>
+                    ) : (
+                      <button type="button" disabled={!targets[index] || approving === index} onClick={() => void approveSuggestion(index, suggestion)} className="btn-brand rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">{approving === index ? 'Guardando…' : 'Aprobar'}</button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-1.5">
+                  {suggestion.columns.map((col) => (
+                    <div key={col.path} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded bg-raised2 px-2 py-0.5 font-medium text-fg-muted">{col.providers.map((p) => p.provider).join(', ')}</span>
+                      <span className="font-mono text-fg">{col.path}</span>
+                      {col.providers[0]?.sample && <span className="text-fg-faint">· ej: {col.providers[0].sample}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       {loading ? <Loader /> : mode === 'overview' ? (
         <Card className="p-0 sm:p-0">
           <div className="overflow-x-auto rounded-xl">
