@@ -19,8 +19,8 @@ export type SyncConnection = {
 
 export const SYNC_PROVIDERS: Record<string, { label: string; description: string; runnerNote: string; runnerFile: string }> = {
   mondelez: { label: 'Mondelez', description: 'Catálogo y precios de Mi Tienda Mondelez', runnerNote: 'El runner local trae el precio B2B real con tu cuenta de Mi Tienda Mondelez.', runnerFile: 'mondelez_sync_runner.py' },
-  juntosplus: { label: 'Juntos+', description: 'Catálogo Coca-Cola FEMSA', runnerNote: 'Juntos+ se sincroniza con el runner local mediante el acceso con OTP.', runnerFile: 'juntosplus_sync_runner.py' },
-  tokin: { label: 'Tokin (Arcor)', description: 'Catálogo Tokin con variantes UN/DI/BU', runnerNote: 'El runner local captura el catálogo, los códigos y las variantes de Tokin.', runnerFile: 'tokin_sync_runner.py' },
+  juntosplus: { label: 'Juntos+', description: 'Catálogo Coca-Cola FEMSA', runnerNote: 'Juntos+ se sincroniza con el runner local mediante el login de Coca-Cola (Microsoft Azure B2C).', runnerFile: 'juntosplus_sync_runner.py' },
+  tokin: { label: 'Tokin (Arcor)', description: 'Catálogo, costos, cuenta y pedidos mediante la extensión de navegador', runnerNote: 'Tokin se sincroniza desde Chrome o Edge con la extensión de StockRápido.', runnerFile: 'tokin_sync_runner.py' },
 };
 
 const DEFAULT_CONNECTIONS = [
