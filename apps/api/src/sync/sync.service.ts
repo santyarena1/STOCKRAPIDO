@@ -207,6 +207,19 @@ export class SyncService {
     return result;
   }
 
+  private columnPref(field: string, path: string): number {
+    let p = 0;
+    const lp = path.toLowerCase();
+    if (/withtax|taxgroup|amount/.test(lp)) p -= 4;
+    const unitFields = ['cost', 'listprice', 'baseprice', 'stock', 'ean', 'eanunit', 'sku', 'supplierref', 'name'];
+    if (unitFields.includes(field.toLowerCase())) {
+      if (/(^|[^a-z])(bu|di)([^a-z]|$)|bulto|box|display/.test(lp)) p -= 2;
+      if (/(^|[^a-z])un([^a-z]|$)|unidad|unit/.test(lp)) p += 1;
+    }
+    p -= 0.2 * ((path.match(/\.|\[\]/g) || []).length); // preferir columnas menos anidadas
+    return p;
+  }
+
   async getFieldMapping(id: string, businessId: string) {
     const discovery = await this.rawColumnsForConnection(id, businessId, false);
     const connection = await this.prisma.syncConnection.findFirst({
@@ -225,8 +238,13 @@ export class SyncService {
       candidates.push({ columnPath: column.path, confidence: detection.confidence, score: detection.score });
       byField.set(field, candidates);
     }
-    for (const candidates of byField.values()) {
-      candidates.sort((a, b) => b.score - a.score || rank(b.confidence) - rank(a.confidence) || a.columnPath.localeCompare(b.columnPath));
+    for (const [field, candidates] of byField.entries()) {
+      candidates.sort(
+        (a, b) =>
+          (b.score + this.columnPref(field, b.columnPath)) - (a.score + this.columnPref(field, a.columnPath)) ||
+          rank(b.confidence) - rank(a.confidence) ||
+          a.columnPath.localeCompare(b.columnPath),
+      );
     }
     const used = new Set<string>();
     const suggestions = FIELD_MAP_TARGETS.map((field) => {
