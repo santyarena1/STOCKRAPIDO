@@ -27,7 +27,7 @@ function extractProducts(payload) {
   const walk = (node) => {
     if (Array.isArray(node)) return node.forEach(walk);
     if (!node || typeof node !== 'object') return;
-    if (node.productId != null && (node.name != null || node.productName != null)) {
+    if (node.productId != null && (node.name != null || node.productName != null || node.priceUN != null || node.variants != null || node.skus != null)) {
       products.push(node);
       return;
     }
@@ -73,18 +73,41 @@ function normalizeVariant(raw) {
   };
 }
 
+const asList = (value) => (Array.isArray(value) ? value : value == null ? [] : [value]);
+const catName = (value) => (typeof value === 'string' ? value : value?.name || value?.title || value?.label || null);
+const boolOrNull = (value) => (typeof value === 'boolean' ? value : value == null ? null : /^(1|true|si|sí|yes)$/i.test(String(value)) ? true : /^(0|false|no)$/i.test(String(value)) ? false : null);
+
 function normalizeProduct(product) {
   const variants = Array.isArray(product.variants) ? product.variants.filter((item) => item && typeof item === 'object').map(normalizeVariant) : [];
   const unit = variants.find((item) => item.uom === 'UN') || variants[0] || {};
-  const skus = Array.isArray(product.skus) ? product.skus : product.skus ? [product.skus] : [];
-  const supplierRef = skus.find((sku) => sku?.ref_id || sku?.refId)?.ref_id || skus.find((sku) => sku?.ref_id || sku?.refId)?.refId || product.refId || unit.refId;
+  const box = variants.find((item) => item.uom === 'BU');
+  const skus = asList(product.skus);
+  const skuRef = skus.find((sku) => sku?.ref_id || sku?.refId);
+  const supplierRef = skuRef?.ref_id || skuRef?.refId || product.refId || unit.refId;
+  const skuIdRaw = product.skuId || skus.find((sku) => sku?.sku_id || sku?.skuId)?.sku_id || skus.find((sku) => sku?.sku_id || sku?.skuId)?.skuId || unit.skuId;
   const price = num(product.priceUN);
   const stock = integer(product.stockUN);
+  const cats = asList(pick(product, 'categories', 'categoryTree', 'categorias', 'categoryPath')).map(catName).filter(Boolean);
+  const upd = integer(product.unitsUNPerDI);
+  const dpb = integer(product.unitsDIPerBU);
+  const upb = integer(product.unitsUNPerBU);
   const item = {
     externalId: String(product.productId), supplierRef: supplierRef != null ? String(supplierRef) : null,
-    sku: product.skuId != null ? String(product.skuId) : unit.skuId, ean: unit.ean || null, eanUnit: unit.ean || null,
-    name: product.name || product.productName || `Producto ${product.productId}`, ivaAlicuota: num(product.ivaAlicuota),
-    unitsPerBox: integer(product.unitsUNPerBU) > 1 ? String(integer(product.unitsUNPerBU)) : null,
+    sku: skuIdRaw != null ? String(skuIdRaw) : null, ean: unit.ean || null, eanUnit: unit.ean || null,
+    eanBox: box?.ean || pick(product, 'eanBox', 'eanBU') || null,
+    name: product.name || product.productName || `Producto ${product.productId}`,
+    brand: pick(product, 'brand', 'brandName', 'marca'),
+    category: cats[0] || pick(product, 'category', 'departmentName', 'department'),
+    subcategory: cats[1] || pick(product, 'subcategory', 'subCategory'),
+    imageUrl: pick(product, 'imageUrl', 'image', 'thumbnail') || catName(asList(product.images)[0]) || asList(product.images)[0]?.imageUrl || null,
+    link: pick(product, 'link', 'url', 'detailUrl', 'productUrl'),
+    ivaAlicuota: num(product.ivaAlicuota),
+    unitsPerBox: upb && upb > 1 ? String(upb) : null,
+    unitsPerDisplay: upd != null ? String(upd) : null,
+    displaysPerBox: dpb != null ? String(dpb) : null,
+    weight: pick(product, 'weight', 'netWeight', 'peso'), format: pick(product, 'format', 'formato'),
+    flavor: pick(product, 'flavor', 'sabor'), presentation: pick(product, 'presentation', 'presentacion'),
+    retornable: boolOrNull(pick(product, 'retornable', 'returnable')),
     basePrice: price, cost: price, listPrice: num(product.listPriceUN), available: stock == null || stock > 0,
     stock, variants, raw: product,
   };
@@ -167,8 +190,8 @@ function collectProducts(payload) {
   let added = 0;
   for (const product of extractProducts(payload)) {
     const key = String(product.productId);
-    if (!run.products.has(key)) added += 1;
-    run.products.set(key, product);
+    if (!run.products.has(key)) { added += 1; run.products.set(key, product); }
+    else run.products.set(key, { ...run.products.get(key), ...product });
   }
   return added;
 }
