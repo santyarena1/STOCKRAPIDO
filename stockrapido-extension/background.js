@@ -157,37 +157,97 @@ async function messageTab(tabId, message, retries = 10) {
   return null;
 }
 
+async function waitForTemplate(timeout = 8000) {
+  const started = Date.now();
+  while (run && !run.searchTemplate && Date.now() - started < timeout) await sleep(250);
+  return run?.searchTemplate || null;
+}
+
+function collectProducts(payload) {
+  let added = 0;
+  for (const product of extractProducts(payload)) {
+    const key = String(product.productId);
+    if (!run.products.has(key)) added += 1;
+    run.products.set(key, product);
+  }
+  return added;
+}
+
+async function scrollHarvest(tabId, label, maxScrolls = 40) {
+  let stable = 0;
+  let previous = run.products.size;
+  for (let index = 0; index < maxScrolls && stable < 3; index += 1) {
+    await messageTab(tabId, { type: 'SCROLL_ONCE' });
+    await sleep(1200);
+    const current = run.products.size;
+    stable = current === previous ? stable + 1 : 0;
+    previous = current;
+    await setProgress('running', `${label} · scroll ${index + 1}`, { products: current });
+  }
+}
+
+async function harvestCurrentPage(tabId, label) {
+  let template = await waitForTemplate(8000);
+  if (!template) {
+    await setProgress('running', `${label} · activando catálogo…`, { products: run.products.size });
+    for (let index = 0; index < 8 && !template; index += 1) {
+      await messageTab(tabId, { type: 'SCROLL_ONCE' });
+      await sleep(1100);
+      template = run.searchTemplate;
+    }
+  }
+  let replayWorked = false;
+  if (template) {
+    let replayAdded = 0;
+    for (let page = 0; page < 100 && run.products.size < 5000; page += 1) {
+      const response = await messageTab(tabId, { type: 'REPLAY_SEARCH', template, page, size: 50 }, 3);
+      if (!response?.ok) break;
+      const added = collectProducts(response.payload);
+      replayAdded += added;
+      await setProgress('running', `${label} · página ${page + 1}`, { products: run.products.size });
+      if (added === 0 && page > 0) break;
+    }
+    replayWorked = replayAdded > 0;
+  }
+  await scrollHarvest(tabId, replayWorked ? `${label} · cobertura por scroll` : `${label} · fallback por scroll`);
+}
+
 async function synchronize() {
   const stored = await chrome.storage.local.get(['accessToken']);
   if (!stored.accessToken) throw new Error('Iniciá sesión en StockRápido primero.');
   const connections = await api('/sync/connections', stored.accessToken);
   const connection = connections.find((item) => item.provider === 'tokin');
   if (!connection) throw new Error('No existe una conexión Tokin. Creala en Configuración → Proveedores.');
-  run = { tabId: null, products: new Map(), summary: [], microcredits: [], checks: [], orders: [] };
+  run = { tabId: null, products: new Map(), searchTemplate: null, rich: { invoice: [], microcredit: [], checks: [], orders: [] } };
   await setProgress('running', 'Abriendo Tokin…', { products: 0 });
   const tabs = await chrome.tabs.query({ url: ['https://tokintienda.com.ar/*', 'https://tokintienda.cl/*'] });
   const tab = tabs[0] || await chrome.tabs.create({ url: TOKIN_HOME, active: true });
   run.tabId = tab.id;
-  if (!tab.url?.startsWith('https://tokintienda.com.ar/')) await navigate(tab.id, TOKIN_HOME);
-  else { await chrome.tabs.update(tab.id, { active: true }); await sleep(1200); }
-  await messageTab(tab.id, { type: 'SWEEP_PAGE' });
+  run.searchTemplate = null;
+  await navigate(tab.id, 'https://tokintienda.com.ar/store/search?q=&size=n_50_n');
+  await harvestCurrentPage(tab.id, 'Catálogo general');
   const response = await messageTab(tab.id, { type: 'GET_CATALOG_LINKS' });
   const links = [...new Set((response?.links || []).filter((url) => /^https:\/\/([^.]+\.)?tokintienda\.(com\.ar|cl)\//i.test(url)))].slice(0, 200);
   for (let index = 0; index < links.length; index += 1) {
+    run.searchTemplate = null;
     await navigate(tab.id, links[index]);
-    await messageTab(tab.id, { type: 'SWEEP_PAGE' });
-    await setProgress('running', `Catálogo ${index + 1}/${links.length}`, { products: run.products.size });
+    await harvestCurrentPage(tab.id, `Categoría ${index + 1}/${links.length}`);
   }
-  await setProgress('running', 'Cosechando cuenta corriente…', { products: run.products.size });
-  await navigate(tab.id, 'https://tokintienda.com.ar/store/invoice-summary');
-  await sleep(3500);
-  await setProgress('running', 'Cosechando pedidos…', { products: run.products.size });
-  await navigate(tab.id, 'https://tokintienda.com.ar/store/orders');
-  await messageTab(tab.id, { type: 'SWEEP_PAGE' });
-  await sleep(2500);
+
+  // Cuenta corriente, facturas, microcréditos, TokinChecks y pedidos (best-effort, no rompe el catálogo).
+  try {
+    await setProgress('running', 'Trayendo cuenta corriente y pedidos…', { products: run.products.size });
+    await navigate(tab.id, 'https://tokintienda.com.ar/store/account/orders');
+    await sleep(3500);
+    const acct = await messageTab(tab.id, { type: 'GET_ACCOUNT_LINKS' });
+    const acctLinks = [...new Set((acct?.links || []).filter((url) => /^https:\/\/([^.]+\.)?tokintienda\.(com\.ar|cl)\/store\/account\//i.test(url)))].slice(0, 20);
+    for (const link of acctLinks) {
+      try { await navigate(tab.id, link); await sleep(2800); } catch (_) {}
+    }
+  } catch (error) { /* seguimos con lo que haya */ }
 
   const items = [...run.products.values()].map(normalizeProduct);
-  if (!items.length) throw new Error('No se capturaron productos. Verificá que estés logueado en Tokin y volvé a intentar.');
+  if (!items.length) throw new Error('No se capturaron productos. Abrí el catálogo de Tokin, scrolleá un poco y volvé a intentar.');
   let pushed = 0;
   for (let start = 0; start < items.length; start += 100) {
     const batch = items.slice(start, start + 100);
@@ -195,28 +255,34 @@ async function synchronize() {
     pushed += Number(result?.itemsUpserted || 0);
     await setProgress('running', `Subiendo productos ${Math.min(start + batch.length, items.length)}/${items.length}`, { products: items.length });
   }
-  let invoiceCount = 0; let orderCount = 0;
-  if (run.summary.length || run.microcredits.length || run.checks.length) {
-    const account = normalizeAccount(run.summary, run.microcredits, run.checks);
-    await api(`/sync/connections/${connection.id}/account`, stored.accessToken, { method: 'POST', body: JSON.stringify(account) });
-    invoiceCount = account.invoices.length;
-  }
-  if (run.orders.length) {
-    const orders = normalizeOrders(run.orders);
-    await api(`/sync/connections/${connection.id}/orders`, stored.accessToken, { method: 'POST', body: JSON.stringify({ orders }) });
-    orderCount = orders.length;
-  }
-  await setProgress('success', `Listo: ${pushed} productos, ${invoiceCount} facturas y ${orderCount} pedidos.`, { products: items.length, pushed, invoices: invoiceCount, orders: orderCount });
+
+  // Push de cuenta corriente y pedidos (best-effort).
+  let invoicesCount = 0; let ordersCount = 0;
+  try {
+    const orders = normalizeOrders(run.rich.orders);
+    const { account, invoices, credits } = normalizeAccount(run.rich.invoice, run.rich.microcredit, run.rich.checks);
+    if (invoices.length || credits.length || (account && Object.keys(account).length > 1)) {
+      await api(`/sync/connections/${connection.id}/account`, stored.accessToken, { method: 'POST', body: JSON.stringify({ account, invoices, credits }) });
+      invoicesCount = invoices.length;
+    }
+    if (orders.length) {
+      await api(`/sync/connections/${connection.id}/orders`, stored.accessToken, { method: 'POST', body: JSON.stringify({ orders }) });
+      ordersCount = orders.length;
+    }
+  } catch (error) { /* cuenta/pedidos best-effort */ }
+
+  await setProgress('success', `Listo: ${pushed} productos, ${invoicesCount} facturas y ${ordersCount} pedidos.`, { products: items.length, pushed, invoices: invoicesCount, orders: ordersCount });
   run = null;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'TOKIN_CAPTURE' && run && sender.tab?.id === run.tabId) {
-    if (message.kind === 'products') for (const product of extractProducts(message.payload)) run.products.set(String(product.productId), product);
-    else if (message.kind === 'invoice-summary') run.summary.push(message.payload);
-    else if (message.kind === 'microcredits') run.microcredits.push(message.payload);
-    else if (message.kind === 'tokin-checks') run.checks.push(message.payload);
-    else if (message.kind === 'orders') run.orders.push(message.payload);
+    if (message.kind === 'products') {
+      if (!run.searchTemplate && message.request) run.searchTemplate = message.request;
+      collectProducts(message.payload);
+    } else if (run.rich && run.rich[message.kind]) {
+      run.rich[message.kind].push(message.payload);
+    }
     setProgress('running', 'Capturando datos de Tokin…', { products: run.products.size }).catch(() => {});
     return;
   }
