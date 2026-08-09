@@ -80,6 +80,7 @@ const GROUPS = [
       { href: '/proveedores', label: 'Proveedores' },
       { href: '/sincronizaciones', label: 'Sincronización' },
       { href: '/catalogo-proveedor', label: 'Catálogo proveedor' },
+      { href: '/columnas-proveedores', label: 'Columnas de proveedores' },
       { href: '/pedidos-proveedor', label: 'Pedidos proveedor' },
       { href: '/cuenta-proveedor', label: 'Cuenta corriente' },
     ],

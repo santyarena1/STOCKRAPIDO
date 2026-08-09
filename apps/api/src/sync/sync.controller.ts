@@ -36,6 +36,18 @@ export class SyncController {
     return this.sync.listConnections(u.businessId);
   }
 
+  @Get('raw-columns-overview')
+  @UseGuards(JwtAuthGuard)
+  rawColumnsOverview(@CurrentUser() u: User) {
+    return this.sync.getRawColumnsOverview(u.businessId);
+  }
+
+  @Get('connections/:id/raw-columns')
+  @UseGuards(JwtAuthGuard)
+  rawColumns(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.getRawColumns(id, u.businessId);
+  }
+
   @Get('connections/:id')
   @UseGuards(JwtAuthGuard)
   detail(@CurrentUser() u: User, @Param('id') id: string) {

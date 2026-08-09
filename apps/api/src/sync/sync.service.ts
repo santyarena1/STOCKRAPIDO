@@ -7,6 +7,7 @@ import { bulkCostToUnit, decorateSyncedProductUnits } from '../common/units';
 import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
 import { TokinProvider } from './tokin.provider';
 import { proxiedFetch } from './proxied-fetch';
+import { discoverRawColumns, RawColumnType } from './raw-columns.util';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -37,6 +38,13 @@ type SupplierAccountInput = {
   movements?: Array<Record<string, any>>;
   credits?: Array<Record<string, any>>;
 };
+
+const SYNCED_MAPPED_FIELDS = [
+  'name', 'brand', 'category', 'subcategory', 'ean', 'eanUnit', 'eanBox', 'sku',
+  'supplierRef', 'externalId', 'cost', 'basePrice', 'listPrice', 'ivaAlicuota',
+  'unitsPerBox', 'unitsPerDisplay', 'displaysPerBox', 'retornable', 'weight',
+  'format', 'flavor', 'presentation', 'available', 'stock', 'imageUrl', 'link',
+] as const;
 
 @Injectable()
 export class SyncService {
@@ -70,6 +78,65 @@ export class SyncService {
     const c = await this.prisma.syncConnection.findFirst({ where: { id, businessId } });
     if (!c) throw new NotFoundException('Conexión no encontrada');
     return this.sanitizeConnection(c);
+  }
+
+  private async rawColumnsForConnection(id: string, businessId: string, includeMapped: boolean) {
+    const connection = await this.prisma.syncConnection.findFirst({
+      where: { id, businessId },
+      select: { id: true, provider: true, name: true },
+    });
+    if (!connection) throw new NotFoundException('Conexión no encontrada');
+    const rows = await this.prisma.syncedProduct.findMany({
+      where: { connectionId: id, businessId, raw: { not: Prisma.DbNull } },
+      take: 400,
+      orderBy: { syncedAt: 'desc' },
+    });
+    return {
+      connection,
+      total: rows.length,
+      columns: discoverRawColumns(rows as Array<Record<string, any>>, includeMapped ? SYNCED_MAPPED_FIELDS : []),
+    };
+  }
+
+  async getRawColumns(id: string, businessId: string) {
+    return this.rawColumnsForConnection(id, businessId, true);
+  }
+
+  async getRawColumnsOverview(businessId: string) {
+    const connections = await this.prisma.syncConnection.findMany({
+      where: { businessId },
+      select: { id: true, provider: true, name: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const discoveries = await Promise.all(
+      connections.map((connection) => this.rawColumnsForConnection(connection.id, businessId, false)),
+    );
+    const union = new Map<string, {
+      types: Set<RawColumnType>;
+      providers: Array<{ provider: string; connectionId: string; coverage: number; total: number; sample: string | null }>;
+    }>();
+    for (const discovery of discoveries) {
+      for (const column of discovery.columns) {
+        const current = union.get(column.path) ?? { types: new Set<RawColumnType>(), providers: [] };
+        current.types.add(column.type);
+        current.providers.push({
+          provider: discovery.connection.provider,
+          connectionId: discovery.connection.id,
+          coverage: column.coverage,
+          total: column.total,
+          sample: column.samples[0] ?? null,
+        });
+        union.set(column.path, current);
+      }
+    }
+    return [...union.entries()]
+      .map(([path, info]) => ({
+        path,
+        type: info.types.size === 1 ? [...info.types][0] : 'mixed',
+        providers: info.providers,
+        coincidence: new Set(info.providers.map((provider) => provider.provider)).size,
+      }))
+      .sort((a, b) => b.coincidence - a.coincidence || a.path.localeCompare(b.path));
   }
 
   async createConnection(businessId: string, data: ConnInput) {
@@ -401,38 +468,27 @@ export class SyncService {
 
   async runCatalogSync(id: string, businessId: string) {
     const conn = await this.getConnection(id, businessId);
+    if (conn.provider === 'tokin') {
+      throw new BadRequestException(
+        'Tokin se sincroniza desde la extensión del navegador (Configuración → Proveedores → Descargar extensión), porque Tokin bloquea las IPs de servidor.',
+      );
+    }
     if (conn.provider === 'juntosplus') {
       throw new BadRequestException(
         'Juntos+ se sincroniza con el runner local (no hay catálogo público en el servidor).',
       );
     }
-    if (conn.provider !== 'mondelez' && conn.provider !== 'tokin') {
+    if (conn.provider !== 'mondelez') {
       throw new BadRequestException(
-        `El proveedor ${conn.provider} no ofrece sincronización pública en el servidor. Usá su runner local.`,
+        `El proveedor ${conn.provider} no ofrece sincronización pública en el servidor. Usá su runner o extensión.`,
       );
-    }
-    if (conn.provider === 'tokin' && !process.env.PROXY_URL_AR?.trim()) {
-      throw new BadRequestException('Falta configurar el proxy residencial (PROXY_URL_AR) para sincronizar Tokin.');
     }
     const run = await this.prisma.syncRun.create({
       data: { connectionId: id, status: 'running' },
     });
     try {
-      let items: NormalizedItem[];
-      let withCost = false;
-      if (conn.provider === 'tokin') {
-        const secret = await this.prisma.syncConnection.findFirst({ where: { id, businessId }, select: { credentialsEncrypted: true } });
-        let credentials: Record<string, string> | null = null;
-        if (secret?.credentialsEncrypted) {
-          try { credentials = JSON.parse(decryptSecret(secret.credentialsEncrypted)); }
-          catch (error) { this.logger.warn(`No se pudieron descifrar las credenciales Tokin: ${error instanceof Error ? error.message : String(error)}`); }
-        }
-        const result = await this.tokin.fetchCatalog(credentials);
-        items = result.items;
-        withCost = result.authenticated;
-      } else {
-        items = await this.mondelez.fetchCatalog();
-      }
+      const items: NormalizedItem[] = await this.mondelez.fetchCatalog();
+      const withCost = false;
       const upserted = await this.upsertItems(businessId, id, items, withCost);
       const withPrice = items.filter((item) => item.cost != null).length;
       const finished = await this.prisma.syncRun.update({
