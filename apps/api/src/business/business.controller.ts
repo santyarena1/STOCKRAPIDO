@@ -21,6 +21,11 @@ export class BusinessController {
     return this.business.update(user.businessId, body);
   }
 
+  @Patch('openai-key')
+  setOpenaiKey(@CurrentUser() user: User, @Body() body: { key?: string }) {
+    return this.business.setOpenaiKey(user.businessId, body?.key ?? '');
+  }
+
   @Get('categories')
   categories(@CurrentUser() user: User) {
     return this.business.listCategories(user.businessId);

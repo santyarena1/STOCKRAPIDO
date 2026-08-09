@@ -27,6 +27,7 @@ model Business {
   address   String?
   currency  String   @default("ARS")
   posConfig Json?
+  openaiKeyEncrypted String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

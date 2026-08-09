@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { api } from '@/lib/api';
+import Link from 'next/link';
 
 type SyncFrequency = 'manual' | 'daily' | 'hourly' | 'every_6h' | 'every_12h';
 type Connection = {
@@ -23,26 +24,7 @@ type Connection = {
   columnsConfig?: unknown;
   _count?: { items: number };
 };
-type MappingInfo = { mapping: Record<string, string>; productFields: string[]; syncedFields: string[] };
 type Message = { type: 'ok' | 'err'; text: string };
-
-const FIELD_LABELS: Record<string, string> = {
-  name: 'Nombre', ean: 'EAN', eanUnit: 'EAN unidad', eanBox: 'EAN bulto',
-  barcode: 'Código de barras', sku: 'SKU proveedor', supplierRef: 'Ref. proveedor (RefId)',
-  supplierSku: 'SKU proveedor', externalId: 'ID externo', brand: 'Marca', category: 'Categoría',
-  subcategory: 'Subcategoría', imageUrl: 'Imagen', link: 'Link', cost: 'Costo',
-  basePrice: 'Precio base', listPrice: 'Precio lista', ivaAlicuota: 'IVA (%)', iva: 'IVA',
-  unitsPerBox: 'Unidades por bulto', unitsPerDisplay: 'Unidades por display',
-  displaysPerBox: 'Displays por bulto', retornable: 'Retornable', weight: 'Peso',
-  format: 'Formato', flavor: 'Sabor', presentation: 'Presentación', available: 'Disponible', stock: 'Stock',
-};
-const MAPPING_HINTS: Record<string, string> = {
-  barcode: 'Recomendado: EAN unidad',
-  supplierSku: 'Recomendado: Ref. proveedor (RefId)',
-  supplierRef: 'Recomendado: Ref. proveedor (RefId)',
-  eanBox: 'Recomendado: EAN bulto',
-  cost: 'Recomendado: Costo',
-};
 const FREQUENCIES: { value: SyncFrequency; label: string }[] = [
   { value: 'manual', label: 'Manual' },
   { value: 'daily', label: 'Diaria' },
@@ -84,7 +66,6 @@ export default function ProveedoresConfigPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [mapping, setMapping] = useState<MappingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
@@ -95,6 +76,8 @@ export default function ProveedoresConfigPage() {
   const [frequency, setFrequency] = useState<SyncFrequency>('manual');
   const [syncHourLocal, setSyncHourLocal] = useState('');
   const [markup, setMarkup] = useState('0');
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [hasOpenaiKey, setHasOpenaiKey] = useState(false);
 
   const loadConnections = useCallback(async () => {
     try {
@@ -118,14 +101,10 @@ export default function ProveedoresConfigPage() {
   }, []);
 
   const loadActive = useCallback(async () => {
-    if (!activeId) { setConnection(null); setMapping(null); return; }
+    if (!activeId) { setConnection(null); return; }
     try {
-      const [detail, mappingInfo] = await Promise.all([
-        api<Connection>(`/sync/connections/${activeId}`),
-        api<MappingInfo>(`/sync/connections/${activeId}/mapping`),
-      ]);
+      const detail = await api<Connection>(`/sync/connections/${activeId}`);
       setConnection(detail);
-      setMapping(mappingInfo);
       setFrequency(detail.syncFrequency ?? 'manual');
       setSyncHourLocal(detail.syncHourLocal == null ? '' : String(detail.syncHourLocal));
       setMarkup(String(detail.priceMarkup ?? 0));
@@ -140,6 +119,11 @@ export default function ProveedoresConfigPage() {
 
   useEffect(() => { loadConnections(); }, [loadConnections]);
   useEffect(() => { loadActive(); }, [loadActive]);
+  useEffect(() => {
+    api<{ hasOpenaiKey?: boolean }>('/business/me')
+      .then((business) => setHasOpenaiKey(!!business.hasOpenaiKey))
+      .catch(() => {});
+  }, []);
 
   const refresh = async () => { await loadConnections(); await loadActive(); };
 
@@ -229,12 +213,15 @@ export default function ProveedoresConfigPage() {
     finally { setBusy(null); }
   };
 
-  const saveMapping = async () => {
-    if (!connection || !mapping) return; setBusy('mapping'); setMessage(null);
+  const saveOpenaiKey = async () => {
+    setBusy('openai'); setMessage(null);
     try {
-      await api(`/sync/connections/${connection.id}/mapping`, { method: 'PATCH', body: JSON.stringify({ mapping: mapping.mapping }) });
-      setMessage({ type: 'ok', text: 'Mapeo guardado. La próxima importación usará estas columnas.' });
-    } catch (error) { setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al guardar mapeo' }); }
+      const business = await api<{ hasOpenaiKey: boolean }>('/business/openai-key', {
+        method: 'PATCH', body: JSON.stringify({ key: openaiKey }),
+      });
+      setHasOpenaiKey(business.hasOpenaiKey); setOpenaiKey('');
+      setMessage({ type: 'ok', text: business.hasOpenaiKey ? 'API key de OpenAI guardada de forma cifrada.' : 'API key de OpenAI eliminada.' });
+    } catch (error) { setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al guardar la API key' }); }
     finally { setBusy(null); }
   };
 
@@ -264,6 +251,12 @@ export default function ProveedoresConfigPage() {
             ].map((step, index) => <li key={index} className="flex gap-3 text-sm leading-5 text-fg-muted"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-highlight-soft font-mono text-xs font-bold text-brand">{index + 1}</span><span className="pt-0.5">{step}</span></li>)}
           </ol>
         </div>
+      </div>
+    </section>
+    <section className="rounded-2xl border border-hair-soft bg-surface p-5 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-xl"><h2 className="text-lg font-semibold text-fg">Inteligencia artificial (OpenAI)</h2><p className="mt-1 text-sm text-fg-muted">Se usa para sugerir el mapeo de columnas. Se guarda cifrada.</p><p className={`mt-2 text-sm ${hasOpenaiKey ? 'text-ok' : 'text-warn'}`}>{hasOpenaiKey ? 'Configurada ✓' : 'Sin configurar'}</p></div>
+        <div className="flex w-full flex-col gap-2 sm:max-w-md"><label className="text-xs text-fg-faint">API key de OpenAI</label><div className="flex flex-col gap-2 sm:flex-row"><input type="password" value={openaiKey} onChange={(event) => setOpenaiKey(event.target.value)} placeholder={hasOpenaiKey ? 'Ingresá una nueva key para reemplazarla' : 'sk-…'} autoComplete="new-password" className="min-w-0 flex-1 rounded-xl border border-hair bg-raised px-3 py-2.5 font-mono text-sm text-fg" /><button type="button" onClick={() => void saveOpenaiKey()} disabled={busy === 'openai' || (!openaiKey.trim() && !hasOpenaiKey)} className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{busy === 'openai' ? 'Guardando…' : 'Guardar'}</button></div>{hasOpenaiKey && <button type="button" onClick={() => { setOpenaiKey(''); void api<{ hasOpenaiKey: boolean }>('/business/openai-key', { method: 'PATCH', body: JSON.stringify({ key: '' }) }).then((business) => { setHasOpenaiKey(business.hasOpenaiKey); setMessage({ type: 'ok', text: 'API key de OpenAI eliminada.' }); }).catch((error) => setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error al eliminar la API key' })); }} className="self-start text-xs text-crit hover:underline">Eliminar API key</button>}</div>
       </div>
     </section>
     {message && <div className={`rounded-lg border px-4 py-3 text-sm ${message.type === 'ok' ? 'border-ok/30 bg-[var(--ok-soft)] text-ok' : 'border-crit/30 bg-[var(--crit-soft)] text-crit'}`}>{message.text}</div>}
@@ -302,10 +295,7 @@ export default function ProveedoresConfigPage() {
         </section>
       </div>
 
-      <section className="space-y-4 rounded-xl border border-hair-soft bg-surface p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-fg">Mapeo: campo del producto ← dato del proveedor</h2><p className="text-sm text-fg-muted">A la izquierda ves el campo que se completa; elegí a la derecha qué dato del proveedor usar.</p></div><button type="button" onClick={saveMapping} disabled={!mapping || busy === 'mapping'} className="btn-brand rounded-lg px-4 py-2 text-sm disabled:opacity-50">{busy === 'mapping' ? 'Guardando…' : 'Guardar mapeo'}</button></div>
-        {mapping ? <div className="grid gap-3 sm:grid-cols-2">{mapping.productFields.map((productField) => <div key={productField} className="rounded-lg border border-hair-soft bg-raised p-3"><div className="flex items-center gap-2"><span className="w-36 shrink-0 truncate text-sm font-medium text-fg" title={FIELD_LABELS[productField] || productField}>{FIELD_LABELS[productField] || productField}</span><span className="text-fg-faint">←</span><select value={mapping.mapping[productField] || ''} onChange={(event) => setMapping({ ...mapping, mapping: { ...mapping.mapping, [productField]: event.target.value } })} className="min-w-0 flex-1 rounded-lg border border-hair bg-surface px-2 py-1.5 text-sm text-fg"><option value="">— (no completar)</option>{mapping.syncedFields.map((syncedField) => <option key={syncedField} value={syncedField}>{FIELD_LABELS[syncedField] || syncedField}</option>)}</select></div>{MAPPING_HINTS[productField] && <p className="mt-1.5 text-xs text-fg-faint">{MAPPING_HINTS[productField]}</p>}</div>)}</div> : <Loader size="sm" label="Mapeo" />}
-      </section>
+      <section className="flex flex-col gap-4 rounded-xl border border-hair-soft bg-surface p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-fg">Mapeo de columnas</h2><p className="text-sm text-fg-muted">Elegí una única columna de este proveedor para cada campo de StockRápido.</p></div><Link href="/columnas-proveedores" className="btn-brand rounded-xl px-4 py-2.5 text-center text-sm font-semibold">Abrir mapeo 1:1</Link></section>
     </>}
   </div>;
 }

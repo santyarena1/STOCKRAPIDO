@@ -2,20 +2,45 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { mergePosConfigUpdate, sanitizePosConfigForApi } from './pos-config.util';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
 
 @Injectable()
 export class BusinessService {
   constructor(private prisma: PrismaService) {}
+
+  private sanitize<T extends Record<string, any>>(business: T) {
+    const { openaiKeyEncrypted, ...safe } = business;
+    return {
+      ...safe,
+      posConfig: sanitizePosConfigForApi(business.posConfig),
+      hasOpenaiKey: !!openaiKeyEncrypted,
+    };
+  }
 
   async getByUser(businessId: string) {
     const b = await this.prisma.business.findUnique({
       where: { id: businessId },
     });
     if (!b) return null;
-    return {
-      ...b,
-      posConfig: sanitizePosConfigForApi(b.posConfig),
-    };
+    return this.sanitize(b);
+  }
+
+  async setOpenaiKey(businessId: string, key: string) {
+    const normalized = typeof key === 'string' ? key.trim() : '';
+    const business = await this.prisma.business.update({
+      where: { id: businessId },
+      data: { openaiKeyEncrypted: normalized ? encryptSecret(normalized) : null },
+    });
+    return this.sanitize(business);
+  }
+
+  async getOpenaiKey(businessId: string): Promise<string | null> {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { openaiKeyEncrypted: true },
+    });
+    if (!business?.openaiKeyEncrypted) return null;
+    return decryptSecret(business.openaiKeyEncrypted);
   }
 
   async update(businessId: string, data: UpdateBusinessDto) {
@@ -44,10 +69,7 @@ export class BusinessService {
         ...(mergedPos !== undefined && { posConfig: mergedPos as any }),
       },
     });
-    return {
-      ...updated,
-      posConfig: sanitizePosConfigForApi(updated.posConfig),
-    };
+    return this.sanitize(updated);
   }
 
   async listCategories(businessId: string) {

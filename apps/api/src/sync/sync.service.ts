@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,7 +7,8 @@ import { bulkCostToUnit, decorateSyncedProductUnits } from '../common/units';
 import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
 import { TokinProvider } from './tokin.provider';
 import { proxiedFetch } from './proxied-fetch';
-import { discoverRawColumns, RawColumnType } from './raw-columns.util';
+import { discoverRawColumns, flatten, RawColumnType } from './raw-columns.util';
+import { BusinessService } from '../business/business.service';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -46,6 +47,24 @@ const SYNCED_MAPPED_FIELDS = [
   'format', 'flavor', 'presentation', 'available', 'stock', 'imageUrl', 'link',
 ] as const;
 
+const FIELD_MAP_TARGETS = [
+  'name', 'brand', 'category', 'subcategory', 'ean', 'eanUnit', 'eanBox', 'sku',
+  'supplierRef', 'externalId', 'cost', 'basePrice', 'listPrice', 'ivaAlicuota',
+  'stock', 'imageUrl', 'link', 'weight', 'unitsPerBox', 'unitsPerDisplay', 'displaysPerBox',
+] as const;
+type FieldMapTarget = (typeof FIELD_MAP_TARGETS)[number];
+
+const FIELD_DESCRIPTIONS: Record<FieldMapTarget, string> = {
+  name: 'nombre comercial del producto', brand: 'marca', category: 'categoría principal',
+  subcategory: 'subcategoría', ean: 'EAN o código general', eanUnit: 'EAN de unidad',
+  eanBox: 'EAN de bulto o caja', sku: 'SKU del proveedor', supplierRef: 'referencia del proveedor',
+  externalId: 'identificador externo del producto', cost: 'costo B2B', basePrice: 'precio base',
+  listPrice: 'precio de lista', ivaAlicuota: 'alícuota de IVA porcentual', stock: 'stock disponible',
+  imageUrl: 'URL de imagen', link: 'URL del producto', weight: 'peso',
+  unitsPerBox: 'unidades por bulto', unitsPerDisplay: 'unidades por display',
+  displaysPerBox: 'displays por bulto',
+};
+
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger('SyncService');
@@ -53,6 +72,7 @@ export class SyncService {
     private prisma: PrismaService,
     private mondelez: MondelezProvider,
     private tokin: TokinProvider,
+    private business: BusinessService,
   ) {}
 
   // ---------- Conexiones ----------
@@ -69,6 +89,9 @@ export class SyncService {
         tableColumns: Array.isArray(columnsConfig.view?.tableColumns) ? columnsConfig.view.tableColumns : [],
         filterColumns: Array.isArray(columnsConfig.view?.filterColumns) ? columnsConfig.view.filterColumns : [],
       },
+      fieldMap: columnsConfig.fieldMap && typeof columnsConfig.fieldMap === 'object' && !Array.isArray(columnsConfig.fieldMap)
+        ? columnsConfig.fieldMap
+        : {},
     };
   }
 
@@ -172,6 +195,124 @@ export class SyncService {
     return this.sanitizeConnection(updated);
   }
 
+  private readFieldMap(columnsConfig: unknown): Partial<Record<FieldMapTarget, string>> {
+    if (!columnsConfig || typeof columnsConfig !== 'object' || Array.isArray(columnsConfig)) return {};
+    const value = (columnsConfig as Record<string, unknown>).fieldMap;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result: Partial<Record<FieldMapTarget, string>> = {};
+    for (const field of FIELD_MAP_TARGETS) {
+      const path = (value as Record<string, unknown>)[field];
+      if (typeof path === 'string' && path.trim()) result[field] = path.trim();
+    }
+    return result;
+  }
+
+  async getFieldMapping(id: string, businessId: string) {
+    const discovery = await this.rawColumnsForConnection(id, businessId, false);
+    const connection = await this.prisma.syncConnection.findFirst({
+      where: { id, businessId },
+      select: { columnsConfig: true },
+    });
+    const savedFieldMap = this.readFieldMap(connection?.columnsConfig);
+    const rank = (confidence: string) => confidence === 'alta' ? 3 : confidence === 'media' ? 2 : 1;
+    const byField = new Map<FieldMapTarget, Array<{ columnPath: string; confidence: string; score: number }>>();
+    for (const column of discovery.columns) {
+      if (SyncService.MAP_NOISE.test(column.path)) continue;
+      const detection = this.detectTarget(column.path, column.samples, [column.type]);
+      if (!detection || !FIELD_MAP_TARGETS.includes(detection.field as FieldMapTarget)) continue;
+      const field = detection.field as FieldMapTarget;
+      const candidates = byField.get(field) ?? [];
+      candidates.push({ columnPath: column.path, confidence: detection.confidence, score: detection.score });
+      byField.set(field, candidates);
+    }
+    for (const candidates of byField.values()) {
+      candidates.sort((a, b) => b.score - a.score || rank(b.confidence) - rank(a.confidence) || a.columnPath.localeCompare(b.columnPath));
+    }
+    const used = new Set<string>();
+    const suggestions = FIELD_MAP_TARGETS.map((field) => {
+      const candidates = byField.get(field) ?? [];
+      const best = candidates.find((candidate) => !used.has(candidate.columnPath)) ?? null;
+      if (best) used.add(best.columnPath);
+      return {
+        field,
+        columnPath: best?.columnPath ?? null,
+        confidence: best?.confidence ?? null,
+        candidates,
+      };
+    });
+    return { fieldMap: savedFieldMap, suggestions };
+  }
+
+  async updateFieldMap(id: string, businessId: string, input: Record<string, unknown>) {
+    const connection = await this.prisma.syncConnection.findFirst({ where: { id, businessId } });
+    if (!connection) throw new NotFoundException('Conexión no encontrada');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BadRequestException('fieldMap inválido.');
+    const fieldMap: Partial<Record<FieldMapTarget, string>> = {};
+    for (const [field, path] of Object.entries(input)) {
+      if (!FIELD_MAP_TARGETS.includes(field as FieldMapTarget)) throw new BadRequestException(`Campo destino inválido: ${field}`);
+      if (typeof path !== 'string') throw new BadRequestException(`La columna de ${field} debe ser texto.`);
+      if (path.trim()) fieldMap[field as FieldMapTarget] = path.trim();
+    }
+    const selectedPaths = Object.values(fieldMap);
+    if (new Set(selectedPaths).size !== selectedPaths.length) {
+      throw new BadRequestException('Cada columna del proveedor solo puede mapearse a un campo.');
+    }
+    const current = connection.columnsConfig && typeof connection.columnsConfig === 'object' && !Array.isArray(connection.columnsConfig)
+      ? connection.columnsConfig as Record<string, unknown>
+      : {};
+    const updated = await this.prisma.syncConnection.update({
+      where: { id },
+      data: { columnsConfig: { ...current, fieldMap } as Prisma.InputJsonValue },
+    });
+    return this.sanitizeConnection(updated);
+  }
+
+  async getAiFieldMapping(id: string, businessId: string) {
+    const key = await this.business.getOpenaiKey(businessId);
+    if (!key) throw new BadRequestException('Configurá tu API key de OpenAI en Configuración');
+    const discovery = await this.rawColumnsForConnection(id, businessId, false);
+    const availablePaths = new Set(discovery.columns.map((column) => column.path));
+    const targets = FIELD_MAP_TARGETS.map((field) => ({ field, description: FIELD_DESCRIPTIONS[field] }));
+    const columns = discovery.columns.map((column) => ({
+      path: column.path,
+      type: column.type,
+      samples: column.samples,
+    }));
+    const prompt = `Mapeá columnas de un proveedor a campos de StockRápido. Cada campo destino acepta como máximo una columna y una columna no se puede repetir. Usá null cuando no haya evidencia. Respondé únicamente JSON con {"fieldMap":{"campo":"path o null"},"notes":{"campo":"razón corta"}}.\nCampos destino:\n${JSON.stringify(targets)}\nColumnas del proveedor:\n${JSON.stringify(columns)}`;
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: 'Sos especialista en normalización de catálogos de productos.' },
+            { role: 'user', content: prompt },
+          ],
+        }),
+      });
+      const payload = await response.json() as any;
+      if (!response.ok) throw new Error(payload?.error?.message || `OpenAI respondió ${response.status}`);
+      const parsed = JSON.parse(payload?.choices?.[0]?.message?.content || '{}') as { fieldMap?: Record<string, unknown>; notes?: Record<string, unknown> };
+      const fieldMap: Partial<Record<FieldMapTarget, string | null>> = {};
+      const notes: Partial<Record<FieldMapTarget, string>> = {};
+      const used = new Set<string>();
+      for (const field of FIELD_MAP_TARGETS) {
+        const path = parsed.fieldMap?.[field];
+        fieldMap[field] = typeof path === 'string' && availablePaths.has(path) && !used.has(path) ? path : null;
+        if (fieldMap[field]) used.add(fieldMap[field] as string);
+        const note = parsed.notes?.[field];
+        if (typeof note === 'string') notes[field] = note.slice(0, 300);
+      }
+      return { fieldMap, notes };
+    } catch (error) {
+      this.logger.warn(`OpenAI no pudo sugerir el mapeo: ${error instanceof Error ? error.message : String(error)}`);
+      throw new BadGatewayException(`No se pudo obtener el mapeo de OpenAI: ${error instanceof Error ? error.message : 'error desconocido'}`);
+    }
+  }
+
   private static MAP_NOISE = /installment|paymentoption|teaser|highlight|promotion|\.quota\.|blacklist|clusterhighlights|specification|metatag|releasedate|cacheid/i;
 
   private static toNums(samples: string[]): number[] {
@@ -195,6 +336,7 @@ export class SyncService {
   };
 
   private static TARGET_DETECTORS: Array<{ field: string; name: RegExp; value?: (s: string[], t: RawColumnType[]) => boolean; paths?: RegExp }> = [
+    { field: 'eanUnit', name: /^(ean ?unit|ean unidad|unit ?ean)$/, value: (s) => SyncService.V.ean(s), paths: /(^|\.)eanUnit(\[\]|$)/i },
     { field: 'ean', name: /^(ean|barcode|gtin|codigo de barras|ean ?13|ean ?unit)$/, value: (s) => SyncService.V.ean(s), paths: /(^|\.)ean(\[\]|$)/i },
     { field: 'externalId', name: /^(product ?id|id producto|id externo|external ?id|id)$/ },
     { field: 'sku', name: /^(sku|sku id|item ?id|codigo interno|internal ?code|cod ?articulo)$/ },
@@ -202,6 +344,7 @@ export class SyncService {
     { field: 'eanBox', name: /(ean).*(bulto|box|bu)$|ean ?box/ },
     { field: 'ivaAlicuota', name: /(iva|tax|alicuota|impuesto|vat)/, value: (s) => SyncService.V.iva(s) },
     { field: 'listPrice', name: /(list ?price|precio ?lista|price ?from|pvp)/, value: (s) => SyncService.V.price(s) },
+    { field: 'basePrice', name: /(base ?price|precio ?base)/, value: (s) => SyncService.V.price(s) },
     { field: 'cost', name: /(selling ?price|^price$|precio$|costo|cost|price ?with ?tax|precio ?venta)/, value: (s) => SyncService.V.price(s) },
     { field: 'stock', name: /(stock|available ?quantity|existencia|cantidad|disponible|on ?hand)/, value: (s) => SyncService.V.stock(s) },
     { field: 'imageUrl', name: /(image|imagen|thumbnail|foto|picture)/, value: (s) => SyncService.V.img(s) || SyncService.V.url(s) },
@@ -228,7 +371,7 @@ export class SyncService {
       .trim();
   }
 
-  private detectTarget(path: string, samples: string[], types: RawColumnType[]): { field: string; confidence: string } | null {
+  private detectTarget(path: string, samples: string[], types: RawColumnType[]): { field: string; confidence: string; score: number } | null {
     const leaf = this.normalizeLeaf(path);
     let best = { field: '', score: 0 };
     for (const det of SyncService.TARGET_DETECTORS) {
@@ -244,7 +387,7 @@ export class SyncService {
     }
     if (best.score < 2) return null;
     const confidence = best.score >= 5 ? 'alta' : best.score >= 3 ? 'media' : 'baja';
-    return { field: best.field, confidence };
+    return { field: best.field, confidence, score: best.score };
   }
 
   async getMappingSuggestions(businessId: string) {
@@ -1050,6 +1193,7 @@ export class SyncService {
     const markup = Number(conn.priceMarkup) || 0;
     const minStock = conn.defaultMinStock || 0;
     const map = this.getMapping(conn);
+    const fieldMap = this.readFieldMap(conn.columnsConfig);
 
     const synced = await this.prisma.syncedProduct.findMany({
       where: {
@@ -1071,6 +1215,14 @@ export class SyncService {
       return created.id;
     };
     const src = (s: any, productField: string) => {
+      const target = productField === 'barcode' ? (fieldMap.eanUnit ? 'eanUnit' : 'ean')
+        : productField === 'supplierSku' ? 'sku'
+          : productField as FieldMapTarget;
+      const rawPath = fieldMap[target];
+      if (rawPath) {
+        const rawValue = flatten(s.raw).find((entry) => entry.path === rawPath)?.value;
+        if (rawValue != null) return rawValue;
+      }
       const k = map[productField];
       return k ? s[k] : undefined;
     };
@@ -1083,10 +1235,10 @@ export class SyncService {
         const v = src(s, f);
         if (v != null && v !== '') data[f] = String(v);
       }
-      const preferredUnitEan = s.eanUnit || s.ean;
+      const preferredUnitEan = src(s, 'barcode') ?? s.eanUnit ?? s.ean;
       if (preferredUnitEan) data.barcode = String(preferredUnitEan);
-      if (s.supplierRef) data.supplierRef = String(s.supplierRef);
-      if (s.eanBox) data.eanBox = String(s.eanBox);
+      if (!data.supplierRef && s.supplierRef) data.supplierRef = String(s.supplierRef);
+      if (!data.eanBox && s.eanBox) data.eanBox = String(s.eanBox);
       // nombre (requerido)
       const nameVal = src(s, 'name') ?? s.name;
       data.name = nameVal ? String(nameVal) : 'Sin nombre';
@@ -1096,6 +1248,11 @@ export class SyncService {
       const bulkCost = rawCost != null && Number(rawCost) > 0 && Number(rawCost) < 1000000 ? Number(rawCost) : null;
       const cost = bulkCostToUnit(bulkCost, data.unitsPerBox ?? s.unitsPerBox);
       const price = cost != null ? Math.round(cost * (1 + markup / 100) * 100) / 100 : null;
+      const ivaValue = src(s, 'ivaAlicuota') ?? s.ivaAlicuota;
+      if (fieldMap.stock) {
+        const mappedStock = Number(src(s, 'stock'));
+        if (Number.isFinite(mappedStock)) data.stock = Math.trunc(mappedStock);
+      }
       // categoría
       const categoryId = await ensureCategory(src(s, 'category'));
 
@@ -1115,7 +1272,7 @@ export class SyncService {
             price: price != null ? new Decimal(price) : existing.price,
             sourceConnectionId: conn.id,
             sourceProvider: conn.provider,
-            iva: s.ivaAlicuota != null ? new Decimal(s.ivaAlicuota) : existing.iva,
+            iva: ivaValue != null && Number.isFinite(Number(ivaValue)) ? new Decimal(Number(ivaValue)) : existing.iva,
           },
         });
         await this.prisma.syncedProduct.update({ where: { id: s.id }, data: { linkedProductId: existing.id } });
@@ -1133,7 +1290,7 @@ export class SyncService {
             stockControl: true,
             sourceConnectionId: conn.id,
             sourceProvider: conn.provider,
-            iva: s.ivaAlicuota != null ? new Decimal(s.ivaAlicuota) : undefined,
+            iva: ivaValue != null && Number.isFinite(Number(ivaValue)) ? new Decimal(Number(ivaValue)) : undefined,
           },
         });
         await this.prisma.syncedProduct.update({ where: { id: s.id }, data: { linkedProductId: prod.id } });

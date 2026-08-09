@@ -50,12 +50,14 @@ export class SyncController {
 
   @Get('mapping-suggestions')
   @UseGuards(JwtAuthGuard)
+  /** @deprecated Usar GET connections/:id/field-mapping. */
   mappingSuggestions(@CurrentUser() u: User) {
     return this.sync.getMappingSuggestions(u.businessId);
   }
 
   @Post('mapping-suggestions/approve')
   @UseGuards(JwtAuthGuard)
+  /** @deprecated Usar PATCH connections/:id/field-map. */
   approveMapping(
     @CurrentUser() u: User,
     @Body() body: { field?: string; members?: Array<{ connectionId?: string; path?: string }> },
@@ -71,6 +73,28 @@ export class SyncController {
     @Body() body: { tableColumns?: string[]; filterColumns?: string[] },
   ) {
     return this.sync.updateViewConfig(id, u.businessId, body || {});
+  }
+
+  @Get('connections/:id/field-mapping')
+  @UseGuards(JwtAuthGuard)
+  fieldMapping(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.getFieldMapping(id, u.businessId);
+  }
+
+  @Patch('connections/:id/field-map')
+  @UseGuards(JwtAuthGuard)
+  updateFieldMap(
+    @CurrentUser() u: User,
+    @Param('id') id: string,
+    @Body() body: { fieldMap?: Record<string, string> },
+  ) {
+    return this.sync.updateFieldMap(id, u.businessId, body?.fieldMap || {});
+  }
+
+  @Get('connections/:id/ai-field-mapping')
+  @UseGuards(JwtAuthGuard)
+  aiFieldMapping(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.getAiFieldMapping(id, u.businessId);
   }
 
   @Get('connections/:id')

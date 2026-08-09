@@ -38,8 +38,8 @@ type OverviewColumn = {
   providers: ProviderColumn[];
 };
 
-type SuggestionColumn = { path: string; type: ColumnType; providers: { provider: string; connectionId: string; sample: string | null }[] };
-type Suggestion = { suggestedField: string | null; label: string; confidence: 'alta' | 'media' | 'baja'; providers: string[]; columns: SuggestionColumn[] };
+type FieldSuggestion = { field: string; columnPath: string | null; confidence: 'alta' | 'media' | 'baja' | null; candidates: Array<{ columnPath: string; confidence: string; score: number }> };
+type FieldMappingResponse = { fieldMap: Record<string, string>; suggestions: FieldSuggestion[] };
 
 const TYPE_LABELS: Record<ColumnType, string> = {
   string: 'Texto',
@@ -53,10 +53,13 @@ const TARGET_FIELDS = [
   'supplierRef', 'externalId', 'cost', 'basePrice', 'listPrice', 'ivaAlicuota',
   'stock', 'imageUrl', 'link', 'weight', 'unitsPerBox', 'unitsPerDisplay', 'displaysPerBox',
 ];
-const CONF_STYLE: Record<string, string> = {
-  alta: 'border-[color:var(--ok)] bg-[var(--ok-soft)] text-ok',
-  media: 'border-[color:var(--warn)] bg-[var(--warn-soft)] text-warn',
-  baja: 'border-hair bg-raised2 text-fg-muted',
+const FIELD_LABELS: Record<string, string> = {
+  name: 'Nombre', brand: 'Marca', category: 'Categoría', subcategory: 'Subcategoría',
+  ean: 'EAN general', eanUnit: 'EAN unidad', eanBox: 'EAN bulto', sku: 'SKU proveedor',
+  supplierRef: 'Ref. proveedor', externalId: 'ID externo', cost: 'Costo B2B',
+  basePrice: 'Precio base', listPrice: 'Precio lista', ivaAlicuota: 'IVA (%)', stock: 'Stock',
+  imageUrl: 'Imagen', link: 'Link', weight: 'Peso', unitsPerBox: 'Unidades por bulto',
+  unitsPerDisplay: 'Unidades por display', displaysPerBox: 'Displays por bulto',
 };
 
 function Coverage({ coverage, total, sample }: { coverage: number; total: number; sample?: string | null }) {
@@ -85,11 +88,16 @@ function ColumnsPageContent() {
   const [filterColumns, setFilterColumns] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
-  const [loadingSug, setLoadingSug] = useState(false);
-  const [targets, setTargets] = useState<Record<number, string>>({});
-  const [approved, setApproved] = useState<Record<number, boolean>>({});
-  const [approving, setApproving] = useState<number | null>(null);
+  const [fieldSuggestions, setFieldSuggestions] = useState<FieldSuggestion[]>([]);
+  const [fieldMap, setFieldMap] = useState<Record<string, string>>({});
+  const [mappingNotes, setMappingNotes] = useState<Record<string, string>>({});
+  const [mappingBusy, setMappingBusy] = useState<'heuristic' | 'ai' | 'save' | null>(null);
+  const [mappingSaved, setMappingSaved] = useState(false);
+  const [hasOpenaiKey, setHasOpenaiKey] = useState(false);
+
+  useEffect(() => {
+    api<{ hasOpenaiKey?: boolean }>('/business/me').then((business) => setHasOpenaiKey(!!business.hasOpenaiKey)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setTableColumns(connection?.viewConfig?.tableColumns ?? []);
@@ -112,8 +120,11 @@ function ColumnsPageContent() {
     if (mode !== 'provider' || !connection) return;
     let cancelled = false;
     setLoading(true); setError('');
-    api<{ columns: RawColumn[] }>(`/sync/connections/${connection.id}/raw-columns`)
-      .then((result) => { if (!cancelled) setColumns(result.columns); })
+    Promise.all([
+      api<{ columns: RawColumn[] }>(`/sync/connections/${connection.id}/raw-columns`),
+      api<FieldMappingResponse>(`/sync/connections/${connection.id}/field-mapping`),
+    ])
+      .then(([result, mapping]) => { if (!cancelled) { const savedPaths = new Set(Object.values(mapping.fieldMap)); const heuristic = Object.fromEntries(mapping.suggestions.filter((item) => item.columnPath && !mapping.fieldMap[item.field] && !savedPaths.has(item.columnPath)).map((item) => [item.field, item.columnPath as string])); setColumns(result.columns); setFieldSuggestions(mapping.suggestions); setFieldMap({ ...heuristic, ...mapping.fieldMap }); setMappingNotes({}); setMappingSaved(false); } })
       .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : 'No se pudieron cargar las columnas.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -129,29 +140,30 @@ function ColumnsPageContent() {
     [columns, normalizedQuery],
   );
 
-  const loadSuggestions = async () => {
-    setLoadingSug(true); setError('');
-    try {
-      const data = await api('/sync/mapping-suggestions') as Suggestion[];
-      setSuggestions(data);
-      const initial: Record<number, string> = {};
-      data.forEach((item, index) => { if (item.suggestedField) initial[index] = item.suggestedField; });
-      setTargets(initial); setApproved({});
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudieron traer las sugerencias.');
-    } finally { setLoadingSug(false); }
+  const applyHeuristic = () => {
+    setMappingBusy('heuristic');
+    setFieldMap(Object.fromEntries(fieldSuggestions.filter((item) => item.columnPath).map((item) => [item.field, item.columnPath as string])));
+    setMappingNotes(Object.fromEntries(fieldSuggestions.filter((item) => item.columnPath).map((item) => [item.field, `Sugerencia heurística · confianza ${item.confidence ?? 'baja'}`])));
+    setMappingSaved(false); setMappingBusy(null);
   };
-  const approveSuggestion = async (index: number, suggestion: Suggestion) => {
-    const field = targets[index];
-    if (!field) return;
-    setApproving(index); setError('');
+  const suggestWithAi = async () => {
+    if (!connection || !hasOpenaiKey) return;
+    setMappingBusy('ai'); setError('');
     try {
-      const members = suggestion.columns.flatMap((col) => col.providers.map((p) => ({ connectionId: p.connectionId, path: col.path })));
-      await api('/sync/mapping-suggestions/approve', { method: 'POST', body: JSON.stringify({ field, members }) });
-      setApproved((prev) => ({ ...prev, [index]: true }));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo aprobar el mapeo.');
-    } finally { setApproving(null); }
+      const result = await api<{ fieldMap: Record<string, string | null>; notes: Record<string, string> }>(`/sync/connections/${connection.id}/ai-field-mapping`);
+      setFieldMap(Object.fromEntries(Object.entries(result.fieldMap).filter((entry): entry is [string, string] => typeof entry[1] === 'string')));
+      setMappingNotes(result.notes ?? {}); setMappingSaved(false);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo sugerir el mapeo con IA.'); }
+    finally { setMappingBusy(null); }
+  };
+  const saveFieldMap = async () => {
+    if (!connection) return;
+    setMappingBusy('save'); setError(''); setMappingSaved(false);
+    try {
+      await api(`/sync/connections/${connection.id}/field-map`, { method: 'PATCH', body: JSON.stringify({ fieldMap }) });
+      setMappingSaved(true); await refetch();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo guardar el mapeo.'); }
+    finally { setMappingBusy(null); }
   };
 
   const togglePath = (path: string, current: string[], setter: (value: string[]) => void) =>
@@ -175,10 +187,7 @@ function ColumnsPageContent() {
     <Container className="max-w-[1600px] space-y-6 overflow-x-hidden">
       <PageHeader title="Columnas de proveedores" subtitle="Explorá la información disponible antes de decidir cómo mapearla." />
       <Card className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm leading-6 text-fg-muted sm:max-w-2xl">Estas son todas las columnas que trae cada proveedor. Después vas a poder elegir cuáles usar y a qué campo mapearlas.</p>
-          <button type="button" disabled={loadingSug} onClick={() => void loadSuggestions()} className="btn-brand shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loadingSug ? 'Analizando…' : '✨ Sugerir mapeo'}</button>
-        </div>
+        <p className="text-sm leading-6 text-fg-muted">Estas son todas las columnas que trae cada proveedor. Después vas a poder elegir cuáles usar y a qué campo mapearlas.</p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex w-full rounded-xl border border-hair bg-raised p-1 sm:w-auto">
             <button type="button" onClick={() => setMode('overview')} className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${mode === 'overview' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}>Comparación (todos)</button>
@@ -194,51 +203,12 @@ function ColumnsPageContent() {
 
       {error && <div className="rounded-xl border border-[color:var(--crit)] bg-[var(--crit-soft)] p-4 text-sm text-crit">{error}</div>}
 
-      {suggestions && (
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-fg">Sugerencias de mapeo</h3>
-              <p className="text-sm text-fg-muted">Columnas que parecen la misma información. Revisá el campo destino y aprobá lo que corresponda.</p>
-            </div>
-            <button type="button" onClick={() => setSuggestions(null)} className="rounded-lg border border-hair px-3 py-1.5 text-xs text-fg-muted hover:text-fg">Cerrar</button>
-          </div>
-          {!suggestions.length && <p className="py-6 text-center text-sm text-fg-muted">No se encontraron columnas equivalentes para sugerir.</p>}
-          <div className="space-y-3">
-            {suggestions.map((suggestion, index) => (
-              <div key={index} className="rounded-xl border border-hair-soft bg-raised p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium capitalize ${CONF_STYLE[suggestion.confidence]}`}>Confianza {suggestion.confidence}</span>
-                    <span className="text-xs text-fg-faint">{suggestion.providers.join(' + ')}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-fg-muted">Mapear a:</span>
-                    <select value={targets[index] ?? ''} onChange={(event) => setTargets((prev) => ({ ...prev, [index]: event.target.value }))} className="rounded-lg border border-hair bg-surface px-2.5 py-1.5 text-sm text-fg outline-none focus-brand">
-                      <option value="">— elegir —</option>
-                      {TARGET_FIELDS.map((field) => <option key={field} value={field}>{field}</option>)}
-                    </select>
-                    {approved[index] ? (
-                      <span className="inline-flex items-center rounded-lg border border-[color:var(--ok)] bg-[var(--ok-soft)] px-3 py-1.5 text-sm font-medium text-ok">✓ Aprobado</span>
-                    ) : (
-                      <button type="button" disabled={!targets[index] || approving === index} onClick={() => void approveSuggestion(index, suggestion)} className="btn-brand rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">{approving === index ? 'Guardando…' : 'Aprobar'}</button>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-1.5">
-                  {suggestion.columns.map((col) => (
-                    <div key={col.path} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded bg-raised2 px-2 py-0.5 font-medium text-fg-muted">{col.providers.map((p) => p.provider).join(', ')}</span>
-                      <span className="font-mono text-fg">{col.path}</span>
-                      {col.providers[0]?.sample && <span className="text-fg-faint">· ej: {col.providers[0].sample}</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {mode === 'provider' && connection && !loading && <Card className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="text-lg font-semibold text-fg">Mapeo a tus campos</h2><p className="text-sm text-fg-muted">Cada campo de StockRápido usa una sola columna de {SYNC_PROVIDERS[connection.provider]?.label ?? connection.name}.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={applyHeuristic} disabled={!!mappingBusy} className="rounded-xl border border-hair bg-raised px-4 py-2.5 text-sm font-semibold text-fg hover:bg-raised2 disabled:opacity-50">Sugerir (heurística)</button><button type="button" title={hasOpenaiKey ? 'Sugerir usando OpenAI' : 'Configurá tu API key en Configuración'} onClick={() => void suggestWithAi()} disabled={!!mappingBusy || !hasOpenaiKey} className="btn-brand rounded-xl px-4 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">{mappingBusy === 'ai' ? 'Consultando IA…' : 'Sugerir con IA'}</button><button type="button" onClick={() => void saveFieldMap()} disabled={!!mappingBusy} className="rounded-xl border border-[color:var(--ok)] bg-[var(--ok-soft)] px-4 py-2.5 text-sm font-semibold text-ok disabled:opacity-50">{mappingBusy === 'save' ? 'Guardando…' : 'Guardar mapeo'}</button></div></div>
+        {!hasOpenaiKey && <p className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-xs text-warn">Configurá tu API key de OpenAI en Configuración → Proveedores para habilitar la sugerencia con IA.</p>}
+        {mappingSaved && <p className="text-sm text-ok">Mapeo guardado ✓</p>}
+        <div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="px-4 py-3">Campo de StockRápido</th><th className="px-4 py-3">Columna del proveedor</th><th className="px-4 py-3">Sugerencia</th></tr></thead><tbody className="divide-y divide-[color:var(--hair-soft)]">{TARGET_FIELDS.map((field) => { const suggestion = fieldSuggestions.find((item) => item.field === field); return <tr key={field}><td className="px-4 py-3"><span className="font-medium text-fg">{FIELD_LABELS[field] ?? field}</span><span className="ml-2 font-mono text-xs text-fg-faint">{field}</span></td><td className="px-4 py-3"><select value={fieldMap[field] ?? ''} onChange={(event) => { const value = event.target.value; setFieldMap((current) => { const next = Object.fromEntries(Object.entries(current).filter(([otherField, path]) => otherField === field || path !== value)); if (value) next[field] = value; else delete next[field]; return next; }); setMappingSaved(false); }} className="w-full rounded-lg border border-hair bg-surface px-3 py-2 font-mono text-xs text-fg outline-none focus-brand"><option value="">— sin mapear —</option>{columns.filter((column) => !column.mapped).map((column) => <option key={column.path} value={column.path}>{column.path}</option>)}</select></td><td className="px-4 py-3 text-xs text-fg-muted">{mappingNotes[field] ? <span title={mappingNotes[field]}>{mappingNotes[field]}</span> : suggestion?.columnPath ? <span>Heurística: <span className="font-mono">{suggestion.columnPath}</span> · confianza {suggestion.confidence}</span> : 'Sin sugerencia'}</td></tr>; })}</tbody></table></div>
+      </Card>}
       {loading ? <Loader /> : mode === 'overview' ? (
         <Card className="p-0 sm:p-0">
           <div className="overflow-x-auto rounded-xl">
