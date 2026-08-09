@@ -172,6 +172,110 @@ export class SyncService {
     return this.sanitizeConnection(updated);
   }
 
+  private static CANON_RULES: Array<[RegExp, string]> = [
+    [/^(product ?id|id producto|id)$/, 'externalId'],
+    [/^(sku|sku id|codigo interno|item ?id)$/, 'sku'],
+    [/^(ean|barcode|codigo de barras|ean unit|gtin|ean 13)$/, 'ean'],
+    [/^(ref ?id|reference ?id|referencia|supplier ?ref|product ?reference)$/, 'supplierRef'],
+    [/^(name|product ?name|nombre|descripcion|titulo|title)$/, 'name'],
+    [/^(brand|brand ?name|marca)$/, 'brand'],
+    [/^(category|categoria|department|departamento)$/, 'category'],
+    [/^(subcategory|subcategoria|sub department)$/, 'subcategory'],
+    [/^(stock|available ?quantity|existencia|cantidad|disponible)$/, 'stock'],
+    [/^(list ?price|precio ?lista|price|precio)$/, 'listPrice'],
+    [/^(cost|costo|selling ?price|precio venta)$/, 'cost'],
+    [/^(iva|iva ?alicuota|tax|alicuota|impuesto)$/, 'ivaAlicuota'],
+    [/^(image|image ?url|imagen|thumbnail|foto)$/, 'imageUrl'],
+    [/^(link|url|permalink|detail url)$/, 'link'],
+    [/^(weight|peso|net ?weight)$/, 'weight'],
+  ];
+
+  private normalizeLeaf(path: string): string {
+    const leaf = (path.split('.').pop() || path).replace(/\[\]/g, '');
+    return leaf
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_\-]+/g, ' ')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  async getMappingSuggestions(businessId: string) {
+    const overview = await this.getRawColumnsOverview(businessId);
+    const groups = new Map<string, { key: string; canonical: string | null; members: typeof overview }>();
+    for (const col of overview) {
+      if (col.path.startsWith('synced.')) continue; // ya normalizadas
+      const norm = this.normalizeLeaf(col.path);
+      const canonical = SyncService.CANON_RULES.find(([re]) => re.test(norm))?.[1] ?? null;
+      const key = canonical ? `@${canonical}` : norm;
+      const group = groups.get(key) ?? { key, canonical, members: [] as typeof overview };
+      group.members.push(col);
+      groups.set(key, group);
+    }
+    const rank = (c: string) => (c === 'alta' ? 3 : c === 'media' ? 2 : 1);
+    const suggestions: Array<{
+      suggestedField: string | null;
+      label: string;
+      confidence: string;
+      providers: string[];
+      columns: Array<{ path: string; type: RawColumnType; providers: Array<{ provider: string; connectionId: string; sample: string | null }> }>;
+    }> = [];
+    for (const group of groups.values()) {
+      const providerSet = new Set(group.members.flatMap((m) => m.providers.map((p) => p.provider)));
+      if (providerSet.size < 2 && !group.canonical) continue; // solo lo que vale la pena sugerir
+      const confidence = providerSet.size >= 2 && group.canonical ? 'alta' : providerSet.size >= 2 ? 'media' : 'baja';
+      suggestions.push({
+        suggestedField: group.canonical,
+        label: group.canonical ?? group.key,
+        confidence,
+        providers: [...providerSet],
+        columns: group.members.map((m) => ({
+          path: m.path,
+          type: m.type,
+          providers: m.providers.map((p) => ({ provider: p.provider, connectionId: p.connectionId, sample: p.sample })),
+        })),
+      });
+    }
+    return suggestions.sort(
+      (a, b) => rank(b.confidence) - rank(a.confidence) || b.providers.length - a.providers.length || a.label.localeCompare(b.label),
+    );
+  }
+
+  async approveMappingSuggestion(
+    businessId: string,
+    input: { field?: unknown; members?: Array<{ connectionId?: unknown; path?: unknown }> },
+  ) {
+    const field = typeof input?.field === 'string' && input.field.trim() ? input.field.trim() : null;
+    if (!field) throw new BadRequestException('Falta el campo destino (field).');
+    const members = Array.isArray(input?.members) ? input.members : [];
+    const byConn = new Map<string, string[]>();
+    for (const m of members) {
+      const connId = typeof m?.connectionId === 'string' ? m.connectionId : null;
+      const path = typeof m?.path === 'string' ? m.path : null;
+      if (!connId || !path) continue;
+      const list = byConn.get(connId) ?? [];
+      list.push(path);
+      byConn.set(connId, list);
+    }
+    if (!byConn.size) throw new BadRequestException('No hay columnas válidas para mapear.');
+    let updated = 0;
+    for (const [connId, paths] of byConn) {
+      const conn = await this.prisma.syncConnection.findFirst({ where: { id: connId, businessId } });
+      if (!conn) continue;
+      const cfg = conn.columnsConfig && typeof conn.columnsConfig === 'object' && !Array.isArray(conn.columnsConfig)
+        ? (conn.columnsConfig as Record<string, any>)
+        : {};
+      const aliases = { ...(cfg.aliases && typeof cfg.aliases === 'object' ? cfg.aliases : {}) };
+      for (const p of paths) aliases[p] = field;
+      await this.prisma.syncConnection.update({
+        where: { id: connId },
+        data: { columnsConfig: { ...cfg, aliases } as Prisma.InputJsonValue },
+      });
+      updated += paths.length;
+    }
+    return { ok: true, field, aliasesSet: updated };
+  }
+
   async createConnection(businessId: string, data: ConnInput) {
     this.validateSchedule(data);
     const connection = await this.prisma.syncConnection.create({

@@ -48,6 +48,21 @@ export class SyncController {
     return this.sync.getRawColumns(id, u.businessId);
   }
 
+  @Get('mapping-suggestions')
+  @UseGuards(JwtAuthGuard)
+  mappingSuggestions(@CurrentUser() u: User) {
+    return this.sync.getMappingSuggestions(u.businessId);
+  }
+
+  @Post('mapping-suggestions/approve')
+  @UseGuards(JwtAuthGuard)
+  approveMapping(
+    @CurrentUser() u: User,
+    @Body() body: { field?: string; members?: Array<{ connectionId?: string; path?: string }> },
+  ) {
+    return this.sync.approveMappingSuggestion(u.businessId, body || {});
+  }
+
   @Patch('connections/:id/view-config')
   @UseGuards(JwtAuthGuard)
   updateViewConfig(
