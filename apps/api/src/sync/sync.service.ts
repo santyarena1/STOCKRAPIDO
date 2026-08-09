@@ -213,8 +213,8 @@ export class SyncService {
     if (/withtax|taxgroup|amount/.test(lp)) p -= 4;
     const unitFields = ['cost', 'listprice', 'baseprice', 'stock', 'ean', 'eanunit', 'sku', 'supplierref', 'name'];
     if (unitFields.includes(field.toLowerCase())) {
-      if (/(^|[^a-z])(bu|di)([^a-z]|$)|bulto|box|display/.test(lp)) p -= 2;
-      if (/(^|[^a-z])un([^a-z]|$)|unidad|unit/.test(lp)) p += 1;
+      if (/(BU|DI)(?![a-z])/.test(path) || /bulto|box|display/i.test(path)) p -= 2; // bulto/display, no unitario
+      if (/UN(?![a-z])/.test(path) || /unidad|unit/i.test(path)) p += 1; // unitario preferido
     }
     p -= 0.2 * ((path.match(/\.|\[\]/g) || []).length); // preferir columnas menos anidadas
     return p;
