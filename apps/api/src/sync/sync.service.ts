@@ -221,15 +221,22 @@ export class SyncService {
   }
 
   async getFieldMapping(id: string, businessId: string) {
-    const discovery = await this.rawColumnsForConnection(id, businessId, false);
+    const discovery = await this.rawColumnsForConnection(id, businessId, true);
     const connection = await this.prisma.syncConnection.findFirst({
       where: { id, businessId },
       select: { columnsConfig: true },
     });
     const savedFieldMap = this.readFieldMap(connection?.columnsConfig);
+    // Campos que ya se completan automáticamente por el normalizador (synced.<campo> con datos).
+    const autoFields = new Set(
+      discovery.columns
+        .filter((column) => column.path.startsWith('synced.') && column.coverage > 0)
+        .map((column) => column.path.slice('synced.'.length)),
+    );
     const rank = (confidence: string) => confidence === 'alta' ? 3 : confidence === 'media' ? 2 : 1;
     const byField = new Map<FieldMapTarget, Array<{ columnPath: string; confidence: string; score: number }>>();
     for (const column of discovery.columns) {
+      if (column.path.startsWith('synced.')) continue; // synced.* son automáticos, no candidatos crudos
       if (SyncService.MAP_NOISE.test(column.path)) continue;
       const detection = this.detectTarget(column.path, column.samples, [column.type]);
       if (!detection || !FIELD_MAP_TARGETS.includes(detection.field as FieldMapTarget)) continue;
@@ -255,6 +262,7 @@ export class SyncService {
         field,
         columnPath: best?.columnPath ?? null,
         confidence: best?.confidence ?? null,
+        auto: autoFields.has(field),
         candidates,
       };
     });
