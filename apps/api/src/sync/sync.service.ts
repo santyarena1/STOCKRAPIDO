@@ -256,13 +256,16 @@ export class SyncService {
     const used = new Set<string>();
     const suggestions = FIELD_MAP_TARGETS.map((field) => {
       const candidates = byField.get(field) ?? [];
-      const best = candidates.find((candidate) => !used.has(candidate.columnPath)) ?? null;
+      const auto = autoFields.has(field);
+      const rawBest = candidates.find((candidate) => !used.has(candidate.columnPath)) ?? null;
+      // Si el campo ya viene automático, solo sugerimos una columna cruda si es un match fuerte.
+      const best = rawBest && (!auto || rawBest.confidence === 'alta') ? rawBest : null;
       if (best) used.add(best.columnPath);
       return {
         field,
         columnPath: best?.columnPath ?? null,
         confidence: best?.confidence ?? null,
-        auto: autoFields.has(field),
+        auto,
         candidates,
       };
     });
