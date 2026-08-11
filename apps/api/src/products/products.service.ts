@@ -230,6 +230,7 @@ export class ProductsService {
               { supplierSku: { contains: token, mode: 'insensitive' as const } },
               { supplierRef: { contains: token, mode: 'insensitive' as const } },
               { externalId: { contains: token, mode: 'insensitive' as const } },
+              { allCodes: { contains: token, mode: 'insensitive' as const } },
               { brand: { contains: token, mode: 'insensitive' as const } },
             ],
           })),
@@ -595,6 +596,7 @@ export class ProductsService {
         { supplierSku: { contains: token, mode: 'insensitive' } },
         { supplierRef: { contains: token, mode: 'insensitive' } },
         { externalId: { contains: token, mode: 'insensitive' } },
+        { allCodes: { contains: token, mode: 'insensitive' } },
       ],
     }));
     if (query.provider) {

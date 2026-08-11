@@ -1176,6 +1176,7 @@ export class SyncService {
                 { sku: { contains: token, mode: 'insensitive' as const } },
                 { supplierRef: { contains: token, mode: 'insensitive' as const } },
                 { externalId: { contains: token, mode: 'insensitive' as const } },
+                { allCodes: { contains: token, mode: 'insensitive' as const } },
               ],
             }))
           : undefined,
