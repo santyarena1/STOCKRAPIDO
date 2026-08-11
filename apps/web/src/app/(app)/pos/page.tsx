@@ -205,6 +205,7 @@ export default function POSPage() {
   const [sellerBusy, setSellerBusy] = useState(false);
   const [hiddenCategoryIds, setHiddenCategoryIds] = useState<string[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  const [assocMsg, setAssocMsg] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const lastEnterForCobrarRef = useRef<number>(0);
@@ -406,6 +407,20 @@ export default function POSPage() {
     setResults([]);
     searchRef.current?.focus();
   }, []);
+
+  const associateCode = useCallback(async (product: { id: string; name: string; price: string; stock?: number; stockControl?: boolean; imageUrl?: string | null }, code: string) => {
+    const c = code.trim();
+    if (!c) return;
+    try {
+      await api(`/products/${product.id}/add-code`, { method: 'POST', body: JSON.stringify({ code: c }) });
+      setAssocMsg(`Código ${c} asociado a “${product.name}”`);
+      window.setTimeout(() => setAssocMsg(''), 4000);
+      addToCart(product);
+    } catch {
+      setAssocMsg('No se pudo asociar el código.');
+      window.setTimeout(() => setAssocMsg(''), 4000);
+    }
+  }, [addToCart]);
 
   useEffect(() => {
     if (showCustomer) {
@@ -853,17 +868,21 @@ export default function POSPage() {
               Producto rápido
             </button>
           </div>
+          {assocMsg && <div className="mb-2 rounded-lg border border-[color:var(--ok)] bg-[var(--ok-soft)] px-3 py-2 text-sm text-ok">{assocMsg}</div>}
           <div ref={resultsRef} data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
             {loading && <Loader size="sm" label="Productos" />}
             {!loading && results.length > 0 && (
               <><div className="border-b border-hair-soft px-4 py-2 text-right text-xs text-fg-faint"><span className="font-mono tabular-nums">{results.length}</span> {results.length === 1 ? 'resultado' : 'resultados'}</div><ul className="divide-y divide-hair-soft">
-                {results.map((p, idx) => (
-                  <li key={p.id}>
+                {results.map((p, idx) => {
+                  const codeQuery = /^[a-z0-9-]{6,}$/i.test(search.trim());
+                  const showAssociate = codeQuery && (!p.matched || p.matched === 'nombre');
+                  return (
+                  <li key={p.id} className="flex items-stretch">
                     <button
                       type="button"
                       data-result-index={idx}
                       onClick={() => addToCart(p)}
-                      className={`flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-raised ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
+                      className={`flex min-h-16 flex-1 items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-raised ${idx === selectedResultIndex ? 'bg-brand-highlight' : ''}`}
                     >
                       <span className="flex items-center gap-3 min-w-0">
                         {p.imageUrl ? (
@@ -890,8 +909,19 @@ export default function POSPage() {
                         <span className="font-mono text-lg font-bold tabular-nums text-brand">{formatMoneyArs(parseFloat(p.price))} c/u</span>
                       </span>
                     </button>
+                    {showAssociate && (
+                      <button
+                        type="button"
+                        onClick={() => void associateCode(p, search.trim())}
+                        title={`Asociar el código ${search.trim()} a este producto`}
+                        className="shrink-0 border-l border-hair-soft px-3 text-center text-[11px] font-semibold text-brand hover:bg-brand-highlight"
+                      >
+                        ＋ Asociar<br />código
+                      </button>
+                    )}
                   </li>
-                ))}
+                  );
+                })}
               </ul></>
             )}
             {!loading && search.trim() && results.length === 0 && <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-medium text-fg">No encontramos productos</p><p className="mt-1 text-sm text-fg-faint">Podés crearlo ahora y agregarlo directamente al carrito.</p></div><button type="button" onClick={() => { setQuickName(search.trim()); setShowQuickProduct(true); }} className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-2.5 font-medium text-warn">Crear producto rápido</button></div>}

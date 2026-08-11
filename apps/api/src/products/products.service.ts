@@ -795,6 +795,20 @@ export class ProductsService {
     return decorateProductUnits(p);
   }
 
+  /** Asocia un código (ej. de barras escaneado) a un producto, para que la próxima búsqueda sea exacta. */
+  async addCode(id: string, businessId: string, code: string) {
+    const clean = String(code ?? '').trim();
+    if (clean.length < 3 || clean.length > 40) throw new BadRequestException('Código inválido.');
+    const p = await this.prisma.product.findFirst({ where: { id, businessId }, select: { id: true, barcode: true, allCodes: true } });
+    if (!p) throw new NotFoundException('Producto no encontrado.');
+    const codes = new Set((p.allCodes ?? '').split(/\s+/).filter(Boolean));
+    codes.add(clean);
+    const data: Prisma.ProductUpdateInput = { allCodes: [...codes].join(' ') };
+    if (!p.barcode && /^\d{6,14}$/.test(clean)) data.barcode = clean; // si no tiene código de barras y es numérico, lo usamos
+    await this.prisma.product.update({ where: { id }, data });
+    return { ok: true, barcodeSet: !p.barcode && /^\d{6,14}$/.test(clean) };
+  }
+
   /** Completa Product.allCodes con todos los códigos (columnas + del proveedor vinculado). */
   async backfillAllCodes(businessId: string) {
     const products = await this.prisma.product.findMany({

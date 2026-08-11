@@ -197,6 +197,11 @@ export class ProductsController {
     return this.products.backfillAllCodes(user.businessId);
   }
 
+  @Post(':id/add-code')
+  addCode(@CurrentUser() user: User, @Param('id') id: string, @Body() body: { code: string }) {
+    return this.products.addCode(id, user.businessId, body?.code);
+  }
+
   @Get(':id')
   getOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.products.getOne(id, user.businessId);
