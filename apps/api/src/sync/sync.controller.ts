@@ -203,6 +203,12 @@ export class SyncController {
     return this.sync.runCatalogSync(id, u.businessId);
   }
 
+  @Post('connections/:id/renormalize')
+  @UseGuards(JwtAuthGuard)
+  renormalize(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.sync.renormalizeConnection(id, u.businessId);
+  }
+
   // ----- Listados -----
   @Get('connections/:id/products')
   @UseGuards(JwtAuthGuard)

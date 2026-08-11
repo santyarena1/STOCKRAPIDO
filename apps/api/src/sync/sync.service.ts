@@ -1034,6 +1034,64 @@ export class SyncService {
     return n;
   }
 
+  /** Extrae códigos y campos logísticos del raw guardado (Tokin/VTEX) para completar columnas buscables. */
+  private deriveCodesFromRaw(raw: any): Record<string, any> {
+    if (!raw || typeof raw !== 'object') return {};
+    const str = (v: any) => (v != null && v !== '' ? String(v) : null);
+    const num = (v: any) => { const n = Number(String(v).replace(/[^0-9.\-]/g, '')); return Number.isFinite(n) ? n : null; };
+    const int = (v: any) => { const n = num(v); return n == null ? null : Math.trunc(n); };
+    const out: Record<string, any> = {};
+    const variants: any[] = Array.isArray(raw.variants) ? raw.variants : [];
+    const unit = variants.find((v) => v?.uom === 'UN') || variants[0] || {};
+    const box = variants.find((v) => v?.uom === 'BU');
+    // Tokin: skus[].ref_id / sku_id ; VTEX/Mondelez: items[].referenceId / ean, productReference
+    const skus: any[] = Array.isArray(raw.skus) ? raw.skus : [];
+    const items: any[] = Array.isArray(raw.items) ? raw.items : [];
+    const item0 = items[0] || {};
+    const supplierRef =
+      skus.find((s) => s?.ref_id || s?.refId)?.ref_id ||
+      skus.find((s) => s?.ref_id || s?.refId)?.refId ||
+      unit.refId || raw.refId || raw.productReference ||
+      (Array.isArray(item0.referenceId) ? item0.referenceId.find((r: any) => r?.Key === 'RefId')?.Value : undefined);
+    const sku = raw.skuId || skus.find((s) => s?.sku_id || s?.skuId)?.sku_id || skus.find((s) => s?.sku_id || s?.skuId)?.skuId || unit.skuId || item0.itemId;
+    const eanUnit = unit.ean || item0.ean || (typeof supplierRef === 'string' && /^\d{8,14}$/.test(supplierRef) ? supplierRef : null);
+    const eanBox = box?.ean || null;
+    if (str(supplierRef)) out.supplierRef = str(supplierRef);
+    if (str(sku)) out.sku = str(sku);
+    if (str(eanUnit)) { out.eanUnit = str(eanUnit); }
+    if (str(eanBox)) out.eanBox = str(eanBox);
+    if (raw.ivaAlicuota != null && num(raw.ivaAlicuota) != null) out.ivaAlicuota = new Decimal(num(raw.ivaAlicuota) as number);
+    const upb = int(raw.unitsUNPerBU); if (upb && upb > 1) out.unitsPerBox = String(upb);
+    const upd = int(raw.unitsUNPerDI ?? this.spec(raw, 'Unidades por Display')); if (upd != null) out.unitsPerDisplay = String(upd);
+    const dpb = int(raw.unitsDIPerBU); if (dpb != null) out.displaysPerBox = String(dpb);
+    return out;
+  }
+
+  /** Re-procesa el raw de todos los productos de una conexión y completa columnas de códigos/logística. */
+  async renormalizeConnection(id: string, businessId: string) {
+    await this.getConnection(id, businessId);
+    const rows = await this.prisma.syncedProduct.findMany({
+      where: { connectionId: id, businessId, raw: { not: Prisma.DbNull } },
+      select: { id: true, raw: true },
+    });
+    let updated = 0;
+    for (const row of rows) {
+      const data = this.deriveCodesFromRaw(row.raw as any);
+      if (Object.keys(data).length) {
+        await this.prisma.syncedProduct.update({ where: { id: row.id }, data });
+        updated += 1;
+      }
+    }
+    return { ok: true, total: rows.length, updated };
+  }
+
+  private spec(raw: any, name: string): any {
+    // Helper para specs VTEX tipo { "Unidades por Display": ["1"] }
+    const v = raw?.[name];
+    if (Array.isArray(v)) return v[0];
+    return v ?? null;
+  }
+
   // ---------- Listados ----------
   async listSyncedProducts(
     id: string,
