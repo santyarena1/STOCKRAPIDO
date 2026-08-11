@@ -795,6 +795,34 @@ export class ProductsService {
     return decorateProductUnits(p);
   }
 
+  /** Completa Product.allCodes con todos los códigos (columnas + del proveedor vinculado). */
+  async backfillAllCodes(businessId: string) {
+    const products = await this.prisma.product.findMany({
+      where: { businessId },
+      select: { id: true, barcode: true, eanBox: true, supplierSku: true, supplierRef: true, externalId: true, sourceConnectionId: true },
+    });
+    let updated = 0;
+    for (const p of products) {
+      let syncedCodes: string | null = null;
+      if (p.sourceConnectionId && p.externalId) {
+        const sp = await this.prisma.syncedProduct.findFirst({
+          where: { connectionId: p.sourceConnectionId, externalId: p.externalId },
+          select: { allCodes: true },
+        });
+        syncedCodes = sp?.allCodes ?? null;
+      }
+      const parts = [p.barcode, p.eanBox, p.supplierSku, p.supplierRef, p.externalId, syncedCodes]
+        .filter(Boolean)
+        .flatMap((s) => String(s).split(/\s+/));
+      const codes = [...new Set(parts.filter((c) => c.length >= 3 && c.length <= 40))].join(' ') || null;
+      if (codes) {
+        await this.prisma.product.update({ where: { id: p.id }, data: { allCodes: codes } });
+        updated += 1;
+      }
+    }
+    return { ok: true, total: products.length, updated };
+  }
+
   async getSupplierData(id: string, businessId: string) {
     const product = await this.prisma.product.findFirst({
       where: { id, businessId },

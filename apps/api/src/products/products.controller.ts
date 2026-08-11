@@ -192,6 +192,11 @@ export class ProductsController {
     return this.products.getSupplierData(id, user.businessId);
   }
 
+  @Post('backfill-codes')
+  backfillCodes(@CurrentUser() user: User) {
+    return this.products.backfillAllCodes(user.businessId);
+  }
+
   @Get(':id')
   getOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.products.getOne(id, user.businessId);
