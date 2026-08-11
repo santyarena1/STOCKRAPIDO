@@ -547,7 +547,8 @@ export default function POSPage() {
           confirmPendingPayment();
           return;
         }
-        if (showPayment && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+        const typingInField = active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
+        if (showPayment && !typingInField && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
           const idx = parseInt(e.key, 10) - 1;
           if (PAYMENT_METHODS[idx]) {
             e.preventDefault();
@@ -1147,7 +1148,7 @@ export default function POSPage() {
 
       {showPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowPayment(false)}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+          <div className={`max-h-[92vh] w-full ${paymentMethodPending === 'efectivo' ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6`} onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-2 text-lg font-bold text-fg">¿Cómo pagó el cliente?</h2>
             <p className="mb-4 text-sm text-fg-muted">
               Total a cobrar: ${total.toFixed(0)} · Efectivo/Fiado cierra en un paso · Transferencia, MP o tarjeta: elegí método
@@ -1186,42 +1187,51 @@ export default function POSPage() {
               ))}
             </div>
             {paymentMethodPending === 'efectivo' && (
-              <div className="mb-4 space-y-3 rounded-lg border border-[color:var(--ok)] bg-[var(--ok-soft)] p-3">
-                <p className="text-sm font-semibold text-ok">Vuelto — ¿con cuánto pagó? (total ${total.toLocaleString('es-AR')})</p>
-                <div className="grid grid-cols-3 gap-2">
+              <div className="mb-4 space-y-4 rounded-xl border border-[color:var(--ok)] bg-[var(--ok-soft)] p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-base font-bold text-ok">💵 Vuelto — ¿con cuánto pagó?</p>
+                  <span className="rounded-lg bg-surface px-3 py-1 text-sm text-fg-muted">Total: <span className="font-mono font-bold text-fg">${total.toLocaleString('es-AR')}</span></span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                   {(() => {
                     const start = Math.max(1000, Math.ceil(total / 1000) * 1000);
                     const amounts: number[] = [];
-                    for (let a = start; a <= Math.max(20000, start + 10000) && amounts.length < 18; a += 1000) amounts.push(a);
+                    for (let a = start; a <= 20000; a += 1000) amounts.push(a);
+                    if (amounts.length === 0) amounts.push(start); // total ≥ 20.000
                     return amounts.map((a) => (
                       <button key={a} type="button" onClick={() => setCashPaid(a)}
-                        className={`rounded-lg border px-2 py-2 text-center ${cashPaid === a ? 'border-[color:var(--ok)] bg-surface' : 'border-hair bg-raised'}`}>
-                        <span className="block font-mono text-sm font-bold text-fg">${a.toLocaleString('es-AR')}</span>
-                        <span className="block text-[11px] text-fg-muted">vuelto ${(a - total).toLocaleString('es-AR')}</span>
+                        className={`rounded-xl border-2 px-2 py-3 text-center transition ${cashPaid === a ? 'border-[color:var(--ok)] bg-surface shadow-sm' : 'border-hair bg-raised hover:border-[color:var(--ok)]'}`}>
+                        <span className="block font-mono text-base font-bold text-fg">${a.toLocaleString('es-AR')}</span>
+                        <span className="mt-0.5 block text-xs text-fg-muted">vuelto <span className="font-mono font-semibold text-ok">${(a - total).toLocaleString('es-AR')}</span></span>
                       </button>
                     ));
                   })()}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-fg-muted">Pagó con:</span>
-                  <input type="number" inputMode="numeric" placeholder="otro monto"
-                    onChange={(e) => { const v = Number(e.target.value); setCashPaid(Number.isFinite(v) && v > 0 ? v : null); }}
-                    className="w-32 rounded-lg border border-hair bg-surface px-3 py-2 font-mono text-fg outline-none focus-brand" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-fg-muted">Pagó con otro monto:</span>
+                  <input type="text" inputMode="numeric" placeholder="$ escribí el monto"
+                    value={cashPaid != null ? String(cashPaid) : ''}
+                    onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ''); setCashPaid(v ? Number(v) : null); }}
+                    className="w-40 rounded-lg border-2 border-hair bg-surface px-3 py-2.5 font-mono text-lg text-fg outline-none focus-brand" />
                 </div>
-                {cashPaid != null && (
-                  <div className="rounded-lg bg-surface px-3 py-2 text-center">
-                    <span className="text-sm text-fg-muted">Vuelto: </span>
-                    <span className={`font-mono text-2xl font-bold ${cashPaid >= total ? 'text-ok' : 'text-crit'}`}>${Math.max(0, cashPaid - total).toLocaleString('es-AR')}</span>
-                    {cashPaid < total && <span className="ml-2 text-xs text-crit">falta ${(total - cashPaid).toLocaleString('es-AR')}</span>}
-                  </div>
-                )}
+                <div className="rounded-xl bg-surface px-4 py-3 text-center">
+                  {cashPaid == null ? (
+                    <span className="text-sm text-fg-faint">Elegí un monto o escribilo para ver el vuelto</span>
+                  ) : (
+                    <>
+                      <span className="text-base text-fg-muted">Vuelto a dar: </span>
+                      <span className={`font-mono text-3xl font-extrabold ${cashPaid >= total ? 'text-ok' : 'text-crit'}`}>${Math.max(0, cashPaid - total).toLocaleString('es-AR')}</span>
+                      {cashPaid < total && <div className="mt-1 text-sm font-semibold text-crit">⚠ Falta ${(total - cashPaid).toLocaleString('es-AR')}</div>}
+                    </>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => void handleCobrar('efectivo')} disabled={cobrandoBusy}
-                    className="flex-1 rounded-lg btn-brand py-3 font-semibold disabled:opacity-50">
+                    className="flex-1 rounded-xl btn-brand py-3.5 text-base font-bold disabled:opacity-50">
                     {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro'}
                   </button>
                   <button type="button" onClick={() => { setPaymentMethodPending(null); setCashPaid(null); }}
-                    className="rounded-lg border border-hair px-4 py-3 text-sm text-fg-muted hover:bg-raised">Cambiar</button>
+                    className="rounded-xl border border-hair px-5 py-3.5 text-sm font-medium text-fg-muted hover:bg-raised">Cambiar</button>
                 </div>
               </div>
             )}
