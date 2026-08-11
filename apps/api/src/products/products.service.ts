@@ -5,6 +5,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
+import { fuzzyCodeClause } from '../common/fuzzy-code';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -132,30 +133,11 @@ export class ProductsService {
       });
       const firstContains = `%${firstToken}%`;
       const firstStarts = `${firstToken}%`;
-      // Coincidencia aproximada (para códigos que comparten solo una parte, ej. Tokin).
-      const qDigits = term.replace(/\D/g, '');
-      const enableFuzzy = tokens.length === 1 && term.length >= 3;
-      const simExpr = Prisma.sql`GREATEST(
-        similarity(COALESCE(p."barcode", ''), ${term}),
-        similarity(COALESCE(p."eanBox", ''), ${term}),
-        similarity(COALESCE(p."supplierSku", ''), ${term}),
-        similarity(COALESCE(p."supplierRef", ''), ${term}),
-        similarity(COALESCE(p."externalId", ''), ${term})
-      )`;
-      const qDigitsLike = `%${qDigits}%`;
-      const digitExpr = qDigits.length >= 4
-        ? Prisma.sql`(
-            regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-            OR regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-            OR regexp_replace(COALESCE(p."supplierSku", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-            OR regexp_replace(COALESCE(p."eanBox", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-            OR regexp_replace(COALESCE(p."externalId", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-            OR (length(regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') || '%')
-            OR (length(regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') || '%')
-          )`
-        : Prisma.sql`false`;
-      const fuzzyClause = enableFuzzy ? Prisma.sql`OR (${simExpr}) > 0.3 OR ${digitExpr}` : Prisma.empty;
-      const simSelect = enableFuzzy ? simExpr : Prisma.sql`0`;
+      // Coincidencia aproximada por código (comparte una parte; ej. Tokin ARC-... vs barcode).
+      const { match: fuzzyClause, sim: simSelect } = fuzzyCodeClause(
+        term, tokens, 'p',
+        ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId'],
+      );
       const excludedCategories = excludeCategoryIds.length
         ? Prisma.sql`AND (p."categoryId" IS NULL OR p."categoryId" NOT IN (${Prisma.join(excludeCategoryIds)}))`
         : Prisma.empty;
@@ -278,32 +260,6 @@ export class ProductsService {
     return list.map(decorateProductUnits);
   }
 
-  /** Cláusula SQL de coincidencia aproximada por código (similitud + dígitos). Solo para 1 token >=3. */
-  private fuzzyProductClause(term: string, tokens: string[]): Prisma.Sql {
-    if (tokens.length !== 1 || term.length < 3) return Prisma.empty;
-    const qDigits = term.replace(/\D/g, '');
-    const qDigitsLike = `%${qDigits}%`;
-    const simExpr = Prisma.sql`GREATEST(
-      similarity(COALESCE(p."barcode", ''), ${term}),
-      similarity(COALESCE(p."eanBox", ''), ${term}),
-      similarity(COALESCE(p."supplierSku", ''), ${term}),
-      similarity(COALESCE(p."supplierRef", ''), ${term}),
-      similarity(COALESCE(p."externalId", ''), ${term})
-    )`;
-    const digitExpr = qDigits.length >= 4
-      ? Prisma.sql`(
-          regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-          OR regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-          OR regexp_replace(COALESCE(p."supplierSku", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-          OR regexp_replace(COALESCE(p."eanBox", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-          OR regexp_replace(COALESCE(p."externalId", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-          OR (length(regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') || '%')
-          OR (length(regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') || '%')
-        )`
-      : Prisma.sql`false`;
-    return Prisma.sql`OR (${simExpr}) > 0.3 OR ${digitExpr}`;
-  }
-
   async catalog(businessId: string, query: ProductCatalogQuery) {
     let where: Record<string, unknown>;
     const tokens = query.q?.trim().split(/\s+/).filter(Boolean) ?? [];
@@ -321,7 +277,10 @@ export class ProductsService {
             OR COALESCE(p."externalId", '') ILIKE ${contains}
           )`;
         });
-        const fuzzy = this.fuzzyProductClause(query.q?.trim() ?? '', tokens);
+        const { match: fuzzy } = fuzzyCodeClause(
+          query.q?.trim() ?? '', tokens, 'p',
+          ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId'],
+        );
         const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT p."id"
           FROM "Product" p

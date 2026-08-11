@@ -9,6 +9,7 @@ import { TokinProvider } from './tokin.provider';
 import { proxiedFetch } from './proxied-fetch';
 import { discoverRawColumns, flatten, RawColumnType } from './raw-columns.util';
 import { BusinessService } from '../business/business.service';
+import { fuzzyCodeClause } from '../common/fuzzy-code';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -1058,31 +1059,10 @@ export class SyncService {
             OR COALESCE(sp."externalId", '') ILIKE ${contains}
           )`;
         });
-        const term = opts.q?.trim() ?? '';
-        let fuzzy: Prisma.Sql = Prisma.empty;
-        if (tokens.length === 1 && term.length >= 3) {
-          const qDigits = term.replace(/\D/g, '');
-          const qDigitsLike = `%${qDigits}%`;
-          const simExpr = Prisma.sql`GREATEST(
-            similarity(COALESCE(sp."ean", ''), ${term}),
-            similarity(COALESCE(sp."eanUnit", ''), ${term}),
-            similarity(COALESCE(sp."eanBox", ''), ${term}),
-            similarity(COALESCE(sp."sku", ''), ${term}),
-            similarity(COALESCE(sp."supplierRef", ''), ${term}),
-            similarity(COALESCE(sp."externalId", ''), ${term})
-          )`;
-          const digitExpr = qDigits.length >= 4
-            ? Prisma.sql`(
-                regexp_replace(COALESCE(sp."ean", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-                OR regexp_replace(COALESCE(sp."eanUnit", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-                OR regexp_replace(COALESCE(sp."sku", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-                OR regexp_replace(COALESCE(sp."supplierRef", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-                OR regexp_replace(COALESCE(sp."eanBox", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
-                OR (length(regexp_replace(COALESCE(sp."ean", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(sp."ean", ''), '[^0-9]', '', 'g') || '%')
-              )`
-            : Prisma.sql`false`;
-          fuzzy = Prisma.sql`OR (${simExpr}) > 0.3 OR ${digitExpr}`;
-        }
+        const { match: fuzzy } = fuzzyCodeClause(
+          opts.q?.trim() ?? '', tokens, 'sp',
+          ['ean', 'eanUnit', 'eanBox', 'sku', 'supplierRef', 'externalId'],
+        );
         const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT sp."id"
           FROM "SyncedProduct" sp
