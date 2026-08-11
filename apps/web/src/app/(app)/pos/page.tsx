@@ -185,6 +185,7 @@ export default function POSPage() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
+  const [cashPaid, setCashPaid] = useState<number | null>(null); // con cuánto pagó en efectivo (para el vuelto)
   const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'>('internal');
   const [printEnabled,setPrintEnabled]=useState(true);
   const [preferencesLoaded,setPreferencesLoaded]=useState(false);
@@ -279,7 +280,7 @@ export default function POSPage() {
   }, [cart, discountTotal, showPayment, paymentMethodPending, selectedCustomer?.name]);
 
   useEffect(() => {
-    if (!showPayment) setPaymentMethodPending(null);
+    if (!showPayment) { setPaymentMethodPending(null); setCashPaid(null); }
   }, [showPayment]);
 
   const refreshOpenCashRegister = useCallback(async (): Promise<string | null> => {
@@ -511,7 +512,7 @@ export default function POSPage() {
   }, [search, addToCart, hiddenCategoryIds]);
 
   const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,activeSeller?.id]);
-  const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar]);
+  const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;if(id==='efectivo'){setCashPaid(null);setPaymentMethodPending('efectivo');return}paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar]);
   const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -942,7 +943,24 @@ export default function POSPage() {
                 })}
               </ul></>
             )}
-            {!loading && search.trim() && results.length === 0 && <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-medium text-fg">No encontramos productos</p><p className="mt-1 text-sm text-fg-faint">Podés crearlo ahora y agregarlo directamente al carrito.</p></div><button type="button" onClick={() => { setQuickName(search.trim()); setShowQuickProduct(true); }} className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-2.5 font-medium text-warn">Crear producto rápido</button></div>}
+            {!loading && search.trim() && results.length === 0 && (() => {
+              const codeQuery = /^[a-z0-9-]{6,}$/i.test(search.trim());
+              const term = search.trim();
+              return (
+                <div className="flex min-h-[200px] flex-col items-center justify-center gap-4 p-6 text-center">
+                  <div>
+                    <p className="font-medium text-fg">No encontramos productos{codeQuery ? ' con ese código' : ''}</p>
+                    {codeQuery
+                      ? <p className="mt-1 text-sm text-fg-faint">Código <span className="font-mono text-fg-muted">{term}</span> — creá un producto nuevo con ese código, o asocialo a uno que ya tengas.</p>
+                      : <p className="mt-1 text-sm text-fg-faint">Podés crearlo ahora y agregarlo al carrito.</p>}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button type="button" onClick={() => { if (codeQuery) { setQuickBarcode(term); setQuickName(''); } else { setQuickName(term); setQuickBarcode(''); } setQuickPrice(''); setShowQuickProduct(true); }} className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-2.5 font-medium text-warn hover:bg-raised2">Crear producto rápido</button>
+                    {codeQuery && <button type="button" onClick={() => { setAssocCode(term); setSearch(''); searchRef.current?.focus(); }} className="rounded-xl border border-[color:var(--brand-accent)] px-4 py-2.5 font-medium text-brand hover:bg-brand-highlight">Asociar a un producto existente</button>}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -1167,6 +1185,46 @@ export default function POSPage() {
                 </button>
               ))}
             </div>
+            {paymentMethodPending === 'efectivo' && (
+              <div className="mb-4 space-y-3 rounded-lg border border-[color:var(--ok)] bg-[var(--ok-soft)] p-3">
+                <p className="text-sm font-semibold text-ok">Vuelto — ¿con cuánto pagó? (total ${total.toLocaleString('es-AR')})</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(() => {
+                    const start = Math.max(1000, Math.ceil(total / 1000) * 1000);
+                    const amounts: number[] = [];
+                    for (let a = start; a <= Math.max(20000, start + 10000) && amounts.length < 18; a += 1000) amounts.push(a);
+                    return amounts.map((a) => (
+                      <button key={a} type="button" onClick={() => setCashPaid(a)}
+                        className={`rounded-lg border px-2 py-2 text-center ${cashPaid === a ? 'border-[color:var(--ok)] bg-surface' : 'border-hair bg-raised'}`}>
+                        <span className="block font-mono text-sm font-bold text-fg">${a.toLocaleString('es-AR')}</span>
+                        <span className="block text-[11px] text-fg-muted">vuelto ${(a - total).toLocaleString('es-AR')}</span>
+                      </button>
+                    ));
+                  })()}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-fg-muted">Pagó con:</span>
+                  <input type="number" inputMode="numeric" placeholder="otro monto"
+                    onChange={(e) => { const v = Number(e.target.value); setCashPaid(Number.isFinite(v) && v > 0 ? v : null); }}
+                    className="w-32 rounded-lg border border-hair bg-surface px-3 py-2 font-mono text-fg outline-none focus-brand" />
+                </div>
+                {cashPaid != null && (
+                  <div className="rounded-lg bg-surface px-3 py-2 text-center">
+                    <span className="text-sm text-fg-muted">Vuelto: </span>
+                    <span className={`font-mono text-2xl font-bold ${cashPaid >= total ? 'text-ok' : 'text-crit'}`}>${Math.max(0, cashPaid - total).toLocaleString('es-AR')}</span>
+                    {cashPaid < total && <span className="ml-2 text-xs text-crit">falta ${(total - cashPaid).toLocaleString('es-AR')}</span>}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => void handleCobrar('efectivo')} disabled={cobrandoBusy}
+                    className="flex-1 rounded-lg btn-brand py-3 font-semibold disabled:opacity-50">
+                    {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro'}
+                  </button>
+                  <button type="button" onClick={() => { setPaymentMethodPending(null); setCashPaid(null); }}
+                    className="rounded-lg border border-hair px-4 py-3 text-sm text-fg-muted hover:bg-raised">Cambiar</button>
+                </div>
+              </div>
+            )}
             {paymentMethodPending && paymentNeedsCustomerConfirmStep(paymentMethodPending) && (
               <div className="mb-4 space-y-2 rounded-lg border border-ok/30 bg-[var(--ok-soft)] p-3">
                 <p className="text-sm text-ok">
