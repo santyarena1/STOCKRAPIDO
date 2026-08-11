@@ -30,22 +30,31 @@ export function fuzzyCodeClause(
   }
   const colText = cols.map((c) => Prisma.sql`COALESCE(${Prisma.raw(`${alias}."${c}"`)}, '')`);
   const colDigits = cols.map((c) => Prisma.sql`regexp_replace(COALESCE(${Prisma.raw(`${alias}."${c}"`)}, ''), '[^0-9]', '', 'g')`);
-  // Parecido para ORDENAR: combina similitud global y de subcadena (word_similarity), sobre texto y dígitos.
   const qDigits = clean.replace(/\D/g, '');
-  const simTerms = [
-    ...colText.map((ct) => Prisma.sql`similarity(${ct}, ${clean})`),
-    ...colText.map((ct) => Prisma.sql`word_similarity(${clean}, ${ct})`),
-    ...(qDigits.length >= 4 ? colDigits.map((cd) => Prisma.sql`word_similarity(${qDigits}, ${cd})`) : []),
-  ];
+  const numeric = qDigits.length >= 6; // parece un código numérico (EAN/interno)
+
+  // Parecido para ORDENAR. Para códigos no usamos word_similarity (premia el prefijo país/fabricante).
+  const simTerms = numeric
+    ? colDigits.map((cd) => Prisma.sql`similarity(${cd}, ${qDigits})`)
+    : [
+        ...colText.map((ct) => Prisma.sql`similarity(${ct}, ${clean})`),
+        ...colText.map((ct) => Prisma.sql`word_similarity(${clean}, ${ct})`),
+      ];
   const sim = Prisma.sql`GREATEST(${Prisma.join(simTerms, ', ')})`;
 
-  // MATCH: parecido de texto razonable O comparten CUALQUIER tramo de 4 dígitos (cubre solapes de largo/posición variable).
-  const conds: Prisma.Sql[] = [Prisma.sql`(${sim}) > 0.25`];
-  if (qDigits.length >= 4) {
-    for (const gram of kgrams(qDigits, 4)) {
+  const conds: Prisma.Sql[] = [];
+  // Texto (nombre/marca/código con letras): similitud razonable.
+  if (!numeric) conds.push(Prisma.sql`(${sim}) > 0.3`);
+  // Códigos: exigir un TRAMO REAL compartido de dígitos, NO el prefijo de país/fabricante del EAN.
+  // En EAN largos (>=12) sacamos los primeros 4 dígitos (779 país + inicio de fabricante) antes de generar n-gramas.
+  const gramSource = qDigits.length >= 12 ? qDigits.slice(4) : qDigits;
+  const k = gramSource.length >= 5 ? 5 : gramSource.length >= 4 ? 4 : 0;
+  if (k > 0) {
+    for (const gram of kgrams(gramSource, k)) {
       const like = `%${gram}%`;
       for (const cd of colDigits) conds.push(Prisma.sql`${cd} LIKE ${like}`);
     }
   }
+  if (conds.length === 0) return { match: Prisma.empty, sim };
   return { match: Prisma.sql`OR (${Prisma.join(conds, ' OR ')})`, sim };
 }
