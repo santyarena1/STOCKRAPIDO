@@ -202,6 +202,11 @@ export class ProductsController {
     return this.products.addCode(id, user.businessId, body?.code);
   }
 
+  @Get('barcode-lookup')
+  barcodeLookup(@Query('code') code: string) {
+    return this.products.barcodeLookup(code);
+  }
+
   @Get(':id')
   getOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.products.getOne(id, user.businessId);

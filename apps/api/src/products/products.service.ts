@@ -795,6 +795,37 @@ export class ProductsService {
     return decorateProductUnits(p);
   }
 
+  /** Busca un código de barras en bases públicas (Open Food Facts) para identificar qué producto es. */
+  async barcodeLookup(code: string) {
+    const c = String(code ?? '').trim();
+    if (!/^\d{8,14}$/.test(c)) return { found: false as const };
+    try {
+      const res = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${c}.json?fields=product_name,product_name_es,brands,image_url,quantity`,
+        { headers: { 'User-Agent': 'StockRapido/1.0 (kiosco POS)' } },
+      );
+      if (!res.ok) return { found: false as const };
+      const json: any = await res.json();
+      if (json?.status === 1 && json?.product) {
+        const p = json.product;
+        const name = (p.product_name_es || p.product_name || '').trim();
+        if (name) {
+          return {
+            found: true as const,
+            name,
+            brand: (p.brands || '').split(',')[0]?.trim() || null,
+            quantity: p.quantity || null,
+            image: p.image_url || null,
+            source: 'Open Food Facts',
+          };
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Lookup de código público falló: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return { found: false as const };
+  }
+
   /** Asocia un código (ej. de barras escaneado) a un producto, para que la próxima búsqueda sea exacta. */
   async addCode(id: string, businessId: string, code: string) {
     const clean = String(code ?? '').trim();
