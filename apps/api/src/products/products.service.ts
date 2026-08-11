@@ -278,6 +278,32 @@ export class ProductsService {
     return list.map(decorateProductUnits);
   }
 
+  /** Cláusula SQL de coincidencia aproximada por código (similitud + dígitos). Solo para 1 token >=3. */
+  private fuzzyProductClause(term: string, tokens: string[]): Prisma.Sql {
+    if (tokens.length !== 1 || term.length < 3) return Prisma.empty;
+    const qDigits = term.replace(/\D/g, '');
+    const qDigitsLike = `%${qDigits}%`;
+    const simExpr = Prisma.sql`GREATEST(
+      similarity(COALESCE(p."barcode", ''), ${term}),
+      similarity(COALESCE(p."eanBox", ''), ${term}),
+      similarity(COALESCE(p."supplierSku", ''), ${term}),
+      similarity(COALESCE(p."supplierRef", ''), ${term}),
+      similarity(COALESCE(p."externalId", ''), ${term})
+    )`;
+    const digitExpr = qDigits.length >= 4
+      ? Prisma.sql`(
+          regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+          OR regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+          OR regexp_replace(COALESCE(p."supplierSku", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+          OR regexp_replace(COALESCE(p."eanBox", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+          OR regexp_replace(COALESCE(p."externalId", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+          OR (length(regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') || '%')
+          OR (length(regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') || '%')
+        )`
+      : Prisma.sql`false`;
+    return Prisma.sql`OR (${simExpr}) > 0.3 OR ${digitExpr}`;
+  }
+
   async catalog(businessId: string, query: ProductCatalogQuery) {
     let where: Record<string, unknown>;
     const tokens = query.q?.trim().split(/\s+/).filter(Boolean) ?? [];
@@ -295,11 +321,12 @@ export class ProductsService {
             OR COALESCE(p."externalId", '') ILIKE ${contains}
           )`;
         });
+        const fuzzy = this.fuzzyProductClause(query.q?.trim() ?? '', tokens);
         const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT p."id"
           FROM "Product" p
           WHERE p."businessId" = ${businessId}
-            AND ${Prisma.join(tokenConditions, ' AND ')}
+            AND (${Prisma.join(tokenConditions, ' AND ')} ${fuzzy})
         `);
         where = this.catalogWhere(businessId, { ...query, q: undefined });
         where.id = { in: matches.map((match) => match.id) };
