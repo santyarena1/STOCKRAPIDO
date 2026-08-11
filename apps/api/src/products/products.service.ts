@@ -132,6 +132,30 @@ export class ProductsService {
       });
       const firstContains = `%${firstToken}%`;
       const firstStarts = `${firstToken}%`;
+      // Coincidencia aproximada (para códigos que comparten solo una parte, ej. Tokin).
+      const qDigits = term.replace(/\D/g, '');
+      const enableFuzzy = tokens.length === 1 && term.length >= 3;
+      const simExpr = Prisma.sql`GREATEST(
+        similarity(COALESCE(p."barcode", ''), ${term}),
+        similarity(COALESCE(p."eanBox", ''), ${term}),
+        similarity(COALESCE(p."supplierSku", ''), ${term}),
+        similarity(COALESCE(p."supplierRef", ''), ${term}),
+        similarity(COALESCE(p."externalId", ''), ${term})
+      )`;
+      const qDigitsLike = `%${qDigits}%`;
+      const digitExpr = qDigits.length >= 4
+        ? Prisma.sql`(
+            regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+            OR regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+            OR regexp_replace(COALESCE(p."supplierSku", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+            OR regexp_replace(COALESCE(p."eanBox", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+            OR regexp_replace(COALESCE(p."externalId", ''), '[^0-9]', '', 'g') LIKE ${qDigitsLike}
+            OR (length(regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."barcode", ''), '[^0-9]', '', 'g') || '%')
+            OR (length(regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g')) >= 4 AND ${qDigits} LIKE '%' || regexp_replace(COALESCE(p."supplierRef", ''), '[^0-9]', '', 'g') || '%')
+          )`
+        : Prisma.sql`false`;
+      const fuzzyClause = enableFuzzy ? Prisma.sql`OR (${simExpr}) > 0.3 OR ${digitExpr}` : Prisma.empty;
+      const simSelect = enableFuzzy ? simExpr : Prisma.sql`0`;
       const excludedCategories = excludeCategoryIds.length
         ? Prisma.sql`AND (p."categoryId" IS NULL OR p."categoryId" NOT IN (${Prisma.join(excludeCategoryIds)}))`
         : Prisma.empty;
@@ -141,7 +165,7 @@ export class ProductsService {
             WHERE c."id" = p."categoryId" AND lower(c."name") = lower('combo')
           )`
         : Prisma.empty;
-      const raw = await this.prisma.$queryRaw<Array<{ id: string; score: number; matched: string }>>(Prisma.sql`
+      const raw = await this.prisma.$queryRaw<Array<{ id: string; score: number; matched: string; sim: number }>>(Prisma.sql`
         SELECT p."id",
           CASE
             WHEN p."barcode" = ${term} OR p."eanBox" = ${term} OR p."supplierSku" = ${term}
@@ -154,7 +178,7 @@ export class ProductsService {
               OR COALESCE(p."supplierRef", '') ILIKE ${firstContains}
               OR COALESCE(p."externalId", '') ILIKE ${firstContains} THEN 3
             WHEN unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${firstContains})) THEN 4
-            ELSE 2
+            ELSE 5
           END AS score,
           CASE
             WHEN p."eanBox" = ${term} THEN 'bulto'
@@ -168,14 +192,15 @@ export class ProductsService {
             WHEN COALESCE(p."eanBox", '') ILIKE ${firstContains} THEN 'bulto'
             WHEN unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${firstContains})) THEN 'marca'
             ELSE 'nombre'
-          END AS matched
+          END AS matched,
+          ${simSelect} AS sim
         FROM "Product" p
         WHERE p."businessId" = ${businessId}
           AND p."isActive" = true
-          AND ${Prisma.join(tokenConditions, ' AND ')}
+          AND (${Prisma.join(tokenConditions, ' AND ')} ${fuzzyClause})
           ${excludedCategories}
           ${excludedCombos}
-        ORDER BY score ASC, p."name" ASC
+        ORDER BY score ASC, sim DESC, p."name" ASC
         LIMIT ${limit}
       `);
       const ids = raw.map((row) => row.id);
