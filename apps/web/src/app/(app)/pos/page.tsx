@@ -880,6 +880,7 @@ export default function POSPage() {
                         </span>
                       </span>
                       <span className="flex flex-col items-end shrink-0 gap-0.5">
+                        {idx === selectedResultIndex && <span className="rounded bg-[color:var(--brand-accent)] px-1.5 py-0.5 text-[10px] font-bold text-white">↵ Enter</span>}
                         <span className="flex items-center gap-1.5 text-xs text-fg-muted"><span className={`h-2 w-2 rounded-full ${p.stockControl && p.stock <= LOW_STOCK_THRESHOLD ? 'bg-warn' : 'bg-ok'}`} />Stock <span className="font-mono tabular-nums">{p.stock}</span></span>
                         {p.cost != null && Number(p.cost) > 0 && (
                           <span className="font-mono text-xs tabular-nums text-fg-faint">
