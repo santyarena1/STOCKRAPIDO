@@ -10,6 +10,7 @@ import { proxiedFetch } from './proxied-fetch';
 import { discoverRawColumns, flatten, RawColumnType } from './raw-columns.util';
 import { BusinessService } from '../business/business.service';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
+import { collectAllCodes } from '../common/codes';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -943,6 +944,7 @@ export class SyncService {
         supplierRef: it.supplierRef,
         eanUnit: it.eanUnit,
         eanBox: it.eanBox,
+        allCodes: collectAllCodes(it.raw, [it.sku, it.ean, it.eanUnit, it.eanBox, it.supplierRef, it.externalId]),
         name: it.name,
         brand: it.brand,
         category: it.category,
@@ -1064,6 +1066,8 @@ export class SyncService {
     const upb = int(raw.unitsUNPerBU); if (upb && upb > 1) out.unitsPerBox = String(upb);
     const upd = int(raw.unitsUNPerDI ?? this.spec(raw, 'Unidades por Display')); if (upd != null) out.unitsPerDisplay = String(upd);
     const dpb = int(raw.unitsDIPerBU); if (dpb != null) out.displaysPerBox = String(dpb);
+    const allCodes = collectAllCodes(raw, [out.supplierRef, out.sku, out.eanUnit, out.eanBox]);
+    if (allCodes) out.allCodes = allCodes;
     return out;
   }
 
@@ -1115,19 +1119,36 @@ export class SyncService {
             OR COALESCE(sp."sku", '') ILIKE ${contains}
             OR COALESCE(sp."supplierRef", '') ILIKE ${contains}
             OR COALESCE(sp."externalId", '') ILIKE ${contains}
+            OR COALESCE(sp."allCodes", '') ILIKE ${contains}
             OR sp."raw"::text ILIKE ${contains}
           )`;
         });
-        const { match: fuzzy } = fuzzyCodeClause(
-          opts.q?.trim() ?? '', tokens, 'sp',
-          ['ean', 'eanUnit', 'eanBox', 'sku', 'supplierRef', 'externalId'],
+        const termQ = opts.q?.trim() ?? '';
+        const firstContains = `%${tokens[0]}%`;
+        const { match: fuzzy, sim } = fuzzyCodeClause(
+          termQ, tokens, 'sp',
+          ['ean', 'eanUnit', 'eanBox', 'sku', 'supplierRef', 'externalId', 'allCodes'],
         );
+        // Ranking: nombre/código exacto o contains antes que los aproximados.
         const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          SELECT sp."id"
+          SELECT sp."id",
+            CASE
+              WHEN sp."ean" = ${termQ} OR sp."eanUnit" = ${termQ} OR sp."eanBox" = ${termQ}
+                OR sp."sku" = ${termQ} OR sp."supplierRef" = ${termQ} OR sp."externalId" = ${termQ} THEN 0
+              WHEN unaccent(lower(sp."name")) LIKE unaccent(lower(${firstContains})) THEN 1
+              WHEN COALESCE(sp."ean",'') ILIKE ${firstContains} OR COALESCE(sp."eanUnit",'') ILIKE ${firstContains}
+                OR COALESCE(sp."sku",'') ILIKE ${firstContains} OR COALESCE(sp."supplierRef",'') ILIKE ${firstContains}
+                OR COALESCE(sp."eanBox",'') ILIKE ${firstContains} OR COALESCE(sp."externalId",'') ILIKE ${firstContains}
+                OR COALESCE(sp."allCodes",'') ILIKE ${firstContains} THEN 2
+              ELSE 5
+            END AS score,
+            ${sim} AS sim
           FROM "SyncedProduct" sp
           WHERE sp."connectionId" = ${id}
             AND sp."businessId" = ${businessId}
             AND (${Prisma.join(tokenConditions, ' AND ')} ${fuzzy})
+          ORDER BY score ASC, sim DESC, sp."name" ASC
+          LIMIT ${opts.limit ?? 100}
         `);
         matchedIds = matches.map((match) => match.id);
       } catch (error) {
@@ -1164,7 +1185,11 @@ export class SyncService {
       include: { variants: true },
     });
     const markup = Number(conn.priceMarkup ?? 0);
-    return rows.map((r) => decorateSyncedProductUnits(r, markup));
+    // Preservar el orden del ranking cuando hubo búsqueda.
+    const ordered = matchedIds
+      ? (matchedIds.map((mid) => rows.find((r) => r.id === mid)).filter(Boolean) as typeof rows)
+      : rows;
+    return ordered.map((r) => decorateSyncedProductUnits(r, markup));
   }
 
   async listRuns(id: string, businessId: string) {
@@ -1332,6 +1357,8 @@ export class SyncService {
       if (preferredUnitEan) data.barcode = String(preferredUnitEan);
       if (!data.supplierRef && s.supplierRef) data.supplierRef = String(s.supplierRef);
       if (!data.eanBox && s.eanBox) data.eanBox = String(s.eanBox);
+      const allCodes = s.allCodes || collectAllCodes(s.raw, [data.barcode, data.eanBox, data.supplierRef, s.sku, s.externalId]);
+      if (allCodes) data.allCodes = allCodes;
       // nombre (requerido)
       const nameVal = src(s, 'name') ?? s.name;
       data.name = nameVal ? String(nameVal) : 'Sin nombre';

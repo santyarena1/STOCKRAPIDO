@@ -132,6 +132,7 @@ model Product {
   supplierRef String?
   externalId  String?
   eanBox      String?
+  allCodes    String?   // todos los códigos concatenados (unidad/display/bulto/ref/sku) para filtrar por cualquiera
   sourceConnectionId String?
   sourceProvider String?
   createdAt   DateTime  @default(now())
@@ -631,6 +632,7 @@ model SyncedProduct {
   supplierRef     String?
   eanUnit         String?
   eanBox          String?
+  allCodes        String?   // todos los códigos concatenados para filtrar por cualquiera
   name            String
   brand           String?
   category        String?

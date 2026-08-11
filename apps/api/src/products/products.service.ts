@@ -110,6 +110,7 @@ export class ProductsService {
           { supplierSku: term },
           { supplierRef: term },
           { externalId: term },
+          ...(term.length >= 6 ? [{ allCodes: { contains: term } as const }] : []),
         ],
       },
       take: 1,
@@ -129,6 +130,7 @@ export class ProductsService {
           OR COALESCE(p."supplierSku", '') ILIKE ${contains}
           OR COALESCE(p."supplierRef", '') ILIKE ${contains}
           OR COALESCE(p."externalId", '') ILIKE ${contains}
+          OR COALESCE(p."allCodes", '') ILIKE ${contains}
         )`;
       });
       const firstContains = `%${firstToken}%`;
@@ -136,7 +138,7 @@ export class ProductsService {
       // Coincidencia aproximada por código (comparte una parte; ej. Tokin ARC-... vs barcode).
       const { match: fuzzyClause, sim: simSelect } = fuzzyCodeClause(
         term, tokens, 'p',
-        ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId'],
+        ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId', 'allCodes'],
       );
       const excludedCategories = excludeCategoryIds.length
         ? Prisma.sql`AND (p."categoryId" IS NULL OR p."categoryId" NOT IN (${Prisma.join(excludeCategoryIds)}))`
@@ -158,7 +160,8 @@ export class ProductsService {
               OR COALESCE(p."eanBox", '') ILIKE ${firstContains}
               OR COALESCE(p."supplierSku", '') ILIKE ${firstContains}
               OR COALESCE(p."supplierRef", '') ILIKE ${firstContains}
-              OR COALESCE(p."externalId", '') ILIKE ${firstContains} THEN 3
+              OR COALESCE(p."externalId", '') ILIKE ${firstContains}
+              OR COALESCE(p."allCodes", '') ILIKE ${firstContains} THEN 3
             WHEN unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${firstContains})) THEN 4
             ELSE 5
           END AS score,
@@ -275,11 +278,12 @@ export class ProductsService {
             OR COALESCE(p."supplierSku", '') ILIKE ${contains}
             OR COALESCE(p."supplierRef", '') ILIKE ${contains}
             OR COALESCE(p."externalId", '') ILIKE ${contains}
+            OR COALESCE(p."allCodes", '') ILIKE ${contains}
           )`;
         });
         const { match: fuzzy } = fuzzyCodeClause(
           query.q?.trim() ?? '', tokens, 'p',
-          ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId'],
+          ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId', 'allCodes'],
         );
         const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT p."id"
