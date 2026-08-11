@@ -1057,6 +1057,7 @@ export class SyncService {
             OR COALESCE(sp."sku", '') ILIKE ${contains}
             OR COALESCE(sp."supplierRef", '') ILIKE ${contains}
             OR COALESCE(sp."externalId", '') ILIKE ${contains}
+            OR sp."raw"::text ILIKE ${contains}
           )`;
         });
         const { match: fuzzy } = fuzzyCodeClause(
