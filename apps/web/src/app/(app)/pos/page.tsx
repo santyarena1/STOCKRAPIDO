@@ -206,6 +206,7 @@ export default function POSPage() {
   const [hiddenCategoryIds, setHiddenCategoryIds] = useState<string[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const [assocMsg, setAssocMsg] = useState('');
+  const [assocCode, setAssocCode] = useState(''); // código fijado para asociar buscando el producto por nombre
   const searchRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const lastEnterForCobrarRef = useRef<number>(0);
@@ -415,6 +416,7 @@ export default function POSPage() {
       await api(`/products/${product.id}/add-code`, { method: 'POST', body: JSON.stringify({ code: c }) });
       setAssocMsg(`Código ${c} asociado a “${product.name}”`);
       window.setTimeout(() => setAssocMsg(''), 4000);
+      setAssocCode('');
       addToCart(product);
     } catch {
       setAssocMsg('No se pudo asociar el código.');
@@ -869,13 +871,29 @@ export default function POSPage() {
             </button>
           </div>
           {assocMsg && <div className="mb-2 rounded-lg border border-[color:var(--ok)] bg-[var(--ok-soft)] px-3 py-2 text-sm text-ok">{assocMsg}</div>}
+          {assocCode && (
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[color:var(--warn)] bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">
+              <span>Asociando código <strong className="font-mono">{assocCode}</strong> — buscá el producto por <strong>nombre</strong> y tocá «Asociar».</span>
+              <span className="flex gap-2">
+                <a href={`https://www.google.com/search?q=${encodeURIComponent(assocCode)}`} target="_blank" rel="noopener noreferrer" className="rounded border border-hair px-2 py-1 text-xs text-fg-muted hover:text-fg">🔍 Google</a>
+                <button type="button" onClick={() => setAssocCode('')} className="rounded border border-hair px-2 py-1 text-xs text-fg-muted hover:text-fg">Cancelar</button>
+              </span>
+            </div>
+          )}
+          {!assocCode && /^[a-z0-9-]{6,}$/i.test(search.trim()) && results.length > 0 && !results.some((r) => r.matched && r.matched !== 'nombre' && r.matched !== 'marca') && (
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-hair bg-raised px-3 py-2 text-xs text-fg-muted">
+              <span>¿Ninguno es el correcto? Fijá el código y buscá el producto por nombre.</span>
+              <button type="button" onClick={() => { setAssocCode(search.trim()); setSearch(''); searchRef.current?.focus(); }} className="rounded-md border border-[color:var(--brand-accent)] px-2.5 py-1 font-semibold text-brand hover:bg-brand-highlight">Asociar {search.trim()} por nombre</button>
+            </div>
+          )}
           <div ref={resultsRef} data-tour="pos-results" className="min-h-[200px] flex-1 overflow-auto rounded-xl border border-hair-soft bg-surface">
             {loading && <Loader size="sm" label="Productos" />}
             {!loading && results.length > 0 && (
               <><div className="border-b border-hair-soft px-4 py-2 text-right text-xs text-fg-faint"><span className="font-mono tabular-nums">{results.length}</span> {results.length === 1 ? 'resultado' : 'resultados'}</div><ul className="divide-y divide-hair-soft">
                 {results.map((p, idx) => {
                   const codeQuery = /^[a-z0-9-]{6,}$/i.test(search.trim());
-                  const showAssociate = codeQuery && (!p.matched || p.matched === 'nombre');
+                  const codeToAssoc = assocCode || (codeQuery ? search.trim() : '');
+                  const showAssociate = !!codeToAssoc && (!!assocCode || !p.matched || p.matched === 'nombre');
                   return (
                   <li key={p.id} className="flex items-stretch">
                     <button
@@ -912,11 +930,11 @@ export default function POSPage() {
                     {showAssociate && (
                       <button
                         type="button"
-                        onClick={() => void associateCode(p, search.trim())}
-                        title={`Asociar el código ${search.trim()} a este producto`}
+                        onClick={() => void associateCode(p, codeToAssoc)}
+                        title={`Asociar el código ${codeToAssoc} a este producto`}
                         className="shrink-0 border-l border-hair-soft px-3 text-center text-[11px] font-semibold text-brand hover:bg-brand-highlight"
                       >
-                        ＋ Asociar<br />código
+                        ＋ Asociar<br />{codeToAssoc.length > 8 ? 'código' : codeToAssoc}
                       </button>
                     )}
                   </li>
