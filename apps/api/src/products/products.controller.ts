@@ -187,6 +187,11 @@ export class ProductsController {
     return this.products.importStock(user.businessId, rows);
   }
 
+  @Get(':id/supplier-data')
+  getSupplierData(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.products.getSupplierData(id, user.businessId);
+  }
+
   @Get(':id')
   getOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.products.getOne(id, user.businessId);

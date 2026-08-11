@@ -10,6 +10,8 @@ import { ImageUploader } from '@/components/ImageUploader';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
+import { Check, ChevronDown, Copy, Search } from 'lucide-react';
+import { flattenRaw } from '@/lib/flatten-raw';
 
 type ProductBatch = {
   id: string;
@@ -41,9 +43,50 @@ type Product = {
   flavor?: string | null;
   presentation?: string | null;
   subcategory?: string | null;
+  eanBox?: string | null;
+  supplierSku?: string | null;
+  supplierRef?: string | null;
+  externalId?: string | null;
+  iva?: string | number | null;
+  sourceProvider?: string | null;
+  sourceConnectionId?: string | null;
+  incomplete?: boolean;
+  isActive?: boolean;
 };
 type Category = { id: string; name: string };
 type StockMove = { id: string; qty: number; reason: string; reference?: string; createdAt: string };
+type SupplierVariant = { id: string; uom: string; multiplier: number; skuId?: string | null; refId?: string | null; ean?: string | null; listPrice?: unknown; sellingPrice?: unknown; priceWithTax?: unknown; cost?: unknown; stock?: number | null; taxAlicuota?: unknown };
+type SupplierHistory = { id: string; capturedAt: string; cost?: unknown; listPrice?: unknown; sellingPrice?: unknown };
+type SyncedProduct = { id: string; provider?: string; name?: string; brand?: string | null; category?: string | null; subcategory?: string | null; ean?: string | null; eanUnit?: string | null; eanBox?: string | null; sku?: string | null; supplierRef?: string | null; externalId?: string | null; cost?: unknown; basePrice?: unknown; listPrice?: unknown; ivaAlicuota?: unknown; stock?: number | null; unitsPerBox?: string | null; unitsPerDisplay?: string | null; displaysPerBox?: string | null; retornable?: boolean | null; weight?: string | null; format?: string | null; flavor?: string | null; presentation?: string | null; imageUrl?: string | null; link?: string | null; raw?: unknown; connection: { id: string; provider: string; name: string }; variants: SupplierVariant[]; priceHistory: SupplierHistory[] };
+type SupplierData = { linked: boolean; syncedProduct: SyncedProduct | null };
+
+const displayValue = (value: unknown) => value == null || value === '' ? '—' : String(value);
+const moneyValue = (value: unknown) => value == null || value === '' || !Number.isFinite(Number(value))
+  ? '—'
+  : Number(value).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+
+function InfoCell({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  const empty = value == null || value === '' || value === '—';
+  return <div className="rounded-xl border border-hair-soft bg-raised p-3"><span className="block text-[10px] font-medium uppercase tracking-wide text-fg-faint">{label}</span><div className={`mt-1 break-words text-sm ${mono ? 'font-mono tabular-nums' : ''} ${empty ? 'text-fg-faint' : 'text-fg'}`}>{empty ? '—' : value}</div></div>;
+}
+
+function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5"><h2 className="mb-4 text-base font-semibold text-fg">{title}</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div></section>;
+}
+
+function SupplierRawData({ raw }: { raw: unknown }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+  const values = flattenRaw(raw);
+  const term = query.trim().toLocaleLowerCase('es');
+  const filtered = term ? values.filter((item) => item.path.toLocaleLowerCase('es').includes(term)) : values;
+  const copy = async (key: string, value: unknown) => {
+    await navigator.clipboard.writeText(String(value)); setCopied(key);
+    window.setTimeout(() => setCopied((current) => current === key ? null : current), 1200);
+  };
+  return <section className="overflow-hidden rounded-xl border border-hair-soft bg-surface"><button type="button" onClick={() => setOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 p-4 text-left sm:p-5"><div><h2 className="font-semibold text-fg">Todos los datos del proveedor</h2><p className="text-xs text-fg-muted">{values.length} valores del JSON original, sin recortar</p></div><ChevronDown className={`h-5 w-5 text-fg-muted transition-transform ${open ? 'rotate-180' : ''}`} /></button>{open && <div className="border-t border-hair-soft p-4 sm:p-5"><label className="relative block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nombre de campo…" className="w-full rounded-xl border border-hair bg-raised py-2.5 pl-9 pr-3 text-sm text-fg focus-brand" /></label><div className="mt-4 space-y-2">{filtered.map((item, index) => { const key = `${item.path}-${index}`; return <div key={key} className="grid gap-2 rounded-lg border border-hair-soft bg-raised p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] sm:items-center"><span className="break-all font-mono text-xs text-fg-muted">{item.path}</span><span className="break-all whitespace-pre-wrap font-mono text-xs text-fg">{String(item.value)}</span><button type="button" onClick={() => void copy(key, item.value)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-hair bg-raised2 px-2.5 py-1.5 text-xs text-fg-muted hover:text-fg">{copied === key ? <Check className="h-3.5 w-3.5 text-ok" /> : <Copy className="h-3.5 w-3.5" />}Copiar</button></div>; })}{!filtered.length && <p className="py-8 text-center text-sm text-fg-faint">No hay campos que coincidan.</p>}</div></div>}</section>;
+}
 
 export default function EditarProductoPage() {
   const params = useParams();
@@ -52,6 +95,7 @@ export default function EditarProductoPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [moves, setMoves] = useState<StockMove[]>([]);
+  const [supplierData, setSupplierData] = useState<SupplierData>({ linked: false, syncedProduct: null });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
@@ -63,10 +107,12 @@ export default function EditarProductoPage() {
       api<Product | null>(`/products/${id}`),
       api<Category[]>('/business/categories'),
       api<StockMove[]>(`/products/${id}/stock-moves`),
-    ]).then(([pRes, catsRes, mRes]) => {
+      api<SupplierData>(`/products/${id}/supplier-data`),
+    ]).then(([pRes, catsRes, mRes, supplierRes]) => {
       const p = pRes.status === 'fulfilled' ? pRes.value : null;
       const cats = catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) ? catsRes.value : [];
       const m = mRes.status === 'fulfilled' && Array.isArray(mRes.value) ? mRes.value : [];
+      const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value : { linked: false, syncedProduct: null };
       if (p) {
         setProduct(p);
         setForm({
@@ -90,6 +136,7 @@ export default function EditarProductoPage() {
       }
       setCategories(cats);
       setMoves(m);
+      setSupplierData(supplier);
     }).finally(() => setLoading(false));
   }, [id]);
 
@@ -164,10 +211,69 @@ export default function EditarProductoPage() {
         return acc;
       }, null)
     : null;
+  const synced = supplierData.syncedProduct;
 
   return (
     <Container className="max-w-4xl space-y-6">
       <PageHeader title={product.name} actions={<Link href="/productos" className="text-fg-muted hover:text-fg">← Productos</Link>} />
+
+      <section className="overflow-hidden rounded-2xl border border-hair-soft bg-surface p-4 sm:p-6">
+        <div className="grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+          <div className="aspect-square overflow-hidden rounded-2xl border border-hair-soft bg-raised p-4">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain" /> : <div className="flex h-full items-center justify-center text-5xl font-bold text-fg-faint">{product.name.trim().slice(0, 2).toUpperCase()}</div>}</div>
+          <div><div className="flex flex-wrap gap-2">{product.incomplete ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Incompleto</span> : <span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs text-ok">Completo</span>}<span className={`rounded-md border px-2 py-1 text-xs ${product.isActive === false ? 'border-crit/30 bg-[var(--crit-soft)] text-crit' : 'border-ok/30 bg-[var(--ok-soft)] text-ok'}`}>{product.isActive === false ? 'Inactivo' : 'Activo'}</span></div><h1 className="mt-3 text-2xl font-bold text-fg">{product.name}</h1><p className="mt-1 text-sm text-fg-muted">{displayValue(product.brand)} · {displayValue(product.category?.name)} · {displayValue(product.subcategory)}</p><div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-xl"><InfoCell label="Precio" value={moneyValue(product.price)} mono /><InfoCell label="Stock" value={`${product.stock} unidades`} mono /></div></div>
+        </div>
+      </section>
+
+      <InfoSection title="General">
+        <InfoCell label="Nombre" value={product.name} />
+        <InfoCell label="Marca" value={displayValue(product.brand)} />
+        <InfoCell label="Categoría" value={displayValue(product.category?.name)} />
+        <InfoCell label="Subcategoría" value={displayValue(product.subcategory)} />
+        <InfoCell label="Estado" value={product.isActive === false ? 'Inactivo' : 'Activo'} />
+        <InfoCell label="Ficha" value={product.incomplete ? 'Incompleta' : 'Completa'} />
+        <InfoCell label="URL de imagen" value={displayValue(product.imageUrl)} mono />
+      </InfoSection>
+
+      <InfoSection title="Códigos">
+        <InfoCell label="EAN unidad" value={displayValue(product.barcode)} mono />
+        <InfoCell label="EAN bulto" value={displayValue(product.eanBox)} mono />
+        <InfoCell label="SKU proveedor" value={displayValue(product.supplierSku)} mono />
+        <InfoCell label="Ref. proveedor" value={displayValue(product.supplierRef)} mono />
+        <InfoCell label="ID externo" value={displayValue(product.externalId)} mono />
+      </InfoSection>
+
+      <InfoSection title="Precios e IVA">
+        <InfoCell label="Costo local" value={moneyValue(product.cost)} mono />
+        <InfoCell label="Precio de venta" value={moneyValue(product.price)} mono />
+        <InfoCell label="Precio base proveedor" value={moneyValue(synced?.basePrice)} mono />
+        <InfoCell label="Precio lista proveedor" value={moneyValue(synced?.listPrice)} mono />
+        <InfoCell label="IVA local" value={product.iva == null ? '—' : `${Number(product.iva)}%`} mono />
+        <InfoCell label="IVA proveedor" value={synced?.ivaAlicuota == null ? '—' : `${Number(synced.ivaAlicuota)}%`} mono />
+      </InfoSection>
+
+      <InfoSection title="Logística">
+        <InfoCell label="Unidades por bulto" value={displayValue(product.unitsPerBox ?? synced?.unitsPerBox)} mono />
+        <InfoCell label="Unidades por display" value={displayValue(synced?.unitsPerDisplay)} mono />
+        <InfoCell label="Displays por bulto" value={displayValue(synced?.displaysPerBox)} mono />
+        <InfoCell label="Peso" value={displayValue(product.weight ?? synced?.weight)} mono />
+        <InfoCell label="Formato" value={displayValue(product.format ?? synced?.format)} />
+        <InfoCell label="Sabor" value={displayValue(product.flavor ?? synced?.flavor)} />
+        <InfoCell label="Presentación" value={displayValue(product.presentation ?? synced?.presentation)} />
+        <InfoCell label="Retornable" value={synced?.retornable == null ? '—' : synced.retornable ? 'Sí' : 'No'} />
+        <InfoCell label="Stock" value={product.stock} mono />
+        <InfoCell label="Stock mínimo" value={product.minStock} mono />
+        <InfoCell label="Control de stock" value={product.stockControl ? 'Sí' : 'No'} />
+      </InfoSection>
+
+      <section className="space-y-5 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+        <h2 className="text-base font-semibold text-fg">Origen / Proveedor</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><InfoCell label="Proveedor de origen" value={displayValue(product.sourceProvider)} /><InfoCell label="Conexión de origen" value={displayValue(product.sourceConnectionId)} mono /><InfoCell label="Vínculo sincronizado" value={supplierData.linked ? 'Vinculado' : 'Sin vínculo'} /><InfoCell label="Conexión vinculada" value={displayValue(synced?.connection?.name)} /><InfoCell label="Provider" value={displayValue(synced?.connection?.provider)} mono /><InfoCell label="SyncedProduct ID" value={displayValue(synced?.id)} mono /></div>
+        {synced ? <><div><h3 className="mb-3 text-sm font-semibold text-fg">Variantes UN / DI / BU</h3><div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[900px] text-sm"><thead className="bg-raised text-left text-xs uppercase text-fg-faint"><tr><th className="p-3">UOM</th><th className="p-3 text-right">Multiplicador</th><th className="p-3 text-right">Costo</th><th className="p-3 text-right">Precio lista</th><th className="p-3 text-right">Precio venta</th><th className="p-3 text-right">Con IVA</th><th className="p-3 text-right">Stock</th><th className="p-3">RefId</th><th className="p-3">EAN</th></tr></thead><tbody className="divide-y divide-[color:var(--hair-soft)]">{synced.variants.length ? synced.variants.map((variant) => <tr key={variant.id}><td className="p-3"><span className="rounded-md bg-brand-highlight-soft px-2 py-1 font-mono font-semibold text-brand">{variant.uom}</span></td><td className="p-3 text-right font-mono">×{variant.multiplier}</td><td className="p-3 text-right font-mono">{moneyValue(variant.cost)}</td><td className="p-3 text-right font-mono">{moneyValue(variant.listPrice)}</td><td className="p-3 text-right font-mono">{moneyValue(variant.sellingPrice)}</td><td className="p-3 text-right font-mono">{moneyValue(variant.priceWithTax)}</td><td className="p-3 text-right font-mono">{displayValue(variant.stock)}</td><td className="p-3 font-mono text-xs">{displayValue(variant.refId)}</td><td className="p-3 font-mono text-xs">{displayValue(variant.ean)}</td></tr>) : <tr><td colSpan={9} className="p-6 text-center text-fg-faint">Sin variantes</td></tr>}</tbody></table></div></div><div><h3 className="mb-3 text-sm font-semibold text-fg">Historial de precios</h3><div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[560px] text-sm"><thead className="bg-raised text-left text-xs uppercase text-fg-faint"><tr><th className="p-3">Fecha</th><th className="p-3 text-right">Costo</th><th className="p-3 text-right">Precio lista</th><th className="p-3 text-right">Precio venta</th></tr></thead><tbody className="divide-y divide-[color:var(--hair-soft)]">{synced.priceHistory.length ? synced.priceHistory.map((entry) => <tr key={entry.id}><td className="p-3 font-mono text-fg-muted">{new Date(entry.capturedAt).toLocaleString('es-AR')}</td><td className="p-3 text-right font-mono">{moneyValue(entry.cost)}</td><td className="p-3 text-right font-mono">{moneyValue(entry.listPrice)}</td><td className="p-3 text-right font-mono">{moneyValue(entry.sellingPrice)}</td></tr>) : <tr><td colSpan={4} className="p-6 text-center text-fg-faint">Sin historial registrado todavía</td></tr>}</tbody></table></div></div></> : <p className="rounded-xl border border-hair-soft bg-raised p-4 text-sm text-fg-muted">Este producto todavía no tiene datos sincronizados de un proveedor.</p>}
+      </section>
+
+      {synced && <SupplierRawData raw={synced.raw} />}
+
+      <div className="border-t border-hair-soft pt-2"><h2 className="text-xl font-semibold text-fg">Editar producto</h2><p className="text-sm text-fg-muted">Los cambios de esta sección actualizan la ficha local de StockRápido.</p></div>
 
       <div className="flex flex-col gap-6">
         <form data-tour="editar-producto-form" onSubmit={handleSave} className="w-full space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">

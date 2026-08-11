@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -789,6 +789,41 @@ export class ProductsService {
     });
     if (!p) return null;
     return decorateProductUnits(p);
+  }
+
+  async getSupplierData(id: string, businessId: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, businessId },
+      select: { id: true, sourceConnectionId: true, externalId: true },
+    });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    let syncedProduct = await this.prisma.syncedProduct.findFirst({
+      where: { businessId, linkedProductId: product.id },
+      include: {
+        connection: { select: { id: true, provider: true, name: true } },
+        variants: { orderBy: [{ uom: 'asc' }, { multiplier: 'asc' }] },
+        priceHistory: { orderBy: { capturedAt: 'asc' } },
+      },
+      orderBy: { syncedAt: 'desc' },
+    });
+
+    if (!syncedProduct && product.sourceConnectionId && product.externalId) {
+      syncedProduct = await this.prisma.syncedProduct.findFirst({
+        where: {
+          businessId,
+          connectionId: product.sourceConnectionId,
+          externalId: product.externalId,
+        },
+        include: {
+          connection: { select: { id: true, provider: true, name: true } },
+          variants: { orderBy: [{ uom: 'asc' }, { multiplier: 'asc' }] },
+          priceHistory: { orderBy: { capturedAt: 'asc' } },
+        },
+      });
+    }
+
+    return syncedProduct ? { linked: true, syncedProduct } : { linked: false, syncedProduct: null };
   }
 
   /**
