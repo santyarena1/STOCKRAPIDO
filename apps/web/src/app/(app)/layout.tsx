@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Package,
   Receipt,
+  ScanLine,
   Settings,
   SlidersHorizontal,
   ShoppingCart,
@@ -50,6 +51,7 @@ const OPTIONAL_BRAND_CSS: { key: keyof Branding; cssVar: string }[] = [
 const PINNED = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/pos', label: 'POS', icon: ShoppingCart },
+  { href: '/stock-rapido', label: 'Stock rápido', icon: ScanLine },
 ];
 
 const GROUPS = [

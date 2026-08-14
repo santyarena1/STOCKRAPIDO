@@ -163,9 +163,18 @@ export class ProductsController {
     /** altas = solo creación de productos (alta + stock inicial) */
     @Query('kind') kind?: string,
   ) {
-    const k = kind === 'altas' ? 'altas' : 'all';
+    const k = kind === 'altas' ? 'altas' : kind === 'escaneo' ? 'escaneo' : 'all';
     const n = limit ? parseInt(limit, 10) : 300;
     return this.products.getAllStockMoves(user.businessId, Number.isFinite(n) && n > 0 ? n : 300, k);
+  }
+
+  @Post('scan-move')
+  scanMove(
+    @CurrentUser() user: User,
+    @Body() body: { code?: string; direction?: string },
+  ) {
+    const direction = body?.direction === 'out' ? 'out' : 'in';
+    return this.products.scanMove(user.businessId, body?.code ?? '', direction);
   }
 
   @Get('export-stock')

@@ -785,6 +785,65 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Módulo Stock rápido: escaneás un código y ajusta el stock ±1 (ingreso/egreso).
+   * Match EXACTO por cualquiera de los códigos del producto. Pensado para escaneos rápidos.
+   */
+  async scanMove(businessId: string, code: string, direction: 'in' | 'out') {
+    const clean = String(code ?? '').trim();
+    if (!clean) throw new BadRequestException('Código vacío.');
+    // 1) match exacto por columnas de código
+    let product = await this.prisma.product.findFirst({
+      where: {
+        businessId,
+        isActive: true,
+        OR: [
+          { barcode: clean },
+          { eanBox: clean },
+          { supplierSku: clean },
+          { supplierRef: clean },
+          { externalId: clean },
+        ],
+      },
+      select: { id: true, name: true, stock: true, stockControl: true, barcode: true, imageUrl: true },
+    });
+    // 2) fallback exacto dentro de allCodes (token completo, no substring)
+    if (!product && clean.length >= 4) {
+      const candidates = await this.prisma.product.findMany({
+        where: { businessId, isActive: true, allCodes: { contains: clean } },
+        select: { id: true, name: true, stock: true, stockControl: true, barcode: true, imageUrl: true, allCodes: true },
+        take: 20,
+      });
+      const hit = candidates.find((c) => (c.allCodes ?? '').split(/\s+/).includes(clean));
+      if (hit) {
+        const { allCodes: _allCodes, ...rest } = hit;
+        product = rest;
+      }
+    }
+    if (!product) return { found: false as const, code: clean };
+
+    const reason = direction === 'out' ? 'egreso_escaneo' : 'ingreso_escaneo';
+    if (direction === 'in') {
+      await this.adjustStock(product.id, businessId, 1, reason);
+    } else {
+      // egreso: registramos el movimiento y bajamos 1 (contemplando productos sin control de stock)
+      await this.prisma.stockMove.create({ data: { productId: product.id, qty: -1, reason } });
+      if (product.stockControl) {
+        await this.deductStockFromBatches(product.id, businessId, 1);
+      } else {
+        await this.prisma.product.update({
+          where: { id: product.id },
+          data: { stock: Math.max(0, product.stock - 1) },
+        });
+      }
+    }
+    const updated = await this.prisma.product.findFirst({
+      where: { id: product.id },
+      select: { id: true, name: true, stock: true, barcode: true, imageUrl: true },
+    });
+    return { found: true as const, product: updated, qty: direction === 'out' ? -1 : 1 };
+  }
+
   async getOne(id: string, businessId: string) {
     const p = await this.prisma.product.findFirst({
       where: { id, businessId },
@@ -909,14 +968,19 @@ export class ProductsService {
    * `kind=altas`: solo altas de producto y stock inicial al crear (no compiten con cientos de ventas).
    * `kind=all`: últimos N movimientos de cualquier tipo (ventas, compras, etc.).
    */
-  async getAllStockMoves(businessId: string, limit = 300, kind: 'all' | 'altas' = 'all') {
+  async getAllStockMoves(businessId: string, limit = 300, kind: 'all' | 'altas' | 'escaneo' = 'all') {
     const where =
       kind === 'altas'
         ? {
             product: { businessId },
             reason: { in: ['alta_producto', 'stock_inicial'] },
           }
-        : { product: { businessId } };
+        : kind === 'escaneo'
+          ? {
+              product: { businessId },
+              reason: { in: ['ingreso_escaneo', 'egreso_escaneo'] },
+            }
+          : { product: { businessId } };
     return this.prisma.stockMove.findMany({
       where,
       take: limit,
