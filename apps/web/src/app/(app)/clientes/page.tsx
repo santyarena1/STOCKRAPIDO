@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api, getApiBaseUrl, getToken } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -36,7 +36,6 @@ export default function ClientesPage() {
   const [detailPayments, setDetailPayments] = useState<Payment[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<'ventas' | 'pagos'>('ventas');
 
   const loadCustomers = useCallback(async () => {
     const [c, m, t] = await Promise.all([
@@ -55,7 +54,6 @@ export default function ClientesPage() {
 
   const openDetail = async (customer: Customer) => {
     setDetailCustomer(customer);
-    setDetailTab('ventas');
     setExpandedSaleId(null);
     setDetailSales([]);
     setDetailPayments([]);
@@ -118,6 +116,21 @@ export default function ClientesPage() {
 
   const itemName = (item: SaleItem) =>
     item.product?.name ?? item.productName ?? 'Producto manual';
+
+  // Movimiento unificado de la cuenta corriente: cargos (ventas a cuenta corriente) + pagos, con saldo corriente.
+  const movements = useMemo(() => {
+    const charges = detailSales
+      .filter((s) => s.paymentMethod === 'fiado')
+      .map((s) => ({ id: `sale-${s.id}`, kind: 'cargo' as const, date: s.createdAt, amount: Number(s.totalFinal), sale: s }));
+    const pays = detailPayments.map((p) => ({ id: `pay-${p.id}`, kind: 'pago' as const, date: p.createdAt, amount: Number(p.amount), payment: p }));
+    const all = [...charges, ...pays].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    let run = 0;
+    const withBal = all.map((m) => {
+      run += m.kind === 'cargo' ? m.amount : -m.amount;
+      return { ...m, balanceAfter: run };
+    });
+    return withBal.reverse();
+  }, [detailSales, detailPayments]);
 
   return (
     <Container className="space-y-6">
@@ -206,107 +219,96 @@ export default function ClientesPage() {
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-4 p-5 border-b border-hair-soft">
-              <div>
-                <h2 className="text-xl font-bold text-fg">{detailCustomer.name}</h2>
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-fg truncate">{detailCustomer.name}</h2>
                 {detailCustomer.phone && <p className="text-fg-muted text-sm">{detailCustomer.phone}</p>}
-                <p className={`text-sm font-medium mt-1 ${Number(detailCustomer.balance) > 0 ? 'text-warn' : 'text-fg-muted'}`}>
-                  Saldo: {formatMoney(detailCustomer.balance)}
-                </p>
+                <div className="mt-2">
+                  {Number(detailCustomer.balance) > 0 ? (
+                    <>
+                      <span className="text-xs uppercase tracking-wide text-fg-faint">Debe</span>
+                      <p className="font-mono text-3xl font-bold tabular-nums text-warn">{formatMoney(detailCustomer.balance)}</p>
+                    </>
+                  ) : Number(detailCustomer.balance) < 0 ? (
+                    <>
+                      <span className="text-xs uppercase tracking-wide text-fg-faint">Saldo a favor</span>
+                      <p className="font-mono text-3xl font-bold tabular-nums text-ok">{formatMoney(Math.abs(Number(detailCustomer.balance)))}</p>
+                    </>
+                  ) : (
+                    <p className="text-2xl font-bold text-fg-muted">Al día</p>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {Number(detailCustomer.balance) > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setPaymentFor(detailCustomer.id); setDetailCustomer(null); }}
-                    className="px-3 py-1.5 rounded-lg bg-[var(--ok-soft)] text-fg text-sm font-medium hover:bg-[var(--ok-soft)]"
-                  >
-                    Registrar pago
-                  </button>
-                )}
-                <button type="button" onClick={() => setDetailCustomer(null)} className="text-fg-muted hover:text-fg text-xl px-1">×</button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setPaymentFor(detailCustomer.id); setDetailCustomer(null); }}
+                  className="rounded-lg bg-[var(--ok-soft)] px-3 py-1.5 text-sm font-medium text-ok hover:brightness-110"
+                >
+                  Registrar pago
+                </button>
+                <button type="button" onClick={() => setDetailCustomer(null)} className="px-1 text-xl text-fg-muted hover:text-fg">×</button>
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-hair-soft px-5">
-              <button
-                type="button"
-                onClick={() => setDetailTab('ventas')}
-                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'ventas' ? 'border-brand text-fg' : 'border-transparent text-fg-muted hover:text-fg'}`}
-              >
-                Ventas al fiado {detailSales.length > 0 && `(${detailSales.length})`}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDetailTab('pagos')}
-                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${detailTab === 'pagos' ? 'border-brand text-fg' : 'border-transparent text-fg-muted hover:text-fg'}`}
-              >
-                Pagos {detailPayments.length > 0 && `(${detailPayments.length})`}
-              </button>
+            {/* Movimiento unificado de la cuenta corriente */}
+            <div className="border-b border-hair-soft px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-fg-faint">
+              Movimientos de cuenta corriente
             </div>
-
-            {/* Contenido */}
             <div className="flex-1 overflow-y-auto p-4">
               {detailLoading ? (
                 <Loader size="sm" />
-              ) : detailTab === 'ventas' ? (
-                detailSales.length === 0 ? (
-                  <p className="text-fg-faint text-sm p-4">Sin ventas registradas.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {detailSales.map((sale) => {
-                      const isOpen = expandedSaleId === sale.id;
+              ) : movements.length === 0 ? (
+                <p className="p-4 text-center text-sm text-fg-faint">Sin movimientos en la cuenta corriente.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {movements.map((m) => {
+                    if (m.kind === 'pago') {
                       return (
-                        <li key={sale.id} className="rounded-lg border border-hair-soft bg-raised overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
-                            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-raised2"
-                          >
-                            <span className="flex flex-col gap-0.5">
-                              <span className="text-fg text-sm font-medium">{formatDate(sale.createdAt)}</span>
-                              <span className="text-fg-faint text-xs">
-                                {sale.items.length} {sale.items.length === 1 ? 'ítem' : 'ítems'}
-                                {Number(sale.discount) > 0 && ` · Desc. ${formatMoney(sale.discount)}`}
-                              </span>
-                            </span>
-                            <span className="flex items-center gap-2">
-                              <span className="text-warn font-semibold">{formatMoney(sale.totalFinal)}</span>
-                              <span className="text-fg-faint text-xs">{isOpen ? '▲' : '▼'}</span>
-                            </span>
-                          </button>
-                          {isOpen && (
-                            <ul className="border-t border-hair-soft divide-y divide-hair-soft/50">
-                              {sale.items.map((item) => (
-                                <li key={item.id} className="flex justify-between items-center px-4 py-2 text-sm">
-                                  <span className="text-fg-muted flex-1 min-w-0 truncate">{itemName(item)}</span>
-                                  <span className="text-fg-faint mx-3 shrink-0">×{item.qty}</span>
-                                  <span className="text-fg-muted shrink-0">{formatMoney(item.subtotal)}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                        <li key={m.id} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--ok)]/25 bg-[var(--ok-soft)] px-4 py-3">
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="text-sm font-medium text-fg">Pago recibido</span>
+                            <span className="text-xs text-fg-faint">{formatDate(m.date)}{m.payment.note ? ` · ${m.payment.note}` : ''}</span>
+                          </span>
+                          <span className="flex shrink-0 flex-col items-end">
+                            <span className="font-mono font-semibold tabular-nums text-ok">−{formatMoney(m.amount)}</span>
+                            <span className="font-mono text-xs text-fg-faint">Saldo {formatMoney(m.balanceAfter)}</span>
+                          </span>
                         </li>
                       );
-                    })}
-                  </ul>
-                )
-              ) : (
-                detailPayments.length === 0 ? (
-                  <p className="text-fg-faint text-sm p-4">Sin pagos registrados.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {detailPayments.map((p) => (
-                      <li key={p.id} className="flex justify-between items-center rounded-lg border border-hair-soft bg-raised px-4 py-3">
-                        <span className="flex flex-col gap-0.5">
-                          <span className="text-fg text-sm">{formatDate(p.createdAt)}</span>
-                          {p.note && <span className="text-fg-faint text-xs">{p.note}</span>}
-                        </span>
-                        <span className="text-ok font-semibold">{formatMoney(p.amount)}</span>
+                    }
+                    const sale = m.sale;
+                    const isOpen = expandedSaleId === sale.id;
+                    return (
+                      <li key={m.id} className="overflow-hidden rounded-lg border border-hair-soft bg-raised">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
+                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-raised2"
+                        >
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="text-sm font-medium text-fg">Compra a cuenta{sale.items.length ? ` · ${sale.items.length} ${sale.items.length === 1 ? 'ítem' : 'ítems'}` : ''}</span>
+                            <span className="text-xs text-fg-faint">{formatDate(m.date)}{Number(sale.discount) > 0 ? ` · Desc. ${formatMoney(sale.discount)}` : ''}</span>
+                          </span>
+                          <span className="flex shrink-0 flex-col items-end">
+                            <span className="font-mono font-semibold tabular-nums text-warn">+{formatMoney(m.amount)}</span>
+                            <span className="font-mono text-xs text-fg-faint">Saldo {formatMoney(m.balanceAfter)} {isOpen ? '▲' : '▼'}</span>
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <ul className="divide-y divide-hair-soft/50 border-t border-hair-soft">
+                            {sale.items.map((item) => (
+                              <li key={item.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                                <span className="min-w-0 flex-1 truncate text-fg-muted">{itemName(item)}</span>
+                                <span className="mx-3 shrink-0 text-fg-faint">×{item.qty}</span>
+                                <span className="shrink-0 text-fg-muted">{formatMoney(item.subtotal)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </li>
-                    ))}
-                  </ul>
-                )
+                    );
+                  })}
+                </ul>
               )}
             </div>
           </div>

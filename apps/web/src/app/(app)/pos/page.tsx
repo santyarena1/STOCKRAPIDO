@@ -48,7 +48,7 @@ const PAYMENT_METHODS = [
   { id: 'tarjeta_credito', label: 'Tarjeta crédito' },
   { id: 'transferencia', label: 'Transferencia' },
   { id: 'mercadopago', label: 'Mercado Pago' },
-  { id: 'fiado', label: 'Fiado' },
+  { id: 'fiado', label: 'Cuenta corriente' },
 ];
 
 const SHORTCUTS = [
@@ -192,7 +192,8 @@ export default function POSPage() {
   const [receipt, setReceipt] = useState<any | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; balance: string | number }[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; balance?: number } | null>(null);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [pausedList,setPausedList]=useState<PausedSale[]>([]);
   const [discountInput, setDiscountInput] = useState('');
   const [manualName, setManualName] = useState('');
@@ -425,14 +426,23 @@ export default function POSPage() {
     }
   }, [addToCart]);
 
-  useEffect(() => {
-    if (showCustomer) {
-      fetch(`${getApiBaseUrl()}/customers`, { headers: { Authorization: `Bearer ${getToken()}` } })
-        .then((r) => r.ok ? r.json() : [])
-        .then(setCustomers)
-        .catch(() => setCustomers([]));
-    }
-  }, [showCustomer]);
+  const loadCustomers = useCallback(() => {
+    if (!getToken()) return;
+    fetch(`${getApiBaseUrl()}/customers`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then((r) => r.ok ? r.json() : [])
+      .then((list: { id: string; name: string; balance: string | number }[]) => {
+        setCustomers(list);
+        // refresca el saldo del cliente seleccionado
+        setSelectedCustomer((prev) => {
+          if (!prev) return prev;
+          const fresh = list.find((c) => c.id === prev.id);
+          return fresh ? { id: fresh.id, name: fresh.name, balance: Number(fresh.balance) } : prev;
+        });
+      })
+      .catch(() => setCustomers([]));
+  }, []);
+  useEffect(() => { loadCustomers(); }, [loadCustomers]);
+  useEffect(() => { if (showCustomer) loadCustomers(); }, [showCustomer, loadCustomers]);
 
   useEffect(() => {
     if (!search.trim() || !getToken()) {
@@ -512,7 +522,7 @@ export default function POSPage() {
   }, [search, addToCart, hiddenCategoryIds]);
 
   const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,activeSeller?.id]);
-  const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;if(id==='efectivo'){setCashPaid(null);setPaymentMethodPending('efectivo');return}paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar]);
+  const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;if(id==='fiado'&&!selectedCustomer){setCustomerSearch('');setShowCustomer(true);return}if(id==='efectivo'){setCashPaid(null);setPaymentMethodPending('efectivo');return}paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar,selectedCustomer]);
   const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -970,6 +980,26 @@ export default function POSPage() {
             <span>Carrito</span>
             {discountTotal > 0 && <span className="font-mono tabular-nums text-warn">-${discountTotal.toFixed(0)}</span>}
           </div>
+          <button
+            type="button"
+            onClick={() => { setCustomerSearch(''); setShowCustomer(true); }}
+            data-tour="pos-cliente"
+            className={`flex items-center justify-between gap-2 border-b px-4 py-2.5 text-left transition ${selectedCustomer ? 'border-[color:var(--warn)]/40 bg-[var(--warn-soft)]' : 'border-hair-soft hover:bg-raised'}`}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={selectedCustomer ? 'text-warn' : 'text-fg-faint'}>👤</span>
+              <span className={`truncate text-sm font-medium ${selectedCustomer ? 'text-warn' : 'text-fg'}`}>
+                {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}
+              </span>
+            </span>
+            <span className="shrink-0 text-xs">
+              {selectedCustomer
+                ? (selectedCustomer.balance != null && selectedCustomer.balance > 0
+                    ? <span className="font-mono text-warn">Debe ${Number(selectedCustomer.balance).toFixed(0)}</span>
+                    : <span className="text-fg-faint">Cambiar</span>)
+                : <span className="text-brand">Elegir cliente</span>}
+            </span>
+          </button>
           <div className="flex-1 overflow-auto p-2 min-h-[120px]">
             {cart.length === 0 ? (
               <p className="p-4 text-sm text-fg-faint">Agregá productos con la búsqueda, escaneando código o producto manual.</p>
@@ -1004,17 +1034,16 @@ export default function POSPage() {
               <span>Total</span>
               <span className="font-mono text-2xl tabular-nums">${total.toFixed(0)}</span>
             </div>
-            {selectedCustomer && (
-              <p className="text-amber-400 text-sm">Al fiado: {selectedCustomer.name}</p>
-            )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button
                 type="button"
-                onClick={() => setShowCustomer(true)}
+                onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { void handleCobrar('fiado'); } }}
+                disabled={cart.length === 0}
                 data-tour="pos-fiado"
-                className={`flex-1 py-3 rounded-lg font-medium ${selectedCustomer ? 'bg-amber-600 text-fg' : 'bg-raised2 text-fg hover:bg-raised2'}`}
+                title="Carga esta venta a la cuenta corriente del cliente"
+                className="flex-1 rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn hover:brightness-110 disabled:opacity-50"
               >
-                {selectedCustomer ? 'Fiado: ' + selectedCustomer.name : 'Vender al fiado'}
+                {selectedCustomer ? `A cuenta de ${selectedCustomer.name.split(' ')[0]}` : 'A cuenta corriente'}
               </button>
               <button
                 type="button"
@@ -1044,7 +1073,7 @@ export default function POSPage() {
         <button type="button" onClick={openPayment} disabled={cart.length === 0} className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-50">Cobrar</button>
       </div>
 
-      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div>{selectedCustomer && <p className="text-sm text-warn">Al fiado: {selectedCustomer.name}</p>}<div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => { setShowMobileCart(false); setShowCustomer(true); }} className={`rounded-lg py-3 font-medium ${selectedCustomer ? 'bg-amber-600 text-white' : 'bg-raised2 text-fg'}`}>{selectedCustomer ? `Fiado: ${selectedCustomer.name}` : 'Vender al fiado'}</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
+      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div><button type="button" onClick={() => { setCustomerSearch(''); setShowCustomer(true); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised2 text-fg'}`}><span className="truncate">👤 {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}</span><span className="shrink-0 text-xs">{selectedCustomer ? (selectedCustomer.balance != null && selectedCustomer.balance > 0 ? `Debe $${Number(selectedCustomer.balance).toFixed(0)}` : 'Cambiar') : 'Elegir'}</span></button><div className="grid grid-cols-2 gap-2"><button type="button" disabled={cart.length === 0} onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { setShowMobileCart(false); void handleCobrar('fiado'); } }} className="rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn disabled:opacity-50">A cuenta corriente</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
 
       {showOpenCaja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
@@ -1349,29 +1378,55 @@ export default function POSPage() {
 
       {showCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowCustomer(false)}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-fg mb-4">Vender al fiado</h2>
-            <button
-              type="button"
-              onClick={() => { setSelectedCustomer(null); setShowCustomer(false); }}
-              className="w-full py-2 rounded-lg bg-raised2 text-fg mb-2"
-            >
-              Cobro normal (sin fiado)
-            </button>
-            <ul className="space-y-2">
-              {customers.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedCustomer({ id: c.id, name: c.name }); setShowCustomer(false); }}
-                    className="w-full text-left px-4 py-2 rounded bg-raised hover:bg-raised2 text-fg"
-                  >
-                    {c.name} {Number(c.balance) > 0 && <span className="text-amber-400 text-sm">(saldo: ${Number(c.balance).toFixed(0)})</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button type="button" onClick={() => setShowCustomer(false)} className="mt-4 w-full py-2 rounded-lg border border-hair text-fg-muted">Cerrar</button>
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-hair bg-surface" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-hair-soft px-5 py-4">
+              <h2 className="mb-3 text-lg font-bold text-fg">Cliente de la venta</h2>
+              <input
+                autoFocus
+                type="text"
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                placeholder="Buscar cliente por nombre…"
+                className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              <button
+                type="button"
+                onClick={() => { setSelectedCustomer(null); setShowCustomer(false); }}
+                className="mb-2 flex w-full items-center justify-between rounded-lg bg-raised2 px-4 py-2.5 text-left text-fg hover:bg-raised"
+              >
+                <span>Consumidor final <span className="text-fg-faint">(sin cliente)</span></span>
+                {!selectedCustomer && <span className="text-xs text-brand">✓ actual</span>}
+              </button>
+              <ul className="space-y-1.5">
+                {customers
+                  .filter((c) => c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()))
+                  .map((c) => {
+                    const bal = Number(c.balance);
+                    return (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedCustomer({ id: c.id, name: c.name, balance: bal }); setShowCustomer(false); }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-4 py-2.5 text-left hover:bg-raised2 ${selectedCustomer?.id === c.id ? 'bg-brand-highlight' : 'bg-raised'}`}
+                        >
+                          <span className="truncate text-fg">{c.name}</span>
+                          {bal > 0
+                            ? <span className="shrink-0 font-mono text-sm text-warn">Debe ${bal.toFixed(0)}</span>
+                            : bal < 0
+                              ? <span className="shrink-0 font-mono text-sm text-ok">A favor ${Math.abs(bal).toFixed(0)}</span>
+                              : <span className="shrink-0 text-xs text-fg-faint">Al día</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                {customers.filter((c) => c.name.toLowerCase().includes(customerSearch.trim().toLowerCase())).length === 0 && (
+                  <li className="px-4 py-6 text-center text-sm text-fg-faint">No hay clientes que coincidan.</li>
+                )}
+              </ul>
+            </div>
+            <button type="button" onClick={() => setShowCustomer(false)} className="border-t border-hair-soft py-3 text-sm text-fg-muted hover:bg-raised">Cerrar</button>
           </div>
         </div>
       )}
