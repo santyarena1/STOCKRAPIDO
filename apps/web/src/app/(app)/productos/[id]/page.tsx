@@ -102,6 +102,23 @@ export default function EditarProductoPage() {
   const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, silent: false, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
+  const [showQuickView, setShowQuickView] = useState(false);
+  const [silentBusy, setSilentBusy] = useState(false);
+
+  const toggleSilent = async () => {
+    if (!product || silentBusy) return;
+    const next = !(product.silent ?? false);
+    setSilentBusy(true);
+    try {
+      await api(`/products/${id}`, { method: 'PATCH', body: JSON.stringify({ silent: next }) });
+      setProduct((p) => (p ? { ...p, silent: next } : p));
+      setForm((f) => ({ ...f, silent: next }));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo actualizar');
+    } finally {
+      setSilentBusy(false);
+    }
+  };
 
   useEffect(() => {
     Promise.allSettled([
@@ -218,7 +235,23 @@ export default function EditarProductoPage() {
 
   return (
     <Container className="max-w-4xl space-y-6">
-      <PageHeader title={product.name} actions={<Link href="/productos" className="text-fg-muted hover:text-fg">← Productos</Link>} />
+      <PageHeader title={product.name} actions={<div className="flex items-center gap-2"><button type="button" onClick={() => setShowQuickView(true)} className="rounded-lg border border-hair bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-raised">👁️ Vista rápida</button><Link href="/productos" className="text-fg-muted hover:text-fg">← Productos</Link></div>} />
+
+      {/* Producto silencioso — arriba de todo */}
+      <button
+        type="button"
+        onClick={() => void toggleSilent()}
+        disabled={silentBusy}
+        className={`flex w-full items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left transition disabled:opacity-60 ${product.silent ? 'border-[color:var(--brand-accent)] bg-brand-highlight' : 'border-hair-soft bg-surface hover:bg-raised'}`}
+      >
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-semibold text-fg">Producto silencioso {product.silent && <span className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand">PS</span>}</span>
+          <span className="mt-0.5 block text-xs text-fg-faint">{product.silent ? 'En el ticket impreso sale con el texto configurado.' : 'En el ticket impreso sale con su nombre real.'}</span>
+        </span>
+        <span className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${product.silent ? 'bg-[color:var(--brand-accent)]' : 'bg-raised2'}`}>
+          <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${product.silent ? 'translate-x-5' : 'translate-x-1'}`} />
+        </span>
+      </button>
 
       <section className="overflow-hidden rounded-2xl border border-hair-soft bg-surface p-4 sm:p-6">
         <div className="grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
@@ -412,10 +445,6 @@ export default function EditarProductoPage() {
             <input type="checkbox" checked={form.stockControl} onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))} />
             Controlar stock
           </label>
-          <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
-            <input type="checkbox" checked={form.silent} onChange={(e) => setForm((f) => ({ ...f, silent: e.target.checked }))} />
-            Producto silencioso <span className="text-xs text-fg-faint">(en el ticket impreso sale con el texto configurado)</span>
-          </label>
           <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {saving ? 'Guardando...' : 'Guardar'}
           </button>
@@ -559,6 +588,55 @@ export default function EditarProductoPage() {
           </div>
         </div>
       </div>
+
+      {showQuickView && (() => {
+        const rows: [string, string | null][] = [
+          ['Marca', product.brand ?? null],
+          ['Categoría', product.category?.name ?? null],
+          ['Subcategoría', product.subcategory ?? null],
+          ['Cód. de barras (EAN)', product.barcode ?? null],
+          ['EAN bulto', product.eanBox ?? null],
+          ['SKU proveedor', product.supplierSku ?? null],
+          ['Ref. proveedor', product.supplierRef ?? null],
+          ['ID externo', product.externalId ?? null],
+          ['Costo', product.cost != null && Number(product.cost) > 0 ? moneyValue(product.cost) : null],
+          ['Precio', moneyValue(product.price)],
+          ['IVA', product.iva != null ? `${Number(product.iva)}%` : null],
+          ['Unidades por bulto', product.unitsPerBox ?? null],
+          ['Peso', product.weight ?? null],
+          ['Formato', product.format ?? null],
+          ['Sabor', product.flavor ?? null],
+          ['Presentación', product.presentation ?? null],
+          ['Stock', String(product.stock)],
+          ['Stock mínimo', String(product.minStock)],
+          ['Control de stock', product.stockControl ? 'Sí' : 'No'],
+          ['Producto silencioso', product.silent ? 'Sí' : 'No'],
+          ['Origen', product.sourceProvider ?? null],
+          ['Vencimiento', product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : null],
+        ];
+        const filled = rows.filter(([, v]) => v != null && v !== '' && v !== '—');
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowQuickView(false)}>
+            <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-hair bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 border-b border-hair-soft p-4">
+                {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-raised2 text-sm font-bold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}
+                <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold text-fg">{product.name}</h2><p className="text-xs text-fg-faint">Vista rápida · {filled.length} datos completos</p></div>
+                <button type="button" onClick={() => setShowQuickView(false)} className="rounded-lg px-2 py-1 text-fg-muted hover:bg-raised">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                  {filled.map(([label, value]) => (
+                    <div key={label} className="flex flex-col border-b border-hair-soft/60 pb-2">
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">{label}</dt>
+                      <dd className="mt-0.5 truncate text-sm text-fg">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </Container>
   );
 }
