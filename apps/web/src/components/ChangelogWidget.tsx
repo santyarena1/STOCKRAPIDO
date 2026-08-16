@@ -5,23 +5,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CHANGELOG, CURRENT_VERSION, formatChangelogDate, TAG_STYLE } from '@/lib/changelog';
 
-const DISMISS_KEY = 'sr-changelog-dismissed';
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+const SEEN_KEY = 'sr-changelog-seen';
 
 export function ChangelogWidget() {
   const router = useRouter();
   const [showPopup, setShowPopup] = useState(false);
   const latest = CHANGELOG[0];
 
-  // Popup de novedades: se muestra una vez por día por versión.
+  // Popup de novedades: se muestra una vez por versión en cada dispositivo.
   useEffect(() => {
     if (!latest) return;
     try {
-      const key = `${CURRENT_VERSION}|${todayStr()}`;
-      if (localStorage.getItem(DISMISS_KEY) !== key) setShowPopup(true);
+      if (localStorage.getItem(SEEN_KEY) !== CURRENT_VERSION) setShowPopup(true);
     } catch {
       /* localStorage no disponible */
     }
@@ -29,7 +24,7 @@ export function ChangelogWidget() {
 
   const dismiss = () => {
     try {
-      localStorage.setItem(DISMISS_KEY, `${CURRENT_VERSION}|${todayStr()}`);
+      localStorage.setItem(SEEN_KEY, CURRENT_VERSION);
     } catch {
       /* noop */
     }
