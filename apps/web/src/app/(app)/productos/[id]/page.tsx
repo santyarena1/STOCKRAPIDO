@@ -102,7 +102,6 @@ export default function EditarProductoPage() {
   const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, silent: false, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
-  const [showQuickView, setShowQuickView] = useState(false);
   const [silentBusy, setSilentBusy] = useState(false);
 
   const toggleSilent = async () => {
@@ -235,7 +234,7 @@ export default function EditarProductoPage() {
 
   return (
     <Container className="max-w-4xl space-y-6">
-      <PageHeader title={product.name} actions={<div className="flex items-center gap-2"><button type="button" onClick={() => setShowQuickView(true)} className="rounded-lg border border-hair bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-raised">👁️ Vista rápida</button><Link href="/productos" className="text-fg-muted hover:text-fg">← Productos</Link></div>} />
+      <PageHeader title={product.name} actions={<Link href="/productos" className="text-fg-muted hover:text-fg">← Productos</Link>} />
 
       {/* Producto silencioso — arriba de todo */}
       <button
@@ -589,54 +588,6 @@ export default function EditarProductoPage() {
         </div>
       </div>
 
-      {showQuickView && (() => {
-        const rows: [string, string | null][] = [
-          ['Marca', product.brand ?? null],
-          ['Categoría', product.category?.name ?? null],
-          ['Subcategoría', product.subcategory ?? null],
-          ['Cód. de barras (EAN)', product.barcode ?? null],
-          ['EAN bulto', product.eanBox ?? null],
-          ['SKU proveedor', product.supplierSku ?? null],
-          ['Ref. proveedor', product.supplierRef ?? null],
-          ['ID externo', product.externalId ?? null],
-          ['Costo', product.cost != null && Number(product.cost) > 0 ? moneyValue(product.cost) : null],
-          ['Precio', moneyValue(product.price)],
-          ['IVA', product.iva != null ? `${Number(product.iva)}%` : null],
-          ['Unidades por bulto', product.unitsPerBox ?? null],
-          ['Peso', product.weight ?? null],
-          ['Formato', product.format ?? null],
-          ['Sabor', product.flavor ?? null],
-          ['Presentación', product.presentation ?? null],
-          ['Stock', String(product.stock)],
-          ['Stock mínimo', String(product.minStock)],
-          ['Control de stock', product.stockControl ? 'Sí' : 'No'],
-          ['Producto silencioso', product.silent ? 'Sí' : 'No'],
-          ['Origen', product.sourceProvider ?? null],
-          ['Vencimiento', product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : null],
-        ];
-        const filled = rows.filter(([, v]) => v != null && v !== '' && v !== '—');
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowQuickView(false)}>
-            <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-hair bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-3 border-b border-hair-soft p-4">
-                {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-raised2 text-sm font-bold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}
-                <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold text-fg">{product.name}</h2><p className="text-xs text-fg-faint">Vista rápida · {filled.length} datos completos</p></div>
-                <button type="button" onClick={() => setShowQuickView(false)} className="rounded-lg px-2 py-1 text-fg-muted hover:bg-raised">✕</button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                  {filled.map(([label, value]) => (
-                    <div key={label} className="flex flex-col border-b border-hair-soft/60 pb-2">
-                      <dt className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">{label}</dt>
-                      <dd className="mt-0.5 truncate text-sm text-fg">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </Container>
   );
 }

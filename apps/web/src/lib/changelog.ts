@@ -35,7 +35,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'NUEVO',
         title: 'Vista rápida del producto',
-        desc: 'Botón en la ficha del producto que abre un resumen con solo los campos que tienen dato cargado.',
+        desc: 'Desde la lista de productos, el botón “Vista rápida” abre un resumen con solo los datos que el producto tiene cargados, sin necesidad de entrar a la ficha.',
       },
     ],
   },
