@@ -24,6 +24,7 @@ export default function NuevoProductoPage() {
     minStock: '0',
     brand: '',
     stockControl: true,
+    silent: false,
     expiresAt: '',
   });
 
@@ -49,6 +50,7 @@ export default function NuevoProductoPage() {
           minStock: parseInt(form.minStock, 10) || 0,
           brand: form.brand || undefined,
           stockControl: form.stockControl,
+          silent: form.silent,
           expiresAt: form.expiresAt || undefined,
         }),
       });
@@ -165,6 +167,14 @@ export default function NuevoProductoPage() {
             onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))}
           />
           Controlar stock
+        </label>
+        <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.silent}
+            onChange={(e) => setForm((f) => ({ ...f, silent: e.target.checked }))}
+          />
+          Producto silencioso <span className="text-xs text-fg-faint">(en el ticket impreso sale con el texto configurado)</span>
         </label>
         <div data-tour="nuevo-producto-guardar" className="flex gap-2 pt-4">
           <button type="submit" disabled={loading} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">

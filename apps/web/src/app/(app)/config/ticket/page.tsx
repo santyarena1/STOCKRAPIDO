@@ -14,6 +14,7 @@ export default function TicketConfigPage() {
   const [receiptName, setReceiptName] = useState('');
   const [ticketLogoUrl, setTicketLogoUrl] = useState('');
   const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate>('clasico');
+  const [silentLabel, setSilentLabel] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export default function TicketConfigPage() {
     setReceiptName(branding?.receiptName ?? '');
     setTicketLogoUrl(branding?.ticketLogoUrl ?? '');
     setReceiptTemplate(branding?.receiptTemplate === 'moderno' ? 'moderno' : 'clasico');
+    setSilentLabel((business?.posConfig as { silentItemLabel?: string } | undefined)?.silentItemLabel ?? '');
   }, [business]);
 
   const handleSaveTicket = async (event: React.FormEvent) => {
@@ -36,6 +38,7 @@ export default function TicketConfigPage() {
               ticketLogoUrl: ticketLogoUrl.trim(),
               receiptTemplate,
             },
+            silentItemLabel: silentLabel.trim(),
           },
         }),
       });
@@ -63,6 +66,19 @@ export default function TicketConfigPage() {
             className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand"
           />
           <p className="mt-1 text-xs text-fg-faint">Vacío = se usa el nombre de la app o el nombre del negocio.</p>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Texto para productos silenciosos</label>
+          <input
+            type="text"
+            value={silentLabel}
+            onChange={(event) => setSilentLabel(event.target.value)}
+            placeholder="Item kiosco"
+            maxLength={60}
+            className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand"
+          />
+          <p className="mt-1 text-xs text-fg-faint">Los productos marcados como “silenciosos” se imprimen en el ticket con este texto (no afecta estadísticas ni el resto del sistema). Vacío = “Item kiosco”.</p>
         </div>
 
         <div>

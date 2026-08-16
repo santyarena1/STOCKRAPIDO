@@ -52,6 +52,7 @@ type Product = {
   sourceConnectionId?: string | null;
   incomplete?: boolean;
   isActive?: boolean;
+  silent?: boolean;
 };
 type Category = { id: string; name: string };
 type StockMove = { id: string; qty: number; reason: string; reference?: string; createdAt: string };
@@ -98,7 +99,7 @@ export default function EditarProductoPage() {
   const [supplierData, setSupplierData] = useState<SupplierData>({ linked: false, syncedProduct: null });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
+  const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, silent: false, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
 
@@ -124,6 +125,7 @@ export default function EditarProductoPage() {
           minStock: String(p.minStock),
           brand: p.brand || '',
           stockControl: p.stockControl,
+          silent: p.silent ?? false,
           expiresAt: p.expiresAt ? new Date(p.expiresAt).toISOString().slice(0, 10) : '',
           imageUrl: p.imageUrl || '',
           unitsPerBox: p.unitsPerBox || '',
@@ -155,6 +157,7 @@ export default function EditarProductoPage() {
           minStock: parseInt(form.minStock, 10) || 0,
           brand: form.brand || undefined,
           stockControl: form.stockControl,
+          silent: form.silent,
           expiresAt: form.expiresAt || undefined,
           imageUrl: form.imageUrl || undefined,
           unitsPerBox: form.unitsPerBox || undefined,
@@ -408,6 +411,10 @@ export default function EditarProductoPage() {
           <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
             <input type="checkbox" checked={form.stockControl} onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))} />
             Controlar stock
+          </label>
+          <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
+            <input type="checkbox" checked={form.silent} onChange={(e) => setForm((f) => ({ ...f, silent: e.target.checked }))} />
+            Producto silencioso <span className="text-xs text-fg-faint">(en el ticket impreso sale con el texto configurado)</span>
           </label>
           <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {saving ? 'Guardando...' : 'Guardar'}

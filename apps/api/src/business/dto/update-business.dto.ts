@@ -92,6 +92,10 @@ export class BusinessPosConfigDto {
   hiddenCategoryIds?: string[];
 
   @IsOptional()
+  @IsString()
+  silentItemLabel?: string;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => BusinessAiInvoiceDto)
   aiInvoice?: BusinessAiInvoiceDto;

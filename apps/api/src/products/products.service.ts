@@ -38,6 +38,7 @@ export type ProductBulkInput = {
     | 'adjustStock'
     | 'setStockControl'
     | 'setActive'
+    | 'setSilent'
     | 'stopSync'
     | 'delete';
   value?: unknown;
@@ -386,6 +387,7 @@ export class ProductsService {
       'adjustStock',
       'setStockControl',
       'setActive',
+      'setSilent',
       'stopSync',
       'delete',
     ];
@@ -489,7 +491,10 @@ export class ProductsService {
       data = { sourceConnectionId: null, sourceProvider: null };
     } else {
       if (typeof input.value !== 'boolean') throw new BadRequestException('El valor debe ser booleano.');
-      data = input.action === 'setStockControl' ? { stockControl: input.value } : { isActive: input.value };
+      data =
+        input.action === 'setStockControl' ? { stockControl: input.value }
+        : input.action === 'setSilent' ? { silent: input.value }
+        : { isActive: input.value };
     }
     const result = await this.prisma.product.updateMany({
       where: { businessId, id: { in: allowedIds } },
@@ -652,6 +657,7 @@ export class ProductsService {
     supplierSku?: string;
     externalId?: string;
     incomplete?: boolean;
+    silent?: boolean;
   }) {
     const initialStock = Math.max(0, Math.floor(data.stock ?? 0));
     const product = await this.prisma.product.create({
@@ -678,6 +684,7 @@ export class ProductsService {
         supplierSku: data.supplierSku,
         externalId: data.externalId,
         incomplete: data.incomplete ?? false,
+        silent: data.silent ?? false,
       },
       include: { category: true },
     });
@@ -731,6 +738,7 @@ export class ProductsService {
     stockControl: boolean;
     isActive: boolean;
     incomplete: boolean;
+    silent: boolean;
     brand: string;
     iva: number;
     expiresAt: string;

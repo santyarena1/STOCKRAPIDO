@@ -272,7 +272,7 @@ export class FiscalService {
     });
   }
 
-  async receipt(businessId: string, saleId: string) {
+  async receipt(businessId: string, saleId: string, reveal = false) {
     const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { items: { include: { product: true } }, fiscalDocument: true, business: { select: { name: true, cuit: true, address: true, posConfig: true, fiscalConfig: true } } } });
     if (!sale) throw new NotFoundException('Venta no encontrada.');
     const fc = sale.business.fiscalConfig;
@@ -292,8 +292,12 @@ export class FiscalService {
       (typeof branding.logoUrl === 'string' && branding.logoUrl.trim()) ||
       null;
     const template = branding.receiptTemplate === 'moderno' ? 'moderno' : 'clasico';
+    // Productos silenciosos: en el comprobante IMPRESO se muestran con un texto configurable
+    // (salvo que se pida "reveal"). El resto del sistema usa siempre el nombre real.
+    const silentLabel =
+      (typeof posConfig.silentItemLabel === 'string' && posConfig.silentItemLabel.trim()) || 'Item kiosco';
     return { id: sale.id, createdAt: sale.createdAt, total: sale.total, discount: sale.discount, totalFinal: sale.totalFinal, paymentMethod: sale.paymentMethod,
-      items: sale.items.map(i => ({ name: i.product?.name || i.productName || 'Producto', qty: i.qty, unitPrice: i.unitPrice, subtotal: i.subtotal })),
+      items: sale.items.map(i => ({ name: (!reveal && i.product?.silent) ? silentLabel : (i.product?.name || i.productName || 'Producto'), qty: i.qty, unitPrice: i.unitPrice, subtotal: i.subtotal })),
       business: { name: legalName, cuit: fc?.cuit || sale.business.cuit, address: fc?.address || sale.business.address,
         grossIncomeNumber: fc?.grossIncomeNumber, activityStartDate: fc?.activityStartDate },
       ticket: { fantasyName, logoUrl, template, legalName }, fiscalDocument: sale.fiscalDocument };

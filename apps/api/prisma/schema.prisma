@@ -118,6 +118,7 @@ model Product {
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
   incomplete  Boolean   @default(false)
+  silent      Boolean   @default(false)
   businessId  String
   brand       String?
   iva         Decimal?

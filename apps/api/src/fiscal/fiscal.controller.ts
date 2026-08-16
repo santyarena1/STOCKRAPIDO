@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { FiscalService } from './fiscal.service';
@@ -11,7 +11,7 @@ export class FiscalController {
   @Get('config') config(@CurrentUser() u: User) { return this.fiscal.getPublicConfig(u.businessId); }
   @Put('config') save(@CurrentUser() u: User, @Body() body: any) { return this.fiscal.saveConfig(u.businessId, body); }
   @Post('test') test(@CurrentUser() u: User) { return this.fiscal.testConnection(u.businessId); }
-  @Get('sales/:saleId/receipt') receipt(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.receipt(u.businessId, saleId); }
+  @Get('sales/:saleId/receipt') receipt(@CurrentUser() u: User, @Param('saleId') saleId: string, @Query('reveal') reveal?: string) { return this.fiscal.receipt(u.businessId, saleId, reveal === '1' || reveal === 'true'); }
   @Post('sales/:saleId/factura') factura(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.issueFacturaC(u.businessId, saleId); }
   @Post('sales/:saleId/retry') retry(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.issueFacturaC(u.businessId, saleId); }
 }

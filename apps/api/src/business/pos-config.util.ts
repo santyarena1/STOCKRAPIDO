@@ -81,6 +81,7 @@ type PosConfigPatchBody = {
     branding?: Partial<BrandingPosConfig>;
     customerDisplay?: Partial<CustomerDisplayPosConfig>;
     hiddenCategoryIds?: string[] | null;
+    silentItemLabel?: string;
   };
   clearAiInvoiceWebhookSecret?: boolean;
 };
@@ -127,6 +128,8 @@ export function mergePosConfigUpdate(
   const incomingCd = patch.posConfig?.customerDisplay;
   const hasHiddenCategoryIds =
     patch.posConfig !== undefined && 'hiddenCategoryIds' in patch.posConfig;
+  const hasSilentItemLabel =
+    patch.posConfig !== undefined && 'silentItemLabel' in patch.posConfig;
   const hasAi =
     incomingAi !== undefined &&
     typeof incomingAi === 'object' &&
@@ -140,9 +143,15 @@ export function mergePosConfigUpdate(
     typeof incomingCd === 'object' &&
     Object.keys(incomingCd as object).length > 0;
 
-  if (!hasAi && !hasBrand && !hasCd && !hasHiddenCategoryIds) return undefined;
+  if (!hasAi && !hasBrand && !hasCd && !hasHiddenCategoryIds && !hasSilentItemLabel) return undefined;
 
   const base = existing && typeof existing === 'object' ? { ...(existing as Record<string, unknown>) } : {};
+
+  if (hasSilentItemLabel) {
+    const v = patch.posConfig?.silentItemLabel;
+    if (typeof v === 'string' && v.trim() !== '') base.silentItemLabel = v.trim().slice(0, 60);
+    else delete base.silentItemLabel;
+  }
 
   if (hasHiddenCategoryIds) {
     const incoming = patch.posConfig?.hiddenCategoryIds;
