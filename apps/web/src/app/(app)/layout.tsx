@@ -174,6 +174,7 @@ function applyCssBrandVars(br: Branding | undefined) {
 function BillingBanner() {
   const { data } = useBilling();
   if (!data) return null;
+  if (data.status === 'complimentary') return null;
   if (data.trialActive && data.trialEndsAt) {
     const days = Math.max(0, Math.ceil((new Date(data.trialEndsAt).getTime() - Date.now()) / 86400000));
     return (

@@ -15,6 +15,7 @@ import {
 import { useBilling, type BillingInvoice } from '@/components/billing/BillingProvider';
 
 function statusLabel(status: string, trialActive: boolean) {
+  if (status === 'complimentary') return 'Cortesía · no se cobra';
   if (trialActive) return 'Prueba de 14 días';
   if (status === 'active') return 'Activo';
   if (status === 'pending_payment') return 'Esperando el pago';
@@ -125,12 +126,16 @@ function BillingInner() {
               <dd>{data.planRenewsAt ? new Date(data.planRenewsAt).toLocaleDateString('es-AR') : '—'}</dd>
             </div>
           </dl>
-          {data.status === 'pending_payment' || data.pendingInvoice ? (
+          {data.status === 'complimentary' ? (
+            <p className="mt-3 text-sm text-ok">Esta cuenta no se cobra. El plan lo define el equipo de StockRápido.</p>
+          ) : data.status === 'pending_payment' || data.pendingInvoice ? (
             <p className="mt-3 text-sm text-warn">Hay un pago pendiente. El plan ya está reservado; falta que acredite.</p>
           ) : null}
+          {data.status !== 'complimentary' ? (
           <a href="/soporte/nuevo?categoria=pago&asunto=Consulta%20por%20el%20pago%20del%20plan" className="mt-3 inline-block text-sm text-brand hover:underline">
             ¿Un problema con el pago? Abrí un ticket
           </a>
+          ) : null}
         </div>
         {data.trialActive ? (
           <p className="mt-3 text-sm">
@@ -167,6 +172,14 @@ function BillingInner() {
         </dl>
       </section>
 
+      {data.status === 'complimentary' ? (
+        <section className="rounded-xl border border-hair-soft bg-surface p-5">
+          <h3 className="text-lg font-semibold">Plan de cortesía</h3>
+          <p className="mt-2 text-sm text-fg-muted">
+            Esta cuenta no se cobra. Si necesitás otro plan o volver a un abono, escribí a soporte: lo cambia el equipo de StockRápido.
+          </p>
+        </section>
+      ) : (
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">Cambiar de plan</h3>
@@ -224,8 +237,9 @@ function BillingInner() {
         {error ? <p className="mt-3 text-sm text-crit">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-ok">{message}</p> : null}
       </section>
+      )}
 
-      {(data.pendingInvoice || data.transfer.alias || data.transfer.cbu || data.transfer.whatsapp) && (
+      {data.status !== 'complimentary' && (data.pendingInvoice || data.transfer.alias || data.transfer.cbu || data.transfer.whatsapp) && (
         <section className="rounded-xl border border-hair-soft bg-surface p-5">
           <h3 className="font-semibold">Cómo pagar</h3>
           {data.pendingInvoice ? (

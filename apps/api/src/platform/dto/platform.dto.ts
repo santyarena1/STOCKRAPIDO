@@ -6,8 +6,8 @@ export class UpdateBusinessPlanDto {
   planId?: 'mostrador' | 'kiosco' | 'red';
 
   @IsOptional()
-  @IsIn(['trial', 'active', 'pending_payment', 'past_due', 'canceled'])
-  planStatus?: 'trial' | 'active' | 'pending_payment' | 'past_due' | 'canceled';
+  @IsIn(['trial', 'active', 'pending_payment', 'past_due', 'canceled', 'complimentary'])
+  planStatus?: 'trial' | 'active' | 'pending_payment' | 'past_due' | 'canceled' | 'complimentary';
 
   @IsOptional()
   @IsIn(['monthly', 'yearly'])

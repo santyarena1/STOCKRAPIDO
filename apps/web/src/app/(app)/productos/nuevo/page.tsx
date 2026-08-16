@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
+import { BarcodeField } from '@/components/BarcodeField';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 
@@ -77,14 +78,18 @@ export default function NuevoProductoPage() {
             required
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div data-tour="nuevo-producto-barcode">
-            <label className="block text-sm text-fg-muted mb-1">Código de barras</label>
-            <input
-              type="text"
-              value={form.barcode}
-              onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
+            <BarcodeField
+              barcode={form.barcode}
+              onBarcode={(barcode) => setForm((f) => ({ ...f, barcode }))}
+              labelItem={{
+                name: form.name || 'Producto',
+                barcode: form.barcode,
+                sku: '',
+                category: categories.find((c) => c.id === form.categoryId)?.name || '',
+                price: form.price ? parseFloat(form.price) : 0,
+              }}
             />
           </div>
           <div data-tour="nuevo-producto-categoria">

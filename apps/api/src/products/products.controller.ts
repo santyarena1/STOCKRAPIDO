@@ -142,6 +142,66 @@ export class ProductsController {
     return this.products.mergeDuplicates(user.businessId, body?.keepId, body?.mergeIds);
   }
 
+  @Post('generate-barcode')
+  generateBarcode(@CurrentUser() user: User) {
+    return this.products.generateInternalBarcode(user.businessId);
+  }
+
+  @Post('assign-barcodes')
+  assignBarcodes(@CurrentUser() user: User, @Body() body: { ids?: string[] }) {
+    return this.products.assignMissingBarcodes(user.businessId, body?.ids ?? []);
+  }
+
+  @Post('labels')
+  labels(@CurrentUser() user: User, @Body() body: { ids?: string[] }) {
+    return this.products.labelData(user.businessId, body?.ids ?? []);
+  }
+
+  @Get('catalog-ids')
+  catalogIds(
+    @CurrentUser() user: User,
+    @Query('q') q?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('excludeCategoryIds') excludeCategoryIds?: string,
+    @Query('brand') brand?: string,
+    @Query('provider') provider?: string,
+    @Query('type') type?: string,
+    @Query('subcategory') subcategory?: string,
+    @Query('presentation') presentation?: string,
+    @Query('stockControl') stockControl?: string,
+    @Query('status') status?: string,
+    @Query('hasStock') hasStock?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+  ) {
+    const parsedStatus = status ?? 'active';
+    if (!CATALOG_STATUSES.includes(parsedStatus as (typeof CATALOG_STATUSES)[number])) {
+      throw new BadRequestException('status debe ser active, inactive o all.');
+    }
+    const parsedSort = sort ?? 'name';
+    if (!CATALOG_SORTS.includes(parsedSort as (typeof CATALOG_SORTS)[number])) {
+      throw new BadRequestException('Orden de catálogo inválido.');
+    }
+    const query: ProductCatalogQuery = {
+      q,
+      categoryId,
+      excludeCategoryIds: excludeCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
+      brand,
+      provider,
+      type,
+      subcategory,
+      presentation,
+      stockControl: optionalBoolean(stockControl, 'stockControl'),
+      status: parsedStatus as ProductCatalogQuery['status'],
+      hasStock: optionalBoolean(hasStock, 'hasStock'),
+      sort: parsedSort as ProductCatalogQuery['sort'],
+      dir: (dir ?? 'asc') as ProductCatalogQuery['dir'],
+      page: 1,
+      pageSize: 200,
+    };
+    return this.products.catalogIds(user.businessId, query);
+  }
+
   @Get()
   list(
     @CurrentUser() user: User,
