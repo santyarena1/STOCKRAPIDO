@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.5',
+    date: '2026-08-16',
+    summary: 'Soporte con tickets y, para el equipo de StockRápido, un panel de todas las cuentas y sus pagos.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Tickets de soporte',
+        desc: 'En Administración → Soporte podés abrir un ticket si hay un problema técnico o con un pago. Queda el hilo de mensajes.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Estado del pago en Plan y facturación',
+        desc: 'Se ve si estás al día, en prueba o con un pago pendiente, la fecha del último pago y la próxima renovación. Desde ahí también se abre un ticket.',
+      },
+    ],
+  },
+  {
     version: 'v1.4',
     date: '2026-08-16',
     summary: 'Landing pública con login, y planes claros: Mostrador, Fiscal y Pro.',

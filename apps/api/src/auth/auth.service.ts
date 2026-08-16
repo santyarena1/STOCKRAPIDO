@@ -9,6 +9,7 @@ import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { jwtDurationToSeconds, parseJwtDurationToMs } from './jwt-duration.util';
 import { getPlan, TRIAL_DAYS } from '../billing/plans';
+import { userIsPlatformAdmin } from '../platform/platform-access';
 
 function businessWithSanitizedPos<T extends { posConfig?: unknown } | null>(b: T): T {
   if (!b) return b;
@@ -48,10 +49,13 @@ export class AuthService {
         role: 'OWNER',
         businessId: business.id,
       },
-      select: { id: true, email: true, name: true, role: true, businessId: true },
+      select: { id: true, email: true, name: true, role: true, businessId: true, isPlatformAdmin: true },
     });
     const tokens = await this.issueTokens(user.id, user.email);
-    return { user: { ...user, business: { id: business.id, name: business.name } }, ...tokens };
+    return {
+      user: this.withPlatformFlag({ ...user, business: { id: business.id, name: business.name } }),
+      ...tokens,
+    };
   }
 
   async login(email: string, password: string) {
@@ -63,10 +67,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     const tokens = await this.issueTokens(user.id, user.email);
     const { passwordHash: _, ...safe } = user;
-    const safeUser = {
+    const safeUser = this.withPlatformFlag({
       ...safe,
       business: businessWithSanitizedPos(safe.business),
-    };
+    });
     return { user: safeUser, ...tokens };
   }
 
@@ -89,7 +93,7 @@ export class AuthService {
       const tokens = await this.issueTokens(user.id, user.email);
       const { passwordHash: _, ...safe } = user;
       return {
-        user: { ...safe, business: businessWithSanitizedPos(safe.business) },
+        user: this.withPlatformFlag({ ...safe, business: businessWithSanitizedPos(safe.business) }),
         ...tokens,
       };
     } catch {
@@ -181,6 +185,17 @@ export class AuthService {
     });
     if (!user) return null;
     const { passwordHash: _, ...safe } = user;
-    return { ...safe, business: businessWithSanitizedPos(safe.business) };
+    return this.withPlatformFlag({ ...safe, business: businessWithSanitizedPos(safe.business) });
+  }
+
+  me(user: { id: string; email: string; name: string; role: string; businessId: string; isPlatformAdmin?: boolean; business?: unknown }) {
+    return this.withPlatformFlag(user);
+  }
+
+  private withPlatformFlag<T extends { email: string; isPlatformAdmin?: boolean }>(user: T): T & { isPlatformAdmin: boolean } {
+    return {
+      ...user,
+      isPlatformAdmin: userIsPlatformAdmin(user, this.config),
+    };
   }
 }

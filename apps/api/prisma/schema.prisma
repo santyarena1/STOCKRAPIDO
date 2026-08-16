@@ -57,6 +57,7 @@ model Business {
   vendedorSessions    VendedorSession[]
   dataBackups          DataBackup[]
   invoices             Invoice[]
+  supportTickets       SupportTicket[]
 }
 
 model Invoice {
@@ -112,6 +113,7 @@ model User {
   role       Role     @default(CAJERO)
   businessId String
   isActive   Boolean  @default(true)
+  isPlatformAdmin Boolean @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -120,6 +122,8 @@ model User {
   sales               Sale[]
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
+  supportTickets      SupportTicket[]
+  supportMessages     SupportMessage[]
 }
 
 model Category {
@@ -816,3 +820,38 @@ model StickerOrderItem {
   order   StickerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   sticker Sticker      @relation(fields: [stickerId], references: [id])
 }
+
+model SupportTicket {
+  id         String    @id @default(cuid())
+  businessId String
+  userId     String
+  subject    String
+  category   String    @default("otro") // pago | bug | cuenta | otro
+  status     String    @default("open") // open | in_progress | waiting | resolved | closed
+  priority   String    @default("normal") // low | normal | high
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  closedAt   DateTime?
+
+  business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id])
+  messages SupportMessage[]
+
+  @@index([businessId, createdAt])
+  @@index([status, createdAt])
+}
+
+model SupportMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  userId    String
+  fromStaff Boolean  @default(false)
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id])
+
+  @@index([ticketId, createdAt])
+}
+

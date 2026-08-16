@@ -86,7 +86,7 @@ function BillingInner() {
     <Container className="space-y-8">
       <PageHeader
         title="Plan y facturación"
-        subtitle="Mostrador es el kiosco. Fiscal suma AFIP. Pro trae las listas de los mayoristas y la IA."
+        subtitle="Acá ves el plan, el estado del pago y los comprobantes del abono."
       />
 
       {mp === 'success' ? (
@@ -112,14 +112,31 @@ function BillingInner() {
           <span className="text-sm text-fg-muted">{statusLabel(data.status, data.trialActive)}</span>
         </div>
         <p className="mt-2 text-sm text-fg-muted">{data.plan.description}</p>
+        <div className="mt-4 rounded-lg border border-hair-soft bg-raised px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-fg-faint">Estado del pago</p>
+          <p className="mt-1 text-lg font-semibold">{data.paymentStatusLabel}</p>
+          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-fg-faint">Último pago acreditado</dt>
+              <dd>{data.lastPaidAt ? new Date(data.lastPaidAt).toLocaleDateString('es-AR') : 'Todavía no hay un pago acreditado'}</dd>
+            </div>
+            <div>
+              <dt className="text-fg-faint">Próxima renovación</dt>
+              <dd>{data.planRenewsAt ? new Date(data.planRenewsAt).toLocaleDateString('es-AR') : '—'}</dd>
+            </div>
+          </dl>
+          {data.status === 'pending_payment' || data.pendingInvoice ? (
+            <p className="mt-3 text-sm text-warn">Hay un pago pendiente. El plan ya está reservado; falta que acredite.</p>
+          ) : null}
+          <a href="/soporte/nuevo?categoria=pago&asunto=Consulta%20por%20el%20pago%20del%20plan" className="mt-3 inline-block text-sm text-brand hover:underline">
+            ¿Un problema con el pago? Abrí un ticket
+          </a>
+        </div>
         {data.trialActive ? (
           <p className="mt-3 text-sm">
             Te quedan <strong>{trialLeft} día{trialLeft === 1 ? '' : 's'}</strong> de prueba
             {data.trialEndsAt ? ` (hasta el ${new Date(data.trialEndsAt).toLocaleDateString('es-AR')})` : ''}.
           </p>
-        ) : null}
-        {data.status === 'pending_payment' ? (
-          <p className="mt-3 text-sm text-warn">Hay un pago pendiente. El plan ya está reservado; falta que acredite.</p>
         ) : null}
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
           <div>

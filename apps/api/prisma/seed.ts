@@ -189,6 +189,15 @@ async function main() {
 
   console.log('Seed OK. Usuario:', email, 'Password:', password);
   console.log('Cajero: cajero@demo.com / Demo123!');
+
+  const adminEmails = (process.env.SUPER_ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (owner && adminEmails.includes(owner.email.toLowerCase())) {
+    await prisma.user.update({ where: { id: owner.id }, data: { isPlatformAdmin: true } });
+    console.log('Owner marcado como admin de plataforma.');
+  }
 }
 
 main()

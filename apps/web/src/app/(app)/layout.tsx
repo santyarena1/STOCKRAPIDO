@@ -11,6 +11,7 @@ import {
   Receipt,
   ScanLine,
   Settings,
+  Shield,
   SlidersHorizontal,
   ShoppingCart,
   Menu,
@@ -27,6 +28,7 @@ import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 import { cn } from '@/lib/cn';
 import { Loader } from '@/components/ui/Loader';
+import { useSessionUser } from '@/lib/use-session-user';
 
 type Branding = {
   accentColor?: string;
@@ -116,9 +118,19 @@ const GROUPS = [
     items: [
       { href: '/usuarios', label: 'Usuarios' },
       { href: '/billing', label: 'Plan & Facturación' },
+      { href: '/soporte', label: 'Soporte' },
     ],
   },
 ];
+
+const PLATFORM_GROUP = {
+  title: 'Panel StockRápido',
+  icon: Shield,
+  items: [
+    { href: '/admin', label: 'Cuentas' },
+    { href: '/admin/tickets', label: 'Tickets' },
+  ],
+};
 
 const SIDEBAR_GROUPS_KEY = 'sr-sidebar-groups';
 
@@ -127,13 +139,19 @@ function isActivePath(pathname: string, href: string) {
     pathname === href ||
     (href === '/compras' && pathname.startsWith('/compras')) ||
     (href === '/figuritas' && pathname.startsWith('/figuritas')) ||
+    (href === '/admin' && (pathname === '/admin' || pathname.startsWith('/admin/negocios'))) ||
+    (href === '/admin/tickets' && pathname.startsWith('/admin/tickets')) ||
+    (href === '/soporte' && pathname.startsWith('/soporte')) ||
     (href.startsWith('/config/') && pathname.startsWith(href))
   );
 }
 
-function activeGroups(pathname: string) {
+function activeGroups(
+  pathname: string,
+  groups: Array<{ title: string; items: Array<{ href: string; label: string }> }>,
+) {
   return Object.fromEntries(
-    GROUPS.map((group) => [
+    groups.map((group) => [
       group.title,
       group.items.some(({ href }) => isActivePath(pathname, href)),
     ]),
@@ -177,11 +195,13 @@ function BillingBanner() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isPlatformAdmin } = useSessionUser();
+  const navGroups = isPlatformAdmin ? [...GROUPS, PLATFORM_GROUP] : GROUPS;
   const [ready, setReady] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [brand, setBrand] = useState<Branding>({});
   const [sidebarTitle, setSidebarTitle] = useState('StockRápido');
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => activeGroups(pathname));
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => activeGroups(pathname, GROUPS));
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -237,14 +257,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } catch {
       stored = {};
     }
-    const active = activeGroups(pathname);
+    const active = activeGroups(pathname, navGroups);
     setOpenGroups(
       Object.fromEntries(
-        GROUPS.map((group) => [group.title, active[group.title] || stored[group.title] || false]),
+        navGroups.map((group) => [group.title, active[group.title] || stored[group.title] || false]),
       ),
     );
     setGroupsLoaded(true);
-  }, [pathname]);
+  }, [pathname, isPlatformAdmin]);
 
   useEffect(() => {
     if (!groupsLoaded) return;
@@ -314,7 +334,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
         <div className="mt-4 space-y-1">
-          {GROUPS.map(({ title, icon: Icon, items }) => {
+          {navGroups.map(({ title, icon: Icon, items }) => {
             const open = openGroups[title] ?? false;
             const groupActive = items.some(({ href }) => isActivePath(pathname, href));
             return <div key={title}><button type="button" aria-expanded={open} onClick={() => setOpenGroups((current) => (current[title] ? {} : { [title]: true }))} className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg', groupActive ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted')}><Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-fg-muted')} /><span className="min-w-0 flex-1 truncate">{title}</span><ChevronDown className={cn('h-4 w-4 shrink-0 text-fg-faint transition-transform', open && 'rotate-180')} /></button>{open ? <div className="ml-5 mt-0.5 space-y-0.5 border-l border-hair-soft pl-3">{items.map(({ href, label }) => { const active = isActivePath(pathname, href); return <Link key={href} href={href} onClick={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined} className={cn('flex items-center rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors', active ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted hover:bg-raised hover:text-fg')}>{label}</Link>; })}</div> : null}</div>;

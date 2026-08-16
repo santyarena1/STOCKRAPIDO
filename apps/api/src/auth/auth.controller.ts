@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -38,6 +38,15 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  me(
+    @CurrentUser()
+    user: { id: string; email: string; name: string; role: string; businessId: string; isPlatformAdmin?: boolean; business?: unknown },
+  ) {
+    return this.auth.me(user);
   }
 
   @Post('logout-all')

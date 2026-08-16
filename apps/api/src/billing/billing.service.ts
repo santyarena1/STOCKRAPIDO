@@ -39,6 +39,9 @@ export class BillingService {
       }),
     ]);
     const pending = invoices.find((inv) => inv.status === 'pending') ?? null;
+    const lastPaid = invoices.find((inv) => inv.status === 'paid') ?? null;
+    const trialActive = access.trialActive;
+    const payment = this.paymentStatus(access.status, trialActive, !!pending);
     return {
       plan: access.plan,
       planId: access.planId,
@@ -46,8 +49,12 @@ export class BillingService {
       billingCycle: access.billingCycle,
       trialEndsAt: access.trialEndsAt,
       planRenewsAt: access.planRenewsAt,
-      trialActive: access.trialActive,
+      trialActive,
       trialDays: TRIAL_DAYS,
+      paymentStatus: payment.key,
+      paymentStatusLabel: payment.label,
+      lastPaidAt: lastPaid?.paidAt ?? null,
+      lastPaidInvoice: lastPaid ? this.serializeInvoice(lastPaid) : null,
       usage: {
         users,
         products,
@@ -178,6 +185,15 @@ export class BillingService {
       },
     });
     return this.serializeInvoice(paid);
+  }
+
+  private paymentStatus(planStatus: string, trialActive: boolean, hasPending: boolean) {
+    if (hasPending || planStatus === 'pending_payment') return { key: 'pending', label: 'Pago pendiente' };
+    if (trialActive || planStatus === 'trial') return { key: 'trial', label: 'Prueba activa' };
+    if (planStatus === 'active') return { key: 'paid', label: 'Al día' };
+    if (planStatus === 'past_due') return { key: 'overdue', label: 'Pago vencido' };
+    if (planStatus === 'canceled') return { key: 'canceled', label: 'Cancelado' };
+    return { key: planStatus, label: planStatus };
   }
 
   private periodEnd(from: Date, cycle: BillingCycle) {

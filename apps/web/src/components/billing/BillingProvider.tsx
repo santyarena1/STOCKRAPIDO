@@ -29,6 +29,10 @@ export type BillingMe = {
   planRenewsAt: string | null;
   trialActive: boolean;
   trialDays: number;
+  paymentStatus: string;
+  paymentStatusLabel: string;
+  lastPaidAt: string | null;
+  lastPaidInvoice: BillingInvoice | null;
   usage: { users: number; products: number; syncProviders: number };
   limits: PlanDefinition['limits'];
   invoices: BillingInvoice[];
