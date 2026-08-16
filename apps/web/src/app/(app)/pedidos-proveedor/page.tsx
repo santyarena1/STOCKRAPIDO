@@ -9,6 +9,7 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { ProviderTabs, SyncProviderProvider, useSyncProvider } from '@/components/sync/SyncProviderContext';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type Order = {
   id: string; externalOrderId?: string | null; status?: string | null; total?: unknown;
@@ -138,4 +139,10 @@ function OrdersScreen() {
   </Container>;
 }
 
-export default function PedidosProveedorPage() { return <SyncProviderProvider><OrdersScreen /></SyncProviderProvider>; }
+export default function PedidosProveedorPage() {
+  return (
+    <PlanGate feature="sync">
+      <SyncProviderProvider><OrdersScreen /></SyncProviderProvider>
+    </PlanGate>
+  );
+}

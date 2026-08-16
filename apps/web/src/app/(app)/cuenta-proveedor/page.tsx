@@ -7,6 +7,7 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { ProviderTabs, SyncProviderProvider, useSyncProvider } from '@/components/sync/SyncProviderContext';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type Account = { id: string; clienteId?: string | null; razonSocial?: string | null; balance?: unknown; creditLimit?: unknown; availableCredit?: unknown; loyaltyPoints?: number | null; currency?: string | null; updatedAt: string; invoices: Array<{ id: string; number?: string | null; date?: string | null; dueDate?: string | null; total?: unknown; saldoPendiente?: unknown; status?: string | null; pdfUrl?: string | null }>; movements: Array<{ id: string; date?: string | null; type?: string | null; reference?: string | null; amount?: unknown; runningBalance?: unknown }>; credits: Array<{ id: string; tipo?: string | null; montoDisponible?: unknown; montoUsado?: unknown; vencimiento?: string | null; condiciones?: string | null }> };
 const money = (value: unknown) => value != null && Number.isFinite(Number(value)) ? formatMoneyArs(Number(value)) : '—';
@@ -27,4 +28,10 @@ function AccountScreen() {
   </> : <p className="rounded-2xl border border-hair-soft bg-surface p-8 text-center text-fg-muted">{emptyMessage}</p>}</Container>;
 }
 
-export default function CuentaProveedorPage() { return <SyncProviderProvider><AccountScreen /></SyncProviderProvider>; }
+export default function CuentaProveedorPage() {
+  return (
+    <PlanGate feature="sync">
+      <SyncProviderProvider><AccountScreen /></SyncProviderProvider>
+    </PlanGate>
+  );
+}

@@ -13,6 +13,7 @@ import {
   SyncProviderProvider,
   useSyncProvider,
 } from '@/components/sync/SyncProviderContext';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type ColumnType = 'number' | 'string' | 'boolean' | 'mixed';
 type RawColumn = {
@@ -239,5 +240,9 @@ function ColumnsPageContent() {
 }
 
 export default function ColumnsProvidersPage() {
-  return <SyncProviderProvider><ColumnsPageContent /></SyncProviderProvider>;
+  return (
+    <PlanGate feature="sync">
+      <SyncProviderProvider><ColumnsPageContent /></SyncProviderProvider>
+    </PlanGate>
+  );
 }

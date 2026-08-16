@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type SyncFrequency = 'manual' | 'daily' | 'hourly' | 'every_6h' | 'every_12h';
 type Connection = {
@@ -226,9 +227,10 @@ export default function ProveedoresConfigPage() {
   };
 
   if (loading) return <Loader full label="Proveedores" />;
+
   const credentialFields = connection ? CREDENTIAL_FIELDS[connection.provider] ?? GENERIC_CREDENTIAL_FIELDS : GENERIC_CREDENTIAL_FIELDS;
 
-  return <div className="space-y-6">
+  return <PlanGate feature="sync"><div className="space-y-6">
     <PageHeader title="Proveedores y sincronización" subtitle="Configurá credenciales, mapeo de columnas y frecuencia de cada proveedor." />
     <section className="overflow-hidden rounded-2xl border border-hair-soft bg-surface">
       <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] lg:items-start">
@@ -297,5 +299,5 @@ export default function ProveedoresConfigPage() {
 
       <section className="flex flex-col gap-4 rounded-xl border border-hair-soft bg-surface p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-fg">Mapeo de columnas</h2><p className="text-sm text-fg-muted">Elegí una única columna de este proveedor para cada campo de StockRápido.</p></div><Link href="/columnas-proveedores" className="btn-brand rounded-xl px-4 py-2.5 text-center text-sm font-semibold">Abrir mapeo 1:1</Link></section>
     </>}
-  </div>;
+  </div></PlanGate>;
 }

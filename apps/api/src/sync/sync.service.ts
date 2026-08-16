@@ -11,6 +11,7 @@ import { discoverRawColumns, flatten, RawColumnType } from './raw-columns.util';
 import { BusinessService } from '../business/business.service';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
 import { collectAllCodes } from '../common/codes';
+import { assertSyncLimit } from '../billing/plan-guard';
 
 const SYNC_FREQUENCIES = ['manual', 'daily', 'hourly', 'every_6h', 'every_12h'] as const;
 type SyncFrequency = (typeof SYNC_FREQUENCIES)[number];
@@ -511,6 +512,7 @@ export class SyncService {
 
   async createConnection(businessId: string, data: ConnInput) {
     this.validateSchedule(data);
+    await assertSyncLimit(this.prisma, businessId);
     const connection = await this.prisma.syncConnection.create({
       data: {
         businessId,

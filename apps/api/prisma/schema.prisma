@@ -28,6 +28,11 @@ model Business {
   currency  String   @default("ARS")
   posConfig Json?
   openaiKeyEncrypted String?
+  planId       String    @default("mostrador")
+  planStatus   String    @default("active") // trial | active | pending_payment | past_due | canceled
+  billingCycle String    @default("monthly") // monthly | yearly
+  trialEndsAt  DateTime?
+  planRenewsAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -51,6 +56,29 @@ model Business {
   vendedores          Vendedor[]
   vendedorSessions    VendedorSession[]
   dataBackups          DataBackup[]
+  invoices             Invoice[]
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  businessId     String
+  planId         String
+  cycle          String
+  amount         Decimal
+  currency       String    @default("ARS")
+  status         String    @default("pending") // pending | paid | failed | void
+  periodStart    DateTime
+  periodEnd      DateTime
+  paidAt         DateTime?
+  method         String?
+  notes          String?
+  mpPreferenceId String?
+  mpPaymentId    String?
+  createdAt      DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
 }
 
 model Promo {

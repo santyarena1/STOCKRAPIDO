@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-
+import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { getApiBaseUrl } from '@/lib/env-urls';
 
 function ConfirmForm() {
@@ -45,45 +45,34 @@ function ConfirmForm() {
     }
   }
 
+  const field = 'w-full rounded-md border border-[var(--mk-line)] bg-[var(--mk-paper)] px-3 py-2.5';
+
   if (!token) {
     return (
-      <div className="text-center">
-        <p className="text-red-400 mb-4">Enlace inválido (falta token).</p>
-        <Link href="/reset" className="text-sky-400 hover:underline">Solicitar nuevo enlace</Link>
+      <div className="text-center text-sm">
+        <p className="mb-4 text-[var(--mk-red-dark)]">Enlace inválido (falta token).</p>
+        <Link href="/reset" className="text-[var(--mk-red)] hover:underline">Solicitar nuevo enlace</Link>
       </div>
     );
   }
 
   if (done) {
-    return <p className="text-sky-400 text-center">Contraseña actualizada. Redirigiendo al login...</p>;
+    return <p className="text-center text-sm text-[var(--mk-ink-2)]">Contraseña actualizada. Te llevamos a entrar…</p>;
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-400 mb-1">Nueva contraseña (mín. 8)</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
-          required
-          minLength={8}
-        />
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--mk-ink-2)]">Nueva contraseña (mín. 8)</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} required minLength={8} />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-400 mb-1">Repetir contraseña</label>
-        <input
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
-          required
-        />
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--mk-ink-2)]">Repetir contraseña</label>
+        <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={field} required />
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg bg-sky-600 text-white font-medium disabled:opacity-50">
-        {loading ? 'Guardando...' : 'Cambiar contraseña'}
+      {error ? <p className="text-sm text-[var(--mk-red-dark)]">{error}</p> : null}
+      <button type="submit" disabled={loading} className="w-full rounded-md bg-[var(--mk-red)] py-2.5 text-sm font-semibold text-[#f7f1e4] disabled:opacity-50">
+        {loading ? 'Guardando…' : 'Cambiar contraseña'}
       </button>
     </form>
   );
@@ -91,16 +80,18 @@ function ConfirmForm() {
 
 export default function ResetConfirmPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900/50 p-6">
-        <h1 className="text-2xl font-bold text-slate-100 mb-6">Nueva contraseña</h1>
-        <Suspense fallback={<p className="text-slate-400">Cargando...</p>}>
-          <ConfirmForm />
-        </Suspense>
-        <p className="mt-4 text-center text-sm text-slate-500">
-          <Link href="/login" className="text-sky-400 hover:underline">Volver al login</Link>
-        </p>
-      </div>
-    </main>
+    <MarketingShell withNav={false}>
+      <main className="mx-auto flex min-h-[70vh] max-w-md items-center px-4 py-12">
+        <div className="w-full rounded-xl border border-[var(--mk-line)] bg-[var(--mk-paper-2)] p-6">
+          <h1 className="mk-display mb-6 text-3xl">Nueva contraseña</h1>
+          <Suspense fallback={<p className="text-sm text-[var(--mk-ink-2)]">Cargando…</p>}>
+            <ConfirmForm />
+          </Suspense>
+          <p className="mt-4 text-center text-sm">
+            <Link href="/login" className="text-[var(--mk-red)] hover:underline">Volver a entrar</Link>
+          </p>
+        </div>
+      </main>
+    </MarketingShell>
   );
 }

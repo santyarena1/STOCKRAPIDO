@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -23,4 +23,8 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsIn(['mostrador', 'kiosco', 'red'])
+  planId?: 'mostrador' | 'kiosco' | 'red';
 }

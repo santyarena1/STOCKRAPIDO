@@ -10,6 +10,7 @@ import { randomUUID } from 'crypto';
 import { readAiInvoiceFromPosConfig } from '../business/pos-config.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInvoiceCallbackDto } from './dto/ai-invoice-callback.dto';
+import { assertPlanFeature } from '../billing/plan-guard';
 
 export type AiInvoiceItemResult = {
   productId?: string;
@@ -87,6 +88,7 @@ export class AiInvoiceService {
     | { sendOnly: true; n8nHttpStatus: number; message: string }
   > {
     const sendOnly = !!options?.sendOnly;
+    await assertPlanFeature(this.prisma, businessId, 'aiPurchases');
     const s = await this.loadAiInvoiceSettings(businessId);
     const n8nUrl =
       s.n8nWebhookUrl?.trim() || this.config.get<string>('N8N_INVOICE_WEBHOOK_URL')?.trim();

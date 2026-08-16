@@ -6,6 +6,7 @@ import { api, getApiBaseUrl } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ProviderTabs, SYNC_PROVIDERS, SyncProviderProvider, useSyncProvider } from '@/components/sync/SyncProviderContext';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type SyncedSummary = { costUnit?: number | null; linkedProductId?: string | null };
 
@@ -61,4 +62,10 @@ function SynchronizationScreen() {
   </Container>;
 }
 
-export default function SincronizacionesPage() { return <SyncProviderProvider><SynchronizationScreen /></SyncProviderProvider>; }
+export default function SincronizacionesPage() {
+  return (
+    <PlanGate feature="sync">
+      <SyncProviderProvider><SynchronizationScreen /></SyncProviderProvider>
+    </PlanGate>
+  );
+}

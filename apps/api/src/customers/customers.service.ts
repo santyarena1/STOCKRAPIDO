@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { assertPlanFeature } from '../billing/plan-guard';
 
 @Injectable()
 export class CustomersService {
@@ -16,6 +17,7 @@ export class CustomersService {
   }
 
   async create(businessId: string, data: { name: string; phone?: string; notes?: string }) {
+    await assertPlanFeature(this.prisma, businessId, 'customers');
     return this.prisma.customer.create({
       data: { businessId, ...data },
     });

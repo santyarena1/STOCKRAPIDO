@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertUserLimit } from '../billing/plan-guard';
 
 @Injectable()
 export class UsersService {
@@ -19,6 +20,7 @@ export class UsersService {
     data: { email: string; name: string; password: string; role: string },
   ) {
     const hash = await argon2.hash(data.password, { type: 2 });
+    await assertUserLimit(this.prisma, businessId);
     return this.prisma.user.create({
       data: {
         businessId,

@@ -6,6 +6,7 @@ import {
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { WORLDCUP_2026_COUNTRIES } from './worldcup-countries.seed';
+import { assertPlanFeature } from '../billing/plan-guard';
 
 type PriceEntry = { countryId: string; price: number };
 type StickerPriceEntry = { stickerId: string; price: number | null };
@@ -28,6 +29,7 @@ export class StickersService {
   // ---------- Countries ----------
 
   async seedCountries(businessId: string) {
+    await assertPlanFeature(this.prisma, businessId, 'figuritas');
     let created = 0;
     let updated = 0;
 
@@ -71,6 +73,7 @@ export class StickersService {
     businessId: string,
     data: { name: string; code?: string; flag?: string; flagUrl?: string; price?: number },
   ) {
+    await assertPlanFeature(this.prisma, businessId, 'figuritas');
     const name = data.name?.trim();
     if (!name) throw new BadRequestException('El nombre del país es obligatorio');
 

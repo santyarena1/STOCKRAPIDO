@@ -125,7 +125,12 @@ Abrí `https://web-six-jet-75.vercel.app/login` — no debe haber errores CORS e
 | `WEB_URL` | ✅ URL del frontend |
 | `NODE_ENV` | ✅ `production` |
 | `CRON_SECRET` | ✅ si usás auto-sync |
-| `PUBLIC_API_URL` | recomendada (webhooks N8N) |
+| `PUBLIC_API_URL` | recomendada (webhooks N8N y Mercado Pago) |
+| `MP_ACCESS_TOKEN` | opcional — Checkout Pro para el abono |
+| `BILLING_MP_ALIAS` | opcional — alias para transferencia |
+| `BILLING_CBU` | opcional |
+| `BILLING_CUIT` | opcional |
+| `BILLING_WHATSAPP` | opcional — aviso de pago |
 
 ### Web (`apps/web` en Vercel)
 

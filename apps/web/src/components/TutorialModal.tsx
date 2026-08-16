@@ -192,7 +192,8 @@ const TUTORIAL_BY_ROUTE: Record<string, TutorialSection[]> = {
   ],
   '/billing': [
     { title: 'Plan y facturación', items: [
-      { label: 'Contenido', desc: 'Información del plan contratado, facturación y renovación, si la app tiene esta sección activa.' },
+      { label: 'Plan actual', desc: 'Mostrador (básico), Fiscal (AFIP) o Pro (distribuidores + IA). Muestra prueba, usuarios y syncs.' },
+      { label: 'Cambiar de plan', desc: 'Elegí mensual o anual. El pago va por Mercado Pago o transferencia; queda un comprobante pendiente hasta que acredite.' },
     ]},
   ],
 };

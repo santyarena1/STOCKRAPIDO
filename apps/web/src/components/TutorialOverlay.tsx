@@ -95,7 +95,7 @@ const TOUR_CONFIG: Record<string, TourStep[]> = {
     { target: '[data-tour="usuarios-list"]', label: 'Lista de usuarios. Podés activar o desactivar cada uno.', placement: 'top' },
   ],
   '/billing': [
-    { target: '[data-tour="billing-info"]', label: 'Plan y facturación: información del plan actual y estado de pago.', placement: 'bottom' },
+    { target: '[data-tour="billing-info"]', label: 'Acá está tu plan (Mostrador, Fiscal o Pro), si estás en prueba y cuántos usuarios usás.', placement: 'bottom' },
   ],
 };
 

@@ -8,6 +8,7 @@ import { CategorySelector } from '@/components/CategorySelector';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type Product = {
   id: string;
@@ -318,6 +319,7 @@ export default function ComprasIaPage() {
   if (loading) return <Loader full />;
 
   return (
+    <PlanGate feature="aiPurchases">
     <Container className="max-w-6xl space-y-6">
       <PageHeader
         title="Compras con IA"
@@ -616,5 +618,6 @@ export default function ComprasIaPage() {
         </button>
       </form>
     </Container>
+    </PlanGate>
   );
 }

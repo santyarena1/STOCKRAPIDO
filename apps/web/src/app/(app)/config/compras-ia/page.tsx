@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { api } from '@/lib/api';
 import { Business, useConfig } from '../config-context';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 export default function ComprasIaPage() {
   const { business, setBusiness } = useConfig();
@@ -34,7 +35,7 @@ export default function ComprasIaPage() {
     } catch (err) { alert(err instanceof Error ? err.message : 'Error'); } finally { setSavingAi(false); }
   };
 
-  return <div className="space-y-6">
+  return <PlanGate feature="aiPurchases"><div className="space-y-6">
     <PageHeader title="Compras con IA (N8N)" subtitle="Configurá la integración que procesa comprobantes de compra." />
     <form onSubmit={handleSaveAi} className="space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
       <p className="text-sm text-fg-muted">Si N8N o el túnel cambian, podés actualizar la URL aquí sin tocar el servidor. Si no cargás nada, se usan las variables de entorno <code className="text-fg">N8N_INVOICE_WEBHOOK_URL</code> y <code className="text-fg">AI_INVOICE_WEBHOOK_SECRET</code>.</p>
@@ -43,5 +44,5 @@ export default function ComprasIaPage() {
       <div><label className="mb-1 block text-sm text-fg-muted">Secreto del callback (header X-Webhook-Secret)</label><input type="password" autoComplete="new-password" placeholder={aiForm.hasWebhookSecret ? 'Dejá vacío para no cambiar · escribí uno nuevo para reemplazar' : 'Mismo valor que usás en N8N al llamar a la API'} value={aiForm.newWebhookSecret} onChange={(e) => setAiForm((f) => ({ ...f, newWebhookSecret: e.target.value }))} className="w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint" />{aiForm.hasWebhookSecret && <p className="mt-1 text-xs text-ok">Hay un secreto guardado en la app.</p>}</div>
       <div className="flex flex-wrap gap-2"><button type="submit" disabled={savingAi} className="btn-brand rounded-lg px-4 py-2 disabled:opacity-50">{savingAi ? 'Guardando…' : 'Guardar integración IA'}</button>{aiForm.hasWebhookSecret && <button type="button" disabled={savingAi} onClick={handleClearAiSecret} className="rounded-lg border border-hair px-4 py-2 text-fg-muted hover:bg-raised disabled:opacity-50">Quitar secreto guardado</button>}</div>
     </form>
-  </div>;
+  </div></PlanGate>;
 }

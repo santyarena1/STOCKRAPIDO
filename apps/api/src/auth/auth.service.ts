@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { jwtDurationToSeconds, parseJwtDurationToMs } from './jwt-duration.util';
+import { getPlan, TRIAL_DAYS } from '../billing/plans';
 
 function businessWithSanitizedPos<T extends { posConfig?: unknown } | null>(b: T): T {
   if (!b) return b;
@@ -25,11 +26,18 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     const hash = await argon2.hash(dto.password, { type: 2 });
+    const plan = getPlan(dto.planId || 'mostrador');
+    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
     const business = await this.prisma.business.create({
       data: {
         name: dto.businessName,
         cuit: dto.cuit,
         address: dto.address,
+        planId: plan.id,
+        planStatus: 'trial',
+        billingCycle: 'monthly',
+        trialEndsAt,
+        planRenewsAt: trialEndsAt,
       },
     });
     const user = await this.prisma.user.create({

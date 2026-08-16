@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { ProviderTabs, SyncProviderProvider, useSyncProvider } from '@/components/sync/SyncProviderContext';
 import { flattenRaw, rawValuesAtPath } from '@/lib/flatten-raw';
+import { PlanGate } from '@/components/billing/PlanGate';
 
 type Variant = { id: string; uom: string; multiplier: number; skuId?: string | null; refId?: string | null; ean?: string | null; cost?: unknown; listPrice?: unknown; sellingPrice?: unknown; priceWithTax?: unknown; stock?: number | null; taxAlicuota?: unknown };
 type Synced = { id: string; name?: string; ean?: string; eanUnit?: string; eanBox?: string; supplierRef?: string; sku?: string; externalId?: string; ivaAlicuota?: unknown; unitsPerDisplay?: string | null; displaysPerBox?: string | null; unitsPerBox?: string | null; unitsPerBoxNum?: number | null; retornable?: boolean | null; brand?: string; category?: string; costUnit?: number | null; costBulk?: number | null; saleUnit?: number | null; imageUrl?: string; link?: string; linkedProductId?: string | null; points?: number | null; variants?: Variant[]; raw?: unknown };
@@ -140,4 +141,10 @@ function CatalogScreen() {
   </Container>;
 }
 
-export default function CatalogoProveedorPage() { return <SyncProviderProvider><CatalogScreen /></SyncProviderProvider>; }
+export default function CatalogoProveedorPage() {
+  return (
+    <PlanGate feature="sync">
+      <SyncProviderProvider><CatalogScreen /></SyncProviderProvider>
+    </PlanGate>
+  );
+}

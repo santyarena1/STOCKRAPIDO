@@ -57,7 +57,7 @@ Más en `CREDENCIALES.md`. **Recuperar contraseña:** `/reset` → email (en dev
 | `/reportes` | Ventas, top productos, export (en construcción) |
 | `/config` | Configuración del negocio y POS (en construcción) |
 | `/usuarios` | Usuarios y roles (en construcción) |
-| `/billing` | Plan y facturación – MercadoPago preparado (en construcción) |
+| `/billing` | Plan y facturación: Mostrador, Fiscal (AFIP) y Pro (distribuidores + IA) |
 
 **Atajos del POS:** ver `POS_ATAJOS.md`.
 
@@ -81,6 +81,7 @@ En local con SQLite usar `npx prisma db push` en `apps/api` para sincronizar el 
 
 - `docker-compose.yml`: PostgreSQL, Redis (opcional), Mailhog.
 - Variables: `DATABASE_URL` (Postgres), `JWT_SECRET`, `JWT_REFRESH_SECRET`, `WEB_URL` para emails.
-- TODOs: integración ARCA/AFIP, MercadoPago billing, PWA/offline (IndexedDB).
+- TODOs: PWA/offline (IndexedDB).
+- Planes: **Mostrador** (operatoria), **Fiscal** (Factura C AFIP), **Pro** (Tokin/Mondelez/Juntos+ e IA). Variables: `MP_ACCESS_TOKEN`, `BILLING_MP_ALIAS`, `BILLING_CBU`, `BILLING_WHATSAPP`.
 
 Si ves **"Failed to fetch"**: comprobá que la API esté en marcha (`API running at http://localhost:4002`) y que solo corra una instancia de `npx pnpm dev`.

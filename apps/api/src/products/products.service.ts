@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
+import { assertProductLimit } from '../billing/plan-guard';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -659,6 +660,7 @@ export class ProductsService {
     incomplete?: boolean;
     silent?: boolean;
   }) {
+    await assertProductLimit(this.prisma, businessId);
     const initialStock = Math.max(0, Math.floor(data.stock ?? 0));
     const product = await this.prisma.product.create({
       data: {

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { ChangelogWidget } from '@/components/ChangelogWidget';
+import { BillingProvider, useBilling } from '@/components/billing/BillingProvider';
 import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
@@ -152,6 +153,27 @@ function applyCssBrandVars(br: Branding | undefined) {
   }
 }
 
+function BillingBanner() {
+  const { data } = useBilling();
+  if (!data) return null;
+  if (data.trialActive && data.trialEndsAt) {
+    const days = Math.max(0, Math.ceil((new Date(data.trialEndsAt).getTime() - Date.now()) / 86400000));
+    return (
+      <Link href="/billing" className="block border-b border-hair-soft bg-raised px-4 py-2 text-center text-sm text-fg-muted hover:text-fg">
+        Prueba del plan {data.plan.name}: {days} día{days === 1 ? '' : 's'} · ver planes
+      </Link>
+    );
+  }
+  if (data.status === 'pending_payment') {
+    return (
+      <Link href="/billing" className="block border-b border-hair-soft bg-[var(--warn-soft)] px-4 py-2 text-center text-sm text-warn">
+        Hay un pago pendiente · ir a facturación
+      </Link>
+    );
+  }
+  return null;
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -258,7 +280,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/');
   };
 
   const toggleTheme = () => {
@@ -304,6 +326,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
+    <BillingProvider>
     <div className="flex h-screen min-h-0 overflow-hidden bg-app text-fg">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-hair-soft bg-surface lg:flex">{sidebarContent()}</aside>
       <div className={cn('fixed inset-0 z-40 lg:hidden', mobileSidebarOpen ? 'pointer-events-auto' : 'pointer-events-none')} aria-hidden={!mobileSidebarOpen}>
@@ -337,10 +360,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Tutorial
           </button>
         </div>
-        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <BillingBanner />
+          {children}
+        </div>
       </main>
       <TutorialOverlay open={showTutorial} onClose={() => setShowTutorial(false)} />
       <ChangelogWidget />
     </div>
+    </BillingProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { assertPlanFeature } from '../billing/plan-guard';
 
 export type ProductItem = { productId: string; qty: number };
 
@@ -48,6 +49,7 @@ export class PromosService {
   }
 
   async create(businessId: string, data: PromoInput) {
+    await assertPlanFeature(this.prisma, businessId, 'promotions');
     const productIdsJson = data.productIds?.length ? JSON.stringify(data.productIds) : null;
     const productItemsJson = data.productItems?.length ? JSON.stringify(data.productItems) : null;
     const categoryIdsJson = data.categoryIds?.length ? JSON.stringify(data.categoryIds) : null;

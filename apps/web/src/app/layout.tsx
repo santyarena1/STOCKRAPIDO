@@ -1,14 +1,20 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Instrument_Serif } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/Providers';
 
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-sans' });
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-mono' });
+const instrument = Instrument_Serif({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-display',
+});
 
 export const metadata: Metadata = {
-  title: 'StockRápido - POS Kioscos',
-  description: 'Sistema de gestión para kioscos',
+  title: 'StockRápido — Sistema para kioscos',
+  description:
+    'Cobrá, controlá el stock y cerrá la caja. POS, proveedores, fiado y reportes para kioscos de Argentina.',
 };
 
 export default function RootLayout({
@@ -17,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="es" className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

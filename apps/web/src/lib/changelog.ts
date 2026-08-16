@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.4',
+    date: '2026-08-16',
+    summary: 'Landing pública con login, y planes claros: Mostrador, Fiscal y Pro.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Página de inicio',
+        desc: 'Si no estás logueado ves una landing del sistema (qué hace, planes y precios). El login está en esa misma pantalla. Las cuentas nuevas tienen 14 días de prueba.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Planes y facturación',
+        desc: 'Mostrador es el kiosco del día a día. Fiscal suma Factura C a AFIP. Pro trae las listas de Tokin, Mondelez y Juntos+ y las compras con IA. Se paga por mes o por año (2 meses de regalo).',
+      },
+    ],
+  },
+  {
     version: 'v1.3',
     date: '2026-08-16',
     summary:

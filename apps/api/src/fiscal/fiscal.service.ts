@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { decryptFiscalSecret, encryptFiscalSecret } from './fiscal-crypto';
+import { assertPlanFeature } from '../billing/plan-guard';
 import { XMLParser } from 'fast-xml-parser';
 import * as forge from 'node-forge';
 import { request as httpsRequest } from 'node:https';
@@ -29,6 +30,7 @@ export class FiscalService {
   }
 
   async saveConfig(businessId: string, dto: SaveConfig) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
     const cuit = dto.cuit.replace(/\D/g, '');
     if (cuit.length !== 11) throw new BadRequestException('El CUIT debe tener 11 dígitos.');
     if (!Number.isInteger(dto.pointOfSale) || dto.pointOfSale < 1 || dto.pointOfSale > 99999) throw new BadRequestException('Punto de venta inválido.');
@@ -162,6 +164,7 @@ export class FiscalService {
   }
 
   async issueFacturaC(businessId: string, saleId: string) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
     const existing = await this.prisma.fiscalDocument.findUnique({ where: { saleId } });
     if (existing?.status === 'AUTHORIZED') return existing;
     const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { items: { include: { product: true } } } });

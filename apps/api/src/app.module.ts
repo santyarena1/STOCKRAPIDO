@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
+import { BillingModule } from './billing/billing.module';
 import { BusinessModule } from './business/business.module';
 import { ProductsModule } from './products/products.module';
 import { SalesModule } from './sales/sales.module';
@@ -28,6 +29,7 @@ import { DataAdminModule } from './data-admin/data-admin.module';
     PrismaModule,
     MailModule,
     AuthModule,
+    BillingModule,
     BusinessModule,
     ProductsModule,
     SalesModule,
