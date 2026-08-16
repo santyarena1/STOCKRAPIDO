@@ -329,19 +329,27 @@ export default function StockRapidoPage() {
                 <div className="p-10 text-center text-sm text-fg-faint">Todavía no hay movimientos por escaneo.</div>
               ) : (
                 <ul className="divide-y divide-hair-soft">
-                  {moves.map((m) => (
-                    <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate text-sm font-medium text-fg">{m.product?.name ?? 'Producto'}</span>
-                        <span className="text-xs text-fg-faint">
-                          {m.reason === 'ingreso_escaneo' ? 'Ingreso' : 'Egreso'} · {new Date(m.createdAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  {moves.map((m) => {
+                    const entro = m.qty >= 0;
+                    const cant = Math.abs(m.qty);
+                    return (
+                      <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <span className="flex min-w-0 flex-col">
+                          <span className="text-sm leading-snug">
+                            <span className={`font-semibold ${entro ? 'text-ok' : 'text-crit'}`}>{entro ? 'Se agregó' : 'Se descontó'} {cant} {cant === 1 ? 'unidad' : 'unidades'}</span>
+                            <span className="text-fg-muted"> {entro ? 'al stock de' : 'del stock de'} </span>
+                            <span className="font-semibold text-fg">{m.product?.name ?? 'un producto'}</span>
+                          </span>
+                          <span className="mt-0.5 text-xs text-fg-faint">
+                            {new Date(m.createdAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} h
+                          </span>
                         </span>
-                      </span>
-                      <span className={`shrink-0 rounded-lg px-2.5 py-1 text-sm font-bold tabular-nums ${m.qty >= 0 ? 'bg-[var(--ok-soft)] text-ok' : 'bg-[var(--crit-soft)] text-crit'}`}>
-                        {m.qty >= 0 ? '+' : ''}{m.qty}
-                      </span>
-                    </li>
-                  ))}
+                        <span className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-bold tabular-nums ${entro ? 'bg-[var(--ok-soft)] text-ok' : 'bg-[var(--crit-soft)] text-crit'}`}>
+                          <span aria-hidden>{entro ? '↑' : '↓'}</span>{entro ? '+' : '−'}{cant}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
