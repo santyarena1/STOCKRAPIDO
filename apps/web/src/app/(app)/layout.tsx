@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
+import { ChangelogWidget } from '@/components/ChangelogWidget';
 import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
@@ -339,6 +340,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
       </main>
       <TutorialOverlay open={showTutorial} onClose={() => setShowTutorial(false)} />
+      <ChangelogWidget />
     </div>
   );
 }
