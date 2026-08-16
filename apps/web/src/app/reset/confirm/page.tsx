@@ -45,7 +45,7 @@ function ConfirmForm() {
     }
   }
 
-  const field = 'w-full rounded-md border border-[var(--mk-line)] bg-[var(--mk-paper)] px-3 py-2.5';
+  const field = 'w-full rounded-2xl border border-[var(--mk-line)] bg-white px-3 py-2.5';
 
   if (!token) {
     return (
@@ -71,7 +71,7 @@ function ConfirmForm() {
         <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={field} required />
       </div>
       {error ? <p className="text-sm text-[var(--mk-red-dark)]">{error}</p> : null}
-      <button type="submit" disabled={loading} className="w-full rounded-md bg-[var(--mk-red)] py-2.5 text-sm font-semibold text-[#f7f1e4] disabled:opacity-50">
+      <button type="submit" disabled={loading} className="mk-cta w-full disabled:opacity-50">
         {loading ? 'Guardando…' : 'Cambiar contraseña'}
       </button>
     </form>
@@ -82,13 +82,13 @@ export default function ResetConfirmPage() {
   return (
     <MarketingShell withNav={false}>
       <main className="mx-auto flex min-h-[70vh] max-w-md items-center px-4 py-12">
-        <div className="w-full rounded-xl border border-[var(--mk-line)] bg-[var(--mk-paper-2)] p-6">
+        <div className="w-full rounded-[1.75rem] border border-[var(--mk-line)] bg-white p-6 shadow-[0_20px_50px_-28px_rgba(227,28,35,0.35)]">
           <h1 className="mk-display mb-6 text-3xl">Nueva contraseña</h1>
           <Suspense fallback={<p className="text-sm text-[var(--mk-ink-2)]">Cargando…</p>}>
             <ConfirmForm />
           </Suspense>
           <p className="mt-4 text-center text-sm">
-            <Link href="/login" className="text-[var(--mk-red)] hover:underline">Volver a entrar</Link>
+            <Link href="/login" className="font-bold text-[var(--mk-red)] hover:underline">Volver a ingresar</Link>
           </p>
         </div>
       </main>

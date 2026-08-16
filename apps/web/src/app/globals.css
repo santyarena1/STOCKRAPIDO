@@ -136,31 +136,74 @@ body {
   }
 }
 
-/* Marketing / landing: papel de kiosco, no el tema de la app */
+/* Landing pública (no afecta la app) */
 .mk {
-  --mk-paper: #efe8d8;
-  --mk-paper-2: #f7f1e4;
-  --mk-ink: #1c1914;
-  --mk-ink-2: #5a5448;
-  --mk-ink-3: #8a8374;
-  --mk-line: #d9d0bc;
-  --mk-red: #c43c2c;
-  --mk-red-dark: #9e2c20;
-  --mk-ticket: #17151a;
+  --mk-paper: #fff7f2;
+  --mk-paper-2: #ffffff;
+  --mk-ink: #2a1412;
+  --mk-ink-2: #6a4540;
+  --mk-ink-3: #a07872;
+  --mk-line: #f3d5cc;
+  --mk-red: #e31c23;
+  --mk-red-dark: #c0141a;
+  --mk-yellow: #ffd54a;
+  --mk-ticket: #1f1514;
   color: var(--mk-ink);
+  font-family: var(--font-landing), var(--font-sans), system-ui, sans-serif;
   background:
-    radial-gradient(1200px 500px at 10% -10%, rgba(196, 60, 44, 0.08), transparent 55%),
+    radial-gradient(900px 420px at 100% -10%, rgba(255, 213, 74, 0.28), transparent 55%),
+    radial-gradient(800px 380px at -10% 0%, rgba(227, 28, 35, 0.12), transparent 50%),
     var(--mk-paper);
-  font-feature-settings: 'ss01' on;
 }
 .mk-display {
-  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-family: var(--font-landing), var(--font-sans), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.mk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  background: var(--mk-yellow);
+  color: #2a1412;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.85rem;
+}
+.mk-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--mk-red);
+  color: #fff;
+  font-weight: 800;
+  padding: 0.85rem 1.4rem;
+  box-shadow: 0 10px 24px -12px rgba(227, 28, 35, 0.7);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.mk-cta:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.mk-cta-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--mk-ink);
+  font-weight: 700;
+  padding: 0.85rem 1.4rem;
+  border: 2px solid var(--mk-line);
 }
 .mk a:focus-visible,
 .mk button:focus-visible,
 .mk input:focus-visible {
-  outline: 2px solid var(--mk-red);
+  outline: 3px solid var(--mk-yellow);
   outline-offset: 2px;
 }

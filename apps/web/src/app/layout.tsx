@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono, Instrument_Serif } from 'next/font/google';
+import { Geist, Geist_Mono, Instrument_Serif, Nunito } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/Providers';
 
@@ -9,6 +9,11 @@ const instrument = Instrument_Serif({
   subsets: ['latin'],
   weight: '400',
   variable: '--font-display',
+});
+const nunito = Nunito({
+  subsets: ['latin'],
+  variable: '--font-landing',
+  weight: ['400', '600', '700', '800'],
 });
 
 export const metadata: Metadata = {
@@ -23,7 +28,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable}`} suppressHydrationWarning>
+    <html
+      lang="es"
+      className={`${geistSans.variable} ${geistMono.variable} ${instrument.variable} ${nunito.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{

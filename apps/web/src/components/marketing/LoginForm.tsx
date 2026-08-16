@@ -44,13 +44,13 @@ export function LoginForm({ compact, onSuccess }: Props) {
   }
 
   const field =
-    'w-full rounded-md border border-[var(--mk-line)] bg-[var(--mk-paper-2)] px-3 py-2.5 text-[15px] text-[var(--mk-ink)] placeholder:text-[var(--mk-ink-3)]';
+    'w-full rounded-2xl border border-[var(--mk-line)] bg-white px-3 py-2.5 text-[15px] text-[var(--mk-ink)] placeholder:text-[var(--mk-ink-3)]';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {!compact && <h2 className="mk-display text-2xl text-[var(--mk-ink)]">Entrar al kiosco</h2>}
+      {!compact && <h2 className="mk-display text-2xl text-[var(--mk-ink)]">Ingresar</h2>}
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-[var(--mk-ink-2)]">Email</label>
+        <label className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">Email</label>
         <input
           type="email"
           value={email}
@@ -62,8 +62,8 @@ export function LoginForm({ compact, onSuccess }: Props) {
       </div>
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-xs font-medium uppercase tracking-wide text-[var(--mk-ink-2)]">Contraseña</label>
-          <Link href="/reset" className="text-xs text-[var(--mk-red)] hover:underline">
+          <label className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">Contraseña</label>
+          <Link href="/reset" className="text-xs font-bold text-[var(--mk-red)] hover:underline">
             La olvidé
           </Link>
         </div>
@@ -77,16 +77,12 @@ export function LoginForm({ compact, onSuccess }: Props) {
         />
       </div>
       {error ? <p className="text-sm text-[var(--mk-red-dark)]">{error}</p> : null}
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full rounded-md bg-[var(--mk-red)] px-4 py-2.5 text-sm font-semibold text-[#f7f1e4] transition hover:bg-[var(--mk-red-dark)] disabled:opacity-50"
-      >
-        {loading ? 'Entrando…' : 'Entrar'}
+      <button type="submit" disabled={loading} className="mk-cta w-full disabled:opacity-50">
+        {loading ? 'Entrando…' : 'Ingresar'}
       </button>
       <p className="text-center text-sm text-[var(--mk-ink-2)]">
         ¿Todavía no?{' '}
-        <Link href="/register" className="font-medium text-[var(--mk-red)] hover:underline">
+        <Link href="/register" className="font-bold text-[var(--mk-red)] hover:underline">
           Crear cuenta
         </Link>
       </p>
