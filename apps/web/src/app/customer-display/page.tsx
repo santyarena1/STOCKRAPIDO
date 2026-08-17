@@ -128,7 +128,7 @@ export default function CustomerDisplayPage() {
         {logoUrl &&
         (logoUrl.startsWith('data:') || logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="" className="h-16 w-16 md:h-20 md:w-20 rounded-2xl object-cover border border-slate-700 shadow-lg" />
+          <img src={logoUrl} alt="" className="h-16 w-16 bg-transparent object-contain md:h-20 md:w-20" />
         ) : (
           <div
             className="h-16 w-16 md:h-20 md:w-20 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shadow-lg"

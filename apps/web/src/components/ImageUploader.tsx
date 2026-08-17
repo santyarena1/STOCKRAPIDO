@@ -3,9 +3,18 @@
 import { useRef, useState } from 'react';
 import { getToken } from '@/lib/api';
 
-async function compressImage(file: File, maxPx: number, quality: number): Promise<Blob> {
+function knockOutNearWhite(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const image = ctx.getImageData(0, 0, width, height);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245) data[i + 3] = 0;
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+async function compressImage(file: File, maxPx: number, quality: number, transparentBg = false): Promise<Blob> {
   // PNG/WebP conservan transparencia; el resto se comprime a JPEG (más liviano).
-  const keepAlpha = file.type === 'image/png' || file.type === 'image/webp';
+  const keepAlpha = transparentBg || file.type === 'image/png' || file.type === 'image/webp';
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -15,7 +24,14 @@ async function compressImage(file: File, maxPx: number, quality: number): Promis
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const ctx = canvas.getContext('2d', { alpha: true });
+      if (!ctx) {
+        reject(new Error('canvas error'));
+        return;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      if (transparentBg) knockOutNearWhite(ctx, canvas.width, canvas.height);
       canvas.toBlob(
         (b) => (b ? resolve(b) : reject(new Error('canvas error'))),
         keepAlpha ? 'image/png' : 'image/jpeg',
@@ -27,8 +43,8 @@ async function compressImage(file: File, maxPx: number, quality: number): Promis
   });
 }
 
-async function uploadToBlob(file: File, maxPx: number, quality: number): Promise<string> {
-  const compressed = await compressImage(file, maxPx, quality);
+async function uploadToBlob(file: File, maxPx: number, quality: number, transparentBg = false): Promise<string> {
+  const compressed = await compressImage(file, maxPx, quality, transparentBg);
   const fd = new FormData();
   fd.append('file', compressed, compressed.type === 'image/png' ? 'image.png' : 'image.jpg');
   const token = getToken();
@@ -51,8 +67,9 @@ export function ImageUploader({
   onChange,
   maxPx = 1200,
   quality = 0.85,
-  previewClass = 'w-16 h-16 object-contain',
+  previewClass = 'w-16 h-16 object-contain bg-transparent',
   label = 'Subir imagen',
+  transparentBg = false,
 }: {
   value: string;
   onChange: (url: string) => void;
@@ -60,6 +77,8 @@ export function ImageUploader({
   quality?: number;
   previewClass?: string;
   label?: string;
+  /** Recorta fondo blanco y guarda PNG con transparencia (logos / favicon). */
+  transparentBg?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -68,7 +87,7 @@ export function ImageUploader({
     if (!file.type.startsWith('image/')) return;
     setUploading(true);
     try {
-      const url = await uploadToBlob(file, maxPx, quality);
+      const url = await uploadToBlob(file, maxPx, quality, transparentBg);
       onChange(url);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error al subir imagen');
@@ -98,7 +117,7 @@ export function ImageUploader({
       {value && (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="" className={`${previewClass} rounded-lg border border-slate-600 bg-white/5`} />
+          <img src={value} alt="" className={`${previewClass} bg-transparent object-contain`} />
           <button
             type="button"
             onClick={() => onChange('')}
