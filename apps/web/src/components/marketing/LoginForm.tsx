@@ -12,7 +12,7 @@ type Props = {
 
 export function LoginForm({ compact, onSuccess }: Props) {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +25,7 @@ export function LoginForm({ compact, onSuccess }: Props) {
       const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: identifier.trim().toLowerCase(), password }),
         credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
@@ -47,17 +47,26 @@ export function LoginForm({ compact, onSuccess }: Props) {
     'w-full rounded-2xl border border-[var(--mk-line)] bg-white px-3 py-2.5 text-[15px] text-[var(--mk-ink)] placeholder:text-[var(--mk-ink-3)]';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} noValidate className="space-y-3">
       {!compact && <h2 className="mk-display text-2xl text-[var(--mk-ink)]">Ingresar</h2>}
       <div>
-        <label className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">Usuario o email</label>
+        <label htmlFor="login-user" className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">
+          Usuario o email
+        </label>
         <input
+          id="login-user"
+          name="username"
           type="text"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          inputMode="text"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
           className={field}
           required
           autoComplete="username"
+          placeholder="admin"
         />
       </div>
       <div>
