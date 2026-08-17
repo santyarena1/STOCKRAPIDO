@@ -6,7 +6,9 @@ export function StockRapidoBag({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 128 128"
-      className={cn('shrink-0', className)}
+      fill="none"
+      className={cn('shrink-0 bg-transparent', className)}
+      style={{ background: 'transparent' }}
       aria-hidden
       focusable="false"
     >

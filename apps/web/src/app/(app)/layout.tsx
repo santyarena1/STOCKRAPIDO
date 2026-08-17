@@ -323,7 +323,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brand.logoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-hair object-cover" />
+              <img src={brand.logoUrl} alt="" className="h-9 w-9 shrink-0 bg-transparent object-contain" />
               <span className="truncate">{sidebarTitle}</span>
             </>
           ) : (
@@ -368,7 +368,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {brand.logoUrl && (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={brand.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg border border-hair object-cover" />
+                <img src={brand.logoUrl} alt="" className="h-8 w-8 shrink-0 bg-transparent object-contain" />
                 <span className="truncate">{sidebarTitle}</span>
               </>
             ) : (
