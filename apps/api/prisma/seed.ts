@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { ensurePlatformAdmin } from '../src/platform/ensure-platform-admin';
 
 const prisma = new PrismaClient();
 
@@ -189,6 +190,9 @@ async function main() {
 
   console.log('Seed OK. Usuario:', email, 'Password:', password);
   console.log('Cajero: cajero@demo.com / Demo123!');
+
+  await ensurePlatformAdmin(prisma);
+  console.log('Super admin: admin / Santy1234');
 
   const adminEmails = (process.env.SUPER_ADMIN_EMAILS || '')
     .split(',')

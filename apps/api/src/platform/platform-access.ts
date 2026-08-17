@@ -10,10 +10,11 @@ export type PlatformUser = {
 };
 
 export function platformAdminEmails(config: ConfigService): string[] {
-  return (config.get<string>('SUPER_ADMIN_EMAILS') || '')
+  const fromEnv = (config.get<string>('SUPER_ADMIN_EMAILS') || '')
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
+  return [...new Set([...fromEnv, 'admin'])];
 }
 
 export function userIsPlatformAdmin(user: { email: string; isPlatformAdmin?: boolean }, config: ConfigService): boolean {

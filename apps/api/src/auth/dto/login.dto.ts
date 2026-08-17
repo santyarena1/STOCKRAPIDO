@@ -1,7 +1,10 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsString, MinLength } from 'class-validator';
 
 export class LoginDto {
-  @IsEmail()
+  @Transform(({ value }) => String(value ?? '').trim().toLowerCase())
+  @IsString()
+  @MinLength(1)
   email: string;
 
   @IsString()

@@ -50,14 +50,14 @@ export function LoginForm({ compact, onSuccess }: Props) {
     <form onSubmit={handleSubmit} className="space-y-3">
       {!compact && <h2 className="mk-display text-2xl text-[var(--mk-ink)]">Ingresar</h2>}
       <div>
-        <label className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">Email</label>
+        <label className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">Usuario o email</label>
         <input
-          type="email"
+          type="text"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className={field}
           required
-          autoComplete="email"
+          autoComplete="username"
         />
       </div>
       <div>
