@@ -14,7 +14,7 @@ export function platformAdminEmails(config: ConfigService): string[] {
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
-  return [...new Set([...fromEnv, 'admin'])];
+  return [...new Set([...fromEnv, 'admin@admin.com', 'admin'])];
 }
 
 export function userIsPlatformAdmin(user: { email: string; isPlatformAdmin?: boolean }, config: ConfigService): boolean {

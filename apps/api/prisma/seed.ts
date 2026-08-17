@@ -192,7 +192,7 @@ async function main() {
   console.log('Cajero: cajero@demo.com / Demo123!');
 
   await ensurePlatformAdmin(prisma);
-  console.log('Super admin: admin / Santy1234');
+  console.log('Super admin: admin@admin.com / Santy1234');
 
   const adminEmails = (process.env.SUPER_ADMIN_EMAILS || '')
     .split(',')

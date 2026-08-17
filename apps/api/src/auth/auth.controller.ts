@@ -1,7 +1,6 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Throttle } from '@nestjs/throttler';
@@ -19,8 +18,11 @@ export class AuthController {
 
   @Post('login')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password);
+  async login(@Body() body: { email?: string; username?: string; password?: string }) {
+    const email = String(body?.email || body?.username || '').trim().toLowerCase();
+    const password = String(body?.password || '');
+    if (!email || !password) throw new BadRequestException('Ingresá usuario y contraseña');
+    return this.auth.login(email, password);
   }
 
   @Post('refresh')

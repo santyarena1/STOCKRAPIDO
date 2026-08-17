@@ -47,26 +47,22 @@ export function LoginForm({ compact, onSuccess }: Props) {
     'w-full rounded-2xl border border-[var(--mk-line)] bg-white px-3 py-2.5 text-[15px] text-[var(--mk-ink)] placeholder:text-[var(--mk-ink-3)]';
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-3">
       {!compact && <h2 className="mk-display text-2xl text-[var(--mk-ink)]">Ingresar</h2>}
       <div>
         <label htmlFor="login-user" className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">
-          Usuario o email
+          Email
         </label>
         <input
           id="login-user"
-          name="username"
-          type="text"
-          inputMode="text"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
+          name="email"
+          type="email"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           className={field}
           required
-          autoComplete="username"
-          placeholder="admin"
+          autoComplete="email"
+          placeholder="admin@admin.com"
         />
       </div>
       <div>

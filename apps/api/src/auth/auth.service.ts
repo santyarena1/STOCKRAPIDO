@@ -59,8 +59,9 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
+    const normalized = email.toLowerCase() === 'admin' ? 'admin@admin.com' : email.toLowerCase();
     const user = await this.prisma.user.findFirst({
-      where: { email: email.toLowerCase(), isActive: true },
+      where: { email: normalized, isActive: true },
       include: { business: true },
     });
     if (!user || !(await argon2.verify(user.passwordHash, password)))

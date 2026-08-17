@@ -1,28 +1,46 @@
 import * as argon2 from 'argon2';
 import { PrismaClient } from '@prisma/client';
 
-export const PLATFORM_ADMIN_LOGIN = 'admin';
+export const PLATFORM_ADMIN_LOGIN = 'admin@admin.com';
 export const PLATFORM_ADMIN_PASSWORD = 'Santy1234';
+const LEGACY_ADMIN_LOGIN = 'admin';
 
-/** Crea o actualiza el super admin de plataforma: admin / Santy1234 */
+/** Crea o actualiza el super admin: admin@admin.com / Santy1234 */
 export async function ensurePlatformAdmin(prisma: PrismaClient): Promise<void> {
   const email = PLATFORM_ADMIN_LOGIN;
-  const existing = await prisma.user.findUnique({ where: { email } });
+  let existing = await prisma.user.findUnique({ where: { email } });
+  const legacy = await prisma.user.findUnique({ where: { email: LEGACY_ADMIN_LOGIN } });
 
-  if (existing) {
-    const samePass = await argon2.verify(existing.passwordHash, PLATFORM_ADMIN_PASSWORD).catch(() => false);
-    if (samePass && existing.isPlatformAdmin && existing.isActive) return;
-
+  if (!existing && legacy) {
     await prisma.user.update({
-      where: { id: existing.id },
+      where: { id: legacy.id },
       data: {
+        email,
         passwordHash: await argon2.hash(PLATFORM_ADMIN_PASSWORD, { type: 2 }),
         isPlatformAdmin: true,
         isActive: true,
         role: 'OWNER',
       },
     });
-    console.log('Super admin actualizado (admin)');
+    console.log('Super admin migrado a admin@admin.com');
+    return;
+  }
+
+  if (existing) {
+    const samePass = await argon2.verify(existing.passwordHash, PLATFORM_ADMIN_PASSWORD).catch(() => false);
+    if (samePass && existing.isPlatformAdmin && existing.isActive && existing.email === email) return;
+
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        email,
+        passwordHash: await argon2.hash(PLATFORM_ADMIN_PASSWORD, { type: 2 }),
+        isPlatformAdmin: true,
+        isActive: true,
+        role: 'OWNER',
+      },
+    });
+    console.log('Super admin actualizado (admin@admin.com)');
     return;
   }
 
@@ -47,5 +65,5 @@ export async function ensurePlatformAdmin(prisma: PrismaClient): Promise<void> {
       isActive: true,
     },
   });
-  console.log('Super admin creado (admin)');
+  console.log('Super admin creado (admin@admin.com)');
 }
