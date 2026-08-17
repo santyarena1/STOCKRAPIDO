@@ -38,7 +38,7 @@ export function ProductDemos() {
         {tab === 'dist' ? <DistDemo /> : null}
       </div>
       <p className="mt-3 text-center text-sm text-[var(--mk-ink-3)]">
-        Pantallas de ejemplo con datos de un turno. Adentro, el sistema se ve como siempre.
+        Ejemplo de un turno. Adentro se ve igual.
       </p>
     </div>
   );
@@ -113,7 +113,7 @@ function CajaDemo() {
           </div>
         ))}
       </dl>
-      <p className="mt-4 text-sm text-[var(--mk-ink-2)]">147 ventas · no hace falta reconstruir el Excel a la noche.</p>
+      <p className="mt-4 text-sm text-[var(--mk-ink-2)]">147 ventas. El cierre queda armado al terminar el turno.</p>
     </div>
   );
 }
@@ -125,7 +125,8 @@ function FacturaDemo() {
         <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Módulo de facturación · PRO</p>
         <h3 className="mt-1 text-2xl font-extrabold">Factura C desde el mismo cobro</h3>
         <p className="mt-3 text-[15px] leading-relaxed text-[var(--mk-ink-2)]">
-          En el POS se elige comprobante interno o Factura C. El sistema usa el CUIT, el punto de venta y el certificado cargados en Configuración → Facturación. El cliente se lleva el comprobante; vos no salís a otro programa.
+          En el POS elegís comprobante interno o Factura C. El CUIT, el punto de venta y el certificado están en el
+          sistema. El cliente se lleva el comprobante; vos seguís en la misma pantalla.
         </p>
         <ul className="mt-4 space-y-2 text-sm font-semibold text-[var(--mk-ink)]">
           <li>• Punto de venta 00003</li>
@@ -159,7 +160,8 @@ function DistDemo() {
       <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">PREMIUM</p>
       <h3 className="mt-1 text-2xl font-extrabold">Las listas de los mayoristas, adentro</h3>
       <p className="mt-2 max-w-2xl text-[15px] text-[var(--mk-ink-2)]">
-        Tokin, Mondelez y Juntos+ (Coca-Cola FEMSA) entran al catálogo con costo B2B. Después importás a Productos, armás el pedido y, con IA, cargás la factura de compra fotografiada.
+        Tokin, Mondelez y Juntos+ entran al catálogo con el costo. Importás a Productos, armás el pedido y, si querés,
+        cargás la factura de compra con una foto.
       </p>
       <div className="mt-5 overflow-x-auto">
         <table className="w-full min-w-[520px] text-left text-sm">

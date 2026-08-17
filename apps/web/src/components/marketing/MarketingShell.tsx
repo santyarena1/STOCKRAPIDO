@@ -6,7 +6,7 @@ import { BrandMark } from './BrandMark';
 
 const NAV = [
   { href: '/#producto', label: 'El sistema' },
-  { href: '/#modulos', label: 'Módulos' },
+  { href: '/#porque', label: 'Por qué' },
   { href: '/#planes', label: 'Planes' },
   { href: '/#preguntas', label: 'Preguntas' },
 ];
@@ -85,7 +85,7 @@ export function MarketingShell({
       ) : null}
       <footer className="border-t border-[var(--mk-line)] bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-10 text-sm text-[var(--mk-ink-2)] sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p className="font-semibold">StockRápido · sistema de gestión para kioscos</p>
+          <p className="font-semibold">StockRápido · un solo sistema para el kiosco</p>
           <div className="flex flex-wrap gap-4 font-bold">
             <a href="/#planes">Contratar</a>
             <Link href="/login">Ingresar</Link>
