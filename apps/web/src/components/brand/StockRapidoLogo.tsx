@@ -73,12 +73,9 @@ export function StockRapidoLogo({ variant = 'system', size = 'md', href = '/', c
         <span className="mt-1">{slogan}</span>
       </span>
     ) : variant === 'header' ? (
-      <span className="inline-flex items-center gap-2.5 leading-none text-[var(--mk-ink)]">
-        <StockRapidoBag className="h-10 w-10" />
-        <span>
-          <Wordmark className="block text-[17px]" />
-          <span className="mt-1">{slogan}</span>
-        </span>
+      <span className="inline-flex h-10 items-center gap-2 leading-none text-[var(--mk-ink)]">
+        <StockRapidoBag className="h-8 w-8" />
+        <Wordmark className="text-[15px] sm:text-[16px]" />
       </span>
     ) : (
       <span className="inline-flex min-w-0 items-center gap-2 leading-none">
