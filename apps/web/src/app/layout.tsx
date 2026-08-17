@@ -19,7 +19,7 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: 'StockRápido — Sistema para kioscos',
   description:
-    'Cobrá, controlá el stock y cerrá la caja. POS, proveedores, fiado y reportes para kioscos de Argentina.',
+    'Un solo sistema para cobrar, ordenar el stock y no saltar entre plataformas. Hecho por desarrolladores reales, abierto a sugerencias y actualizaciones.',
   icons: {
     icon: [{ url: '/brand/icon.svg', type: 'image/svg+xml' }],
     shortcut: '/brand/icon.svg',

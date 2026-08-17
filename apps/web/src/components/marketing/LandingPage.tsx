@@ -32,18 +32,33 @@ const COMPARE: { feature: PlanFeature; plans: [boolean, boolean, boolean] }[] = 
 const MODULES = [
   {
     plan: 'BASIC',
-    title: 'Gestión del kiosco',
-    text: 'Cobrar, bajar stock, cerrar caja, cargar compras a mano, fiado, promos y reportes. Es el sistema de gestión del local, listo para el mostrador.',
+    title: 'Para vender todos los días',
+    text: 'Cobrar, bajar stock, cerrar caja, cargar compras, fiado, promos y reportes. El kiosco queda ordenado y el mostrador no se frena.',
   },
   {
     plan: 'PRO',
-    title: 'Módulo de facturación',
-    text: 'Encima de BASIC, Factura C electrónica desde el mismo cobro. Cargás CUIT, punto de venta y certificado una vez. Si el cliente no pide factura, el ticket interno sigue ahí.',
+    title: 'Cuando piden factura',
+    text: 'Suma Factura C electrónica al mismo cobro. Cargás CUIT, punto de venta y certificado una vez. Si no hace falta factura, el ticket interno sigue.',
   },
   {
     plan: 'PREMIUM',
-    title: 'Distribuidores e IA',
-    text: 'Encima de PRO, entran las listas de Tokin, Mondelez y Juntos+. Pedidos, costos B2B y compras con IA: subís el PDF o la foto de la factura del mayorista y se arma la compra.',
+    title: 'Mayoristas, también acá',
+    text: 'Entran las listas de Tokin, Mondelez y Juntos+. Pedidos, costos y compras con IA: subís el PDF o la foto de la factura y se arma la compra.',
+  },
+];
+
+const WHY = [
+  {
+    title: 'La venta es más fácil',
+    text: 'Pistoleás, cobrás y el stock se mueve solo. El sistema te ordena el turno: menos vueltas, menos errores, más tiempo en el mostrador.',
+  },
+  {
+    title: 'Todo en un solo lugar',
+    text: 'Ventas, caja, productos, compras y facturación viven juntos. No hace falta entrar a mil plataformas ni copiar datos de un lado al otro.',
+  },
+  {
+    title: 'Lo hacemos nosotros',
+    text: 'Somos desarrolladores reales, no un sistema cerrado. Las sugerencias están abiertas. Si algo suma, lo cambiamos. Hay ediciones y actualizaciones que no se cobran.',
   },
 ];
 
@@ -54,19 +69,23 @@ const FAQ = [
   },
   {
     q: '¿Qué entra en BASIC?',
-    a: 'Cobrar, stock, caja, compras a mano, proveedores cargados por vos, fiado, promos, reportes, figuritas y hasta 5 usuarios. Es la gestión del kiosco, sin facturación electrónica ni listas automáticas de mayoristas.',
+    a: 'Cobrar, stock, caja, compras a mano, proveedores, fiado, promos, reportes, figuritas y hasta 5 usuarios. Es el día a día del kiosco. La factura electrónica y las listas de mayoristas van en los planes de arriba.',
   },
   {
     q: '¿Y si el cliente pide factura?',
-    a: 'Ahí va PRO: misma operatoria, más el módulo de facturación (Factura C). El ticket interno sigue existiendo para quien no la pide.',
+    a: 'Con PRO la emitís desde el mismo cobro (Factura C). El ticket interno sigue para quien no la pide. No tenés que abrir otro programa.',
   },
   {
     q: '¿Tokin, Mondelez o Juntos+ en qué plan están?',
-    a: 'En PREMIUM. Ahí se importan catálogos y precios B2B. El runner local (en tu PC) sigue haciendo falta para algunos precios reales; la app es la que los recibe.',
+    a: 'En PREMIUM. Ahí se importan catálogos y precios. Algunos costos reales piden el runner en tu PC; el sistema es el que los recibe y los usa.',
   },
   {
-    q: '¿La IA qué hace, concreto?',
-    a: 'En PREMIUM subís el PDF o la foto de la factura del proveedor y el sistema arma la compra: productos, cantidades y costos. No escribe textos ni “te asesora”.',
+    q: '¿La IA qué hace?',
+    a: 'En PREMIUM subís el PDF o la foto de la factura del proveedor y se arma la compra: productos, cantidades y costos.',
+  },
+  {
+    q: '¿Puedo pedir un cambio o una función?',
+    a: 'Sí. Lo desarrollamos nosotros. Las sugerencias están abiertas: si algo ayuda al kiosco, lo vemos y lo actualizamos. Hay ediciones y mejoras que no se cobran.',
   },
   {
     q: '¿Hay prueba? ¿Piden tarjeta?',
@@ -92,17 +111,16 @@ export function LandingPage() {
           <div className="mb-6 hidden sm:block">
             <StockRapidoLogo variant="landing" size="lg" href={null} />
           </div>
-          <span className="mk-pill">Sistema de gestión · kioscos</span>
-          <h1 className="mk-display mt-5 max-w-[14ch] text-[2.7rem] text-[var(--mk-ink)] sm:text-6xl">
-            El kiosco, ordenado. Vos, cobrando.
+          <span className="mk-pill">Un solo sistema para el kiosco</span>
+          <h1 className="mk-display mt-5 max-w-[16ch] text-[2.7rem] text-[var(--mk-ink)] sm:text-6xl">
+            La venta, más fácil.
           </h1>
           <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-[var(--mk-ink-2)]">
-            StockRápido es el sistema de gestión del local: punto de venta, stock, caja, facturación y catálogos de
-            distribuidores. Hecho para el mostrador, no para un curso de software.
+            StockRápido ordena el local: cobro, stock, caja y el resto, juntos. Dejás de saltar entre plataformas.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <a href="#planes" className="mk-cta">
-              Contratar un plan
+              Ver planes
             </a>
             <Link href="/register?plan=mostrador" className="mk-cta-ghost">
               Probar 14 días
@@ -122,21 +140,39 @@ export function LandingPage() {
       </section>
 
       <section id="producto" className="scroll-mt-24 mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">Cómo se usa</p>
-        <h2 className="mk-display mt-2 max-w-[18ch] text-4xl sm:text-5xl">Cuatro pantallas, un turno real.</h2>
+        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">El sistema</p>
+        <h2 className="mk-display mt-2 max-w-[18ch] text-4xl sm:text-5xl">Te ordena el día, desde el mostrador.</h2>
         <p className="mt-3 max-w-2xl text-[var(--mk-ink-2)]">
-          POS, caja, facturación y listas de mayoristas. Adentro del sistema la interfaz no cambia: esto es solo para
-          que veas qué hace cada módulo.
+          Punto de venta, caja, facturación y listas de mayoristas. Todo adentro. Así no te perdés entre mil pantallas.
         </p>
         <div className="mt-8">
           <ProductDemos />
         </div>
       </section>
 
-      <section id="modulos" className="scroll-mt-24 border-t border-[var(--mk-line)] bg-white">
+      <section id="porque" className="scroll-mt-24 border-t border-[var(--mk-line)] bg-white">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">Tres capas</p>
-          <h2 className="mk-display mt-2 max-w-[16ch] text-4xl sm:text-5xl">BASIC, PRO y PREMIUM. Sin combos raros.</h2>
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">Por qué StockRápido</p>
+          <h2 className="mk-display mt-2 max-w-[18ch] text-4xl sm:text-5xl">Centralizamos. Y escuchamos.</h2>
+          <p className="mt-3 max-w-2xl text-[var(--mk-ink-2)]">
+            Lo desarrollamos nosotros. Si pedís un cambio que suma, se puede hacer. Hay ediciones y mejoras que no se
+            cobran.
+          </p>
+          <ul className="mt-10 grid gap-6 md:grid-cols-3">
+            {WHY.map((item) => (
+              <li key={item.title} className="rounded-[1.5rem] border border-[var(--mk-line)] bg-[var(--mk-paper)] p-6">
+                <h3 className="text-xl font-extrabold">{item.title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-[var(--mk-ink-2)]">{item.text}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section id="modulos" className="scroll-mt-24 border-t border-[var(--mk-line)]">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">Qué incluye cada plan</p>
+          <h2 className="mk-display mt-2 max-w-[16ch] text-4xl sm:text-5xl">BASIC, PRO y PREMIUM.</h2>
           <ol className="mt-10 grid gap-6 md:grid-cols-3">
             {MODULES.map((item) => (
               <li
@@ -157,10 +193,10 @@ export function LandingPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">Planes</p>
-              <h2 className="mk-display mt-2 text-4xl sm:text-5xl">Elegí y contratá.</h2>
+              <h2 className="mk-display mt-2 text-4xl sm:text-5xl">Elegí el que te sirve.</h2>
               <p className="mt-3 max-w-xl text-[var(--mk-ink-2)]">
-                Arrancás con la gestión. Si hace falta factura, PRO. Si comprás a mayoristas, PREMIUM trae las listas y
-                la IA. 14 días de prueba, después contratás el que uses.
+                BASIC para el día a día. PRO si facturás. PREMIUM si comprás a mayoristas. 14 días de prueba, después
+                contratás el que uses.
               </p>
             </div>
             <div className="inline-flex rounded-full border border-[var(--mk-line)] bg-white p-1 text-sm font-bold">
@@ -261,7 +297,7 @@ export function LandingPage() {
 
       <section id="preguntas" className="scroll-mt-24 border-t border-[var(--mk-line)] bg-white">
         <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
-          <h2 className="mk-display text-4xl">Preguntas de dueño de kiosco</h2>
+          <h2 className="mk-display text-4xl">Preguntas</h2>
           <div className="mt-8 divide-y divide-[var(--mk-line)]">
             {FAQ.map((item, i) => (
               <div key={item.q}>
@@ -279,8 +315,8 @@ export function LandingPage() {
             ))}
           </div>
           <div className="mt-10 rounded-[1.5rem] bg-[var(--mk-paper)] p-6 text-center">
-            <p className="text-lg font-extrabold">¿Listo para contratar?</p>
-            <p className="mt-1 text-sm text-[var(--mk-ink-2)]">14 días de prueba. Después elegís BASIC, PRO o PREMIUM.</p>
+            <p className="text-lg font-extrabold">¿Probamos?</p>
+            <p className="mt-1 text-sm text-[var(--mk-ink-2)]">14 días, sin tarjeta. Después BASIC, PRO o PREMIUM.</p>
             <a href="#planes" className="mk-cta mt-4">
               Ver planes y contratar
             </a>
