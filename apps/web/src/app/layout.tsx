@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   title: 'StockRápido — Sistema para kioscos',
   description:
     'Cobrá, controlá el stock y cerrá la caja. POS, proveedores, fiado y reportes para kioscos de Argentina.',
+  icons: {
+    icon: [{ url: '/brand/icon.svg', type: 'image/svg+xml' }],
+    shortcut: '/brand/icon.svg',
+    apple: '/brand/icon.svg',
+  },
 };
 
 export default function RootLayout({

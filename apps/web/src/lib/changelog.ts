@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.6',
+    date: '2026-08-17',
+    summary: 'Logo de StockRápido en la web, en el sistema y en la pestaña.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Logo de StockRápido',
+        desc: 'En la landing se ve el logo completo, con el slogan. Adentro del sistema queda la bolsa y el nombre, sin el slogan. En la pestaña del navegador, solo la bolsa con la S.',
+      },
+    ],
+  },
+  {
     version: 'v1.5',
     date: '2026-08-16',
     summary: 'Soporte con tickets y, para el equipo de StockRápido, un panel de todas las cuentas y sus pagos.',
