@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingShell } from './MarketingShell';
 import { LoginForm } from './LoginForm';
+import { StockRapidoLogo } from '@/components/brand/StockRapidoLogo';
 import { ProductDemos } from './ProductDemos';
 import {
   formatPlanPrice,
@@ -88,6 +89,9 @@ export function LandingPage() {
     <MarketingShell>
       <section className="mx-auto grid max-w-6xl items-start gap-12 px-4 pb-8 pt-10 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:pt-16">
         <div>
+          <div className="mb-6 hidden sm:block">
+            <StockRapidoLogo variant="landing" size="lg" href={null} />
+          </div>
           <span className="mk-pill">Sistema de gestión · kioscos</span>
           <h1 className="mk-display mt-5 max-w-[14ch] text-[2.7rem] text-[var(--mk-ink)] sm:text-6xl">
             El kiosco, ordenado. Vos, cobrando.

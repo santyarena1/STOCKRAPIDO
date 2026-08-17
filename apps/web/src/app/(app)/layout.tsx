@@ -23,6 +23,7 @@ import {
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { ChangelogWidget } from '@/components/ChangelogWidget';
 import { BillingProvider, useBilling } from '@/components/billing/BillingProvider';
+import { StockRapidoLogo } from '@/components/brand/StockRapidoLogo';
 import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
@@ -320,10 +321,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         >
           {brand.logoUrl &&
           (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-hair object-cover" />
-          ) : null}
-          <span className="truncate">{sidebarTitle}</span>
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={brand.logoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-hair object-cover" />
+              <span className="truncate">{sidebarTitle}</span>
+            </>
+          ) : (
+            <StockRapidoLogo variant="system" href={null} />
+          )}
         </Link>
       </div>
       <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3">
@@ -359,7 +364,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center gap-2 border-b border-hair-soft px-3 py-2 lg:hidden">
           <button type="button" aria-label="Abrir menú" aria-expanded={mobileSidebarOpen} onClick={() => setMobileSidebarOpen(true)} className="rounded-lg border border-hair bg-raised p-2 text-fg-muted"><Menu className="h-5 w-5" /></button>
-          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 font-semibold text-fg">{brand.logoUrl && (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? <img src={brand.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg border border-hair object-cover" /> : null}<span className="truncate">{sidebarTitle}</span></Link>
+          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 font-semibold text-fg">
+            {brand.logoUrl && (brand.logoUrl.startsWith('data:') || brand.logoUrl.startsWith('http://') || brand.logoUrl.startsWith('https://')) ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={brand.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg border border-hair object-cover" />
+                <span className="truncate">{sidebarTitle}</span>
+              </>
+            ) : (
+              <StockRapidoLogo variant="system" href={null} />
+            )}
+          </Link>
           <button type="button" onClick={toggleTheme} aria-label="Cambiar tema" className="rounded-lg border border-hair p-2 text-fg-muted hover:bg-raised">{theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}</button>
           <button type="button" onClick={() => setShowTutorial(true)} className="btn-brand rounded-lg px-2.5 py-2 text-xs font-medium">Tutorial</button>
         </div>
