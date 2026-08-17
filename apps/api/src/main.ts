@@ -28,7 +28,13 @@ async function bootstrap() {
     origin: corsOriginOption(),
     credentials: true,
   });
-  app.getHttpAdapter().get('/health', (_req: any, res: any) => res.json({ status: 'ok' }));
+  app.getHttpAdapter().get('/health', (_req: any, res: any) =>
+    res.json({
+      status: 'ok',
+      v: 3,
+      sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || 'dev',
+    }),
+  );
   const port = process.env.PORT || 4002;
   await app.listen(port);
   console.log(`API running at http://localhost:${port}`);

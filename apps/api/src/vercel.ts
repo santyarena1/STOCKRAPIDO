@@ -4,6 +4,14 @@ import { ExpressAdapter } from '@nestjs/platform-express';
 import * as express from 'express';
 import { AppModule } from './app.module';
 
+function healthPayload() {
+  return {
+    status: 'ok',
+    v: 3,
+    sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || 'dev',
+  };
+}
+
 // Handler serverless para Vercel.
 // La app Nest se construye UNA sola vez y queda cacheada en la instancia
 // (warm) para que las siguientes invocaciones no la reboteen.
@@ -26,7 +34,7 @@ async function bootstrap(): Promise<void> {
     origin: process.env.WEB_URL || true,
     credentials: true,
   });
-  server.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  server.get('/health', (_req, res) => res.json(healthPayload()));
   await app.init();
 }
 

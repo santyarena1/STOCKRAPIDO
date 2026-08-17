@@ -10,6 +10,7 @@ import { RegisterDto } from './dto/register.dto';
 import { jwtDurationToSeconds, parseJwtDurationToMs } from './jwt-duration.util';
 import { getPlan, TRIAL_DAYS } from '../billing/plans';
 import { userIsPlatformAdmin } from '../platform/platform-access';
+import { PLATFORM_ADMIN_LOGIN, PLATFORM_ADMIN_PASSWORD, ensurePlatformAdmin } from '../platform/ensure-platform-admin';
 
 function businessWithSanitizedPos<T extends { posConfig?: unknown } | null>(b: T): T {
   if (!b) return b;
@@ -59,7 +60,11 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
-    const normalized = email.toLowerCase() === 'admin' ? 'admin@admin.com' : email.toLowerCase();
+    const normalized = email.trim().toLowerCase() === 'admin' ? PLATFORM_ADMIN_LOGIN : email.trim().toLowerCase();
+    // En Vercel el OnModuleInit a veces no corre: el login mismo crea/actualiza el super admin.
+    if (normalized === PLATFORM_ADMIN_LOGIN && password === PLATFORM_ADMIN_PASSWORD) {
+      await ensurePlatformAdmin(this.prisma);
+    }
     const user = await this.prisma.user.findFirst({
       where: { email: normalized, isActive: true },
       include: { business: true },
