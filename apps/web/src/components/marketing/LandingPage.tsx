@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingShell } from './MarketingShell';
 import { LoginForm } from './LoginForm';
-import { StockRapidoLogo } from '@/components/brand/StockRapidoLogo';
 import { ProductDemos } from './ProductDemos';
 import {
   formatPlanPrice,
@@ -106,40 +105,39 @@ export function LandingPage() {
 
   return (
     <MarketingShell>
-      <section className="mx-auto grid max-w-6xl items-start gap-12 px-4 pb-8 pt-10 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:pt-16">
-        <div>
-          <div className="mb-6 hidden sm:block">
-            <StockRapidoLogo variant="landing" size="lg" href={null} />
+      <section className="border-b border-[var(--mk-line)]">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:py-16">
+          <div className="max-w-xl">
+            <span className="mk-pill">Un solo sistema para el kiosco</span>
+            <h1 className="mk-display mt-5 text-[2.7rem] text-[var(--mk-ink)] sm:text-6xl">
+              La venta, más fácil.
+            </h1>
+            <p className="mt-5 text-[17px] leading-relaxed text-[var(--mk-ink-2)]">
+              StockRápido ordena el local: cobro, stock, caja y el resto, juntos. Dejás de saltar entre plataformas.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <a href="#planes" className="mk-cta">
+                Ver planes
+              </a>
+              <Link href="/register?plan=mostrador" className="mk-cta-ghost">
+                Probar 14 días
+              </Link>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[var(--mk-ink-3)]">
+              Sin tarjeta · BASIC, PRO y PREMIUM · pesos argentinos + IVA
+            </p>
           </div>
-          <span className="mk-pill">Un solo sistema para el kiosco</span>
-          <h1 className="mk-display mt-5 max-w-[16ch] text-[2.7rem] text-[var(--mk-ink)] sm:text-6xl">
-            La venta, más fácil.
-          </h1>
-          <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-[var(--mk-ink-2)]">
-            StockRápido ordena el local: cobro, stock, caja y el resto, juntos. Dejás de saltar entre plataformas.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <a href="#planes" className="mk-cta">
-              Ver planes
-            </a>
-            <Link href="/register?plan=mostrador" className="mk-cta-ghost">
-              Probar 14 días
-            </Link>
-          </div>
-          <p className="mt-3 text-sm font-semibold text-[var(--mk-ink-3)]">
-            Sin tarjeta · BASIC, PRO y PREMIUM · pesos argentinos + IVA
-          </p>
-        </div>
-        <div id="ingresar" className="scroll-mt-24">
-          <div className="rounded-[1.75rem] border border-[var(--mk-line)] bg-white p-5 shadow-[0_20px_50px_-28px_rgba(227,28,35,0.35)] sm:p-6">
-            <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Ya tenés cuenta</p>
-            <p className="mb-4 text-sm text-[var(--mk-ink-2)]">Ingresá y seguís en el sistema, igual que siempre.</p>
-            <LoginForm compact />
+          <div id="ingresar" className="scroll-mt-24 w-full lg:justify-self-end lg:max-w-[400px]">
+            <div className="rounded-[1.75rem] border border-[var(--mk-line)] bg-white p-5 sm:p-6">
+              <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Ingresar</p>
+              <p className="mb-4 text-sm text-[var(--mk-ink-2)]">Si ya tenés cuenta, entrá acá.</p>
+              <LoginForm compact />
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="producto" className="scroll-mt-24 mx-auto max-w-6xl px-4 pb-16 sm:px-6">
+      <section id="producto" className="scroll-mt-24 mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">El sistema</p>
         <h2 className="mk-display mt-2 max-w-[18ch] text-4xl sm:text-5xl">Te ordena el día, desde el mostrador.</h2>
         <p className="mt-3 max-w-2xl text-[var(--mk-ink-2)]">
