@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { fetchLocalSerperStatus } from '@/lib/serper-client';
 
 export type Business = {
   id: string;
@@ -33,6 +34,10 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const refetch = async () => {
     const [nextBusiness, nextCategories] = await Promise.all([api<Business>('/business/me'), api<BusinessCategory[]>('/business/categories')]);
+    if (nextBusiness && !nextBusiness.hasSerperKey) {
+      const local = await fetchLocalSerperStatus();
+      if (local.hasSerperKey) nextBusiness.hasSerperKey = true;
+    }
     setBusiness(nextBusiness); setCategories(nextCategories);
   };
   useEffect(() => { refetch().catch(() => {}).finally(() => setLoading(false)); }, []);

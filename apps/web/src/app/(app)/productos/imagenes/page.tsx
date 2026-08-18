@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { assignProductImage, autoAssignSerperPhotos, isApiRouteMissing } from '@/lib/serper-client';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
@@ -30,16 +31,38 @@ export default function ProductImagesEditorPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api<{ total: number; items: Row[] }>('/products/serper/editor', {
-        params: {
-          q: qDebounced || undefined,
-          missingOnly: missingOnly ? 'true' : 'false',
-          page: String(page),
-          pageSize: String(pageSize),
-        },
-      });
-      setTotal(data.total);
-      setItems(data.items || []);
+      try {
+        const data = await api<{ total: number; items: Row[] }>('/products/serper/editor', {
+          params: {
+            q: qDebounced || undefined,
+            missingOnly: missingOnly ? 'true' : 'false',
+            page: String(page),
+            pageSize: String(pageSize),
+          },
+        });
+        setTotal(data.total);
+        setItems(data.items || []);
+      } catch (err) {
+        if (!isApiRouteMissing(err)) throw err;
+        const data = await api<{ total: number; items: Row[] }>('/products/catalog', {
+          params: {
+            q: qDebounced || undefined,
+            page: String(page),
+            pageSize: String(pageSize),
+            status: 'active',
+          },
+        });
+        const rows = (data.items || []).map((row) => ({
+          id: row.id,
+          name: row.name,
+          brand: row.brand,
+          barcode: row.barcode,
+          imageUrl: row.imageUrl,
+        }));
+        const filtered = missingOnly ? rows.filter((row) => !row.imageUrl) : rows;
+        setTotal(missingOnly ? filtered.length : data.total);
+        setItems(filtered);
+      }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo cargar el listado.');
     } finally {
@@ -52,10 +75,7 @@ export default function ProductImagesEditorPage() {
   }, [load]);
 
   const assign = async (productId: string, imageUrl: string) => {
-    const updated = await api<Row>('/products/serper/assign', {
-      method: 'POST',
-      body: JSON.stringify({ productId, imageUrl }),
-    });
+    const updated = await assignProductImage(productId, imageUrl);
     setItems((current) => current.map((row) => (row.id === productId ? { ...row, imageUrl: updated.imageUrl } : row)));
   };
 
@@ -65,10 +85,7 @@ export default function ProductImagesEditorPage() {
     setAutoBusy(true);
     setMsg('');
     try {
-      const result = await api<{ updated: number; skipped: { reason: string }[] }>('/products/serper/auto', {
-        method: 'POST',
-        body: JSON.stringify({ ids: items.map((row) => row.id), onlyMissing: missingOnly }),
-      });
+      const result = await autoAssignSerperPhotos(items.map((row) => row.id), missingOnly);
       setMsg(`${result.updated} imágenes aplicadas${result.skipped.length ? ` · ${result.skipped.length} omitidos` : ''}.`);
       await load();
     } catch (err) {

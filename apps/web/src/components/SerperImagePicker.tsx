@@ -1,14 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { api } from '@/lib/api';
+import { searchSerperImages, type SerperImageHit } from '@/lib/serper-client';
 
-export type SerperImageHit = {
-  title: string;
-  imageUrl: string;
-  thumbnailUrl: string;
-  source: string;
-};
+export type { SerperImageHit };
 
 type Props = {
   query: string;
@@ -32,10 +27,7 @@ export function SerperImagePicker({ query, value, onChange, compact }: Props) {
     setBusy(true);
     setError('');
     try {
-      const data = await api<{ images: SerperImageHit[] }>('/products/serper/search', {
-        method: 'POST',
-        body: JSON.stringify({ q, num: compact ? 6 : 10 }),
-      });
+      const data = await searchSerperImages(q, compact ? 6 : 10);
       setHits(data.images || []);
       if (!data.images?.length) setError('No encontramos fotos para esa búsqueda.');
     } catch (err) {

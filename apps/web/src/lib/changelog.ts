@@ -56,6 +56,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Imprimir etiquetas',
         desc: 'Al tocar Imprimir etiquetas se abre el diálogo aunque la API todavía no tenga el endpoint nuevo. Si hay productos seleccionados, imprime esos. Imprimir A4 ya no depende de una ventana emergente que el navegador bloqueaba.',
       },
+      {
+        tag: 'FIX',
+        title: 'Guardar API de Serper',
+        desc: 'Si la API del servidor todavía no tiene PATCH /business/serper-key, la key se guarda igual y las búsquedas de fotos salen por la web.',
+      },
     ],
   },
   {
