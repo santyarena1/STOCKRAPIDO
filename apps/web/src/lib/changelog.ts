@@ -46,6 +46,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Imprimir etiquetas en A4',
         desc: 'Desde el producto o desde la lista (seleccionados o todo el filtro) imprimís etiquetas chicas. Elegís qué sale: nombre, SKU, categoría, barras, números y precio. El precio viene apagado.',
       },
+      {
+        tag: 'FIX',
+        title: 'Cabecera de Productos',
+        desc: 'Los botones de exportar, importar e imprimir ya no se superponen al título. Quedan en una barra aparte y se acomodan si la pantalla es angosta.',
+      },
     ],
   },
   {
