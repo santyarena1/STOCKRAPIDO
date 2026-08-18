@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.7',
+    date: '2026-08-18',
+    summary: 'En el POS volvió el botón para asociar un código de barras que no coincidía exacto.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Asociar código en el POS',
+        desc: 'Si escaneás o buscás un código y no pega exacto, en cada producto de la lista aparece «Asociar». Lo guarda como código de barras de ese producto y la próxima vez el escaneo sí lo encuentra.',
+      },
+    ],
+  },
+  {
     version: 'v1.6',
     date: '2026-08-17',
     summary: 'Logo de StockRápido en la web, en el sistema y en la pestaña.',

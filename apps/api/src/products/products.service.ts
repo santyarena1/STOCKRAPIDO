@@ -905,10 +905,11 @@ export class ProductsService {
     if (!p) throw new NotFoundException('Producto no encontrado.');
     const codes = new Set((p.allCodes ?? '').split(/\s+/).filter(Boolean));
     codes.add(clean);
+    if (p.barcode && p.barcode !== clean) codes.add(p.barcode);
     const data: Prisma.ProductUpdateInput = { allCodes: [...codes].join(' ') };
-    if (!p.barcode && /^\d{6,14}$/.test(clean)) data.barcode = clean; // si no tiene código de barras y es numérico, lo usamos
+    if (p.barcode !== clean) data.barcode = clean;
     await this.prisma.product.update({ where: { id }, data });
-    return { ok: true, barcodeSet: !p.barcode && /^\d{6,14}$/.test(clean) };
+    return { ok: true, barcodeSet: p.barcode !== clean };
   }
 
   /** Completa Product.allCodes con todos los códigos (columnas + del proveedor vinculado). */

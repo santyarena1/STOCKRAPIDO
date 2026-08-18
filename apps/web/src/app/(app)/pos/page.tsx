@@ -30,6 +30,23 @@ type PausedSalePayload={items:CartItem[];discount?:number;selectedCustomer?:{id:
 const LOW_STOCK_THRESHOLD = 3;
 
 const normalizeSearchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
+const looksLikeProductCode = (value: string) => /^[a-z0-9-]{6,}$/i.test(value.trim());
+
+type ProductCodeFields = {
+  barcode?: string | null;
+  eanBox?: string | null;
+  supplierSku?: string | null;
+  supplierRef?: string | null;
+  externalId?: string | null;
+  allCodes?: string | null;
+};
+
+function productHasExactCode(product: ProductCodeFields, code: string) {
+  const c = code.trim();
+  if (!c) return false;
+  if ([product.barcode, product.eanBox, product.supplierSku, product.supplierRef, product.externalId].includes(c)) return true;
+  return (product.allCodes ?? '').split(/\s+/).includes(c);
+}
 const highlightedName = (name: string, query: string) => {
   const normalizedName = normalizeSearchText(name);
   const candidates = [query.trim(), ...query.trim().split(/\s+/)].filter(Boolean);
@@ -165,6 +182,7 @@ export default function POSPage() {
       supplierSku?: string | null;
       supplierRef?: string | null;
       externalId?: string | null;
+      allCodes?: string | null;
       matched?: SearchMatch;
       imageUrl?: string | null;
       unitsPerBox?: string | null;
@@ -469,6 +487,7 @@ export default function POSPage() {
             supplierSku?: string | null;
             supplierRef?: string | null;
             externalId?: string | null;
+            allCodes?: string | null;
             matched?: SearchMatch;
             imageUrl?: string | null;
             unitsPerBox?: string | null;
@@ -496,13 +515,14 @@ export default function POSPage() {
           supplierSku: p.supplierSku ?? null,
           supplierRef: p.supplierRef ?? null,
           externalId: p.externalId ?? null,
+          allCodes: typeof p.allCodes === 'string' ? p.allCodes : null,
           matched: p.matched,
           imageUrl: p.imageUrl ?? null,
           unitsPerBox: p.unitsPerBox ?? null,
           unitsPerBoxNum: p.unitsPerBoxNum ?? null,
           cost: p.cost ?? null,
         }));
-        if (mapped.length === 1 && [mapped[0].barcode, mapped[0].eanBox, mapped[0].supplierSku, mapped[0].supplierRef, mapped[0].externalId].includes(term)) {
+        if (mapped.length === 1 && productHasExactCode(mapped[0], term)) {
           addToCart(mapped[0], 1);
           return;
         }
@@ -894,7 +914,7 @@ export default function POSPage() {
               </span>
             </div>
           )}
-          {!assocCode && /^[a-z0-9-]{6,}$/i.test(search.trim()) && results.length > 0 && !results.some((r) => r.matched && r.matched !== 'nombre' && r.matched !== 'marca') && (
+          {!assocCode && looksLikeProductCode(search) && results.length > 0 && !results.some((r) => productHasExactCode(r, search.trim())) && (
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-hair bg-raised px-3 py-2 text-xs text-fg-muted">
               <span>¿Ninguno es el correcto? Fijá el código y buscá el producto por nombre.</span>
               <button type="button" onClick={() => { setAssocCode(search.trim()); setSearch(''); searchRef.current?.focus(); }} className="rounded-md border border-[color:var(--brand-accent)] px-2.5 py-1 font-semibold text-brand hover:bg-brand-highlight">Asociar {search.trim()} por nombre</button>
@@ -905,9 +925,9 @@ export default function POSPage() {
             {!loading && results.length > 0 && (
               <><div className="border-b border-hair-soft px-4 py-2 text-right text-xs text-fg-faint"><span className="font-mono tabular-nums">{results.length}</span> {results.length === 1 ? 'resultado' : 'resultados'}</div><ul className="divide-y divide-hair-soft">
                 {results.map((p, idx) => {
-                  const codeQuery = /^[a-z0-9-]{6,}$/i.test(search.trim());
+                  const codeQuery = looksLikeProductCode(search);
                   const codeToAssoc = assocCode || (codeQuery ? search.trim() : '');
-                  const showAssociate = !!codeToAssoc && (!!assocCode || !p.matched || p.matched === 'nombre');
+                  const showAssociate = !!codeToAssoc && !productHasExactCode(p, codeToAssoc);
                   return (
                   <li key={p.id} className="flex items-stretch">
                     <button
@@ -944,11 +964,15 @@ export default function POSPage() {
                     {showAssociate && (
                       <button
                         type="button"
-                        onClick={() => void associateCode(p, codeToAssoc)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void associateCode(p, codeToAssoc);
+                        }}
                         title={`Asociar el código ${codeToAssoc} a este producto`}
                         className="shrink-0 border-l border-hair-soft px-3 text-center text-[11px] font-semibold text-brand hover:bg-brand-highlight"
                       >
-                        ＋ Asociar<br />{codeToAssoc.length > 8 ? 'código' : codeToAssoc}
+                        ＋ Asociar<br />{codeToAssoc.length > 10 ? `${codeToAssoc.slice(0, 8)}…` : codeToAssoc}
                       </button>
                     )}
                   </li>
@@ -957,7 +981,7 @@ export default function POSPage() {
               </ul></>
             )}
             {!loading && search.trim() && results.length === 0 && (() => {
-              const codeQuery = /^[a-z0-9-]{6,}$/i.test(search.trim());
+              const codeQuery = looksLikeProductCode(search);
               const term = search.trim();
               return (
                 <div className="flex min-h-[200px] flex-col items-center justify-center gap-4 p-6 text-center">
