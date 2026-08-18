@@ -51,6 +51,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Cabecera de Productos',
         desc: 'Los botones de exportar, importar e imprimir ya no se superponen al título. Quedan en una barra aparte y se acomodan si la pantalla es angosta.',
       },
+      {
+        tag: 'FIX',
+        title: 'Imprimir etiquetas',
+        desc: 'Al tocar Imprimir etiquetas se abre el diálogo aunque la API todavía no tenga el endpoint nuevo. Si hay productos seleccionados, imprime esos. Imprimir A4 ya no depende de una ventana emergente que el navegador bloqueaba.',
+      },
     ],
   },
   {
