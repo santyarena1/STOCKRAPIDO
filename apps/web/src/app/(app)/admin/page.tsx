@@ -13,6 +13,7 @@ type Overview = {
   trials: number;
   pendingPayment: number;
   active: number;
+  complimentary: number;
   openTickets: number;
   pendingInvoices: number;
   salesToday: { count: number; amount: number };
@@ -38,7 +39,7 @@ function AdminHomeInner() {
 
   const cards = data
     ? [
-        { href: '/admin/negocios', label: 'Cuentas', value: String(data.businesses), hint: `${data.active} activas · ${data.trials} en prueba` },
+        { href: '/admin/negocios', label: 'Cuentas', value: String(data.businesses), hint: `${data.active} activas · ${data.complimentary ?? 0} cortesía · ${data.trials} en prueba` },
         { href: '/admin/negocios?status=pending_payment', label: 'Pagos pendientes', value: String(data.pendingPayment), hint: `${data.pendingInvoices} comprobantes` },
         { href: '/admin/tickets', label: 'Tickets abiertos', value: String(data.openTickets), hint: 'Soporte de los kioscos' },
         { href: '/admin/negocios', label: 'Ventas de hoy (todas las cuentas)', value: moneyArs(data.salesToday.amount), hint: `${data.salesToday.count} tickets` },

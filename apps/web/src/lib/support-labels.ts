@@ -19,6 +19,7 @@ export const PLAN_STATUS_LABELS: Record<string, string> = {
   pending_payment: 'Pago pendiente',
   past_due: 'Pago vencido',
   canceled: 'Cancelado',
+  complimentary: 'Cortesía',
 };
 
 export const INVOICE_STATUS_LABELS: Record<string, string> = {

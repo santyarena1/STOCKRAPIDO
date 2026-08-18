@@ -24,7 +24,7 @@ export const CHANGELOG: ChangelogVersion[] = [
   {
     version: 'v1.8',
     date: '2026-08-18',
-    summary: 'Fotos de productos con Serper, y una lista de productos más clara para filtrar y ordenar.',
+    summary: 'Fotos con Serper, lista de productos más clara, códigos internos y etiquetas A4.',
     items: [
       {
         tag: 'NUEVO',
@@ -35,6 +35,16 @@ export const CHANGELOG: ChangelogVersion[] = [
         tag: 'MEJORA',
         title: 'Lista de productos más clara',
         desc: 'El buscador, la categoría, el proveedor, la marca y el orden van juntos en un solo bloque. Las categorías ya no aparecen como chips sueltos. Las estadísticas quedan abajo, plegadas.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Generar código de barras interno',
+        desc: 'En alta o edición de producto, si no tiene EAN, generás un código interno (EAN-13 de uso interno) y lo guardás en la ficha. Sirve para pistolear en el mostrador.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Imprimir etiquetas en A4',
+        desc: 'Desde el producto o desde la lista (seleccionados o todo el filtro) imprimís etiquetas chicas. Elegís qué sale: nombre, SKU, categoría, barras, números y precio. El precio viene apagado.',
       },
     ],
   },

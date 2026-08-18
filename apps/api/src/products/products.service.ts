@@ -7,6 +7,8 @@ import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
 import { assertProductLimit } from '../billing/plan-guard';
+import { collectAllCodes } from '../common/codes';
+import { buildEan13, tenantPrefix } from '../common/ean13';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -696,6 +698,7 @@ export class ProductsService {
         externalId: data.externalId,
         incomplete: data.incomplete ?? false,
         silent: data.silent ?? false,
+        allCodes: collectAllCodes(null, [data.barcode, data.supplierSku, data.externalId]),
       },
       include: { category: true },
     });
@@ -775,6 +778,19 @@ export class ProductsService {
     if (data.imageUrl !== undefined) {
       const url = typeof data.imageUrl === 'string' ? data.imageUrl.trim() : '';
       update.imageUrl = url && /^https?:\/\//i.test(url) ? url : null;
+    }
+    if (data.barcode != null || data.supplierSku != null || data.externalId != null) {
+      const current = await this.prisma.product.findFirst({ where: { id, businessId } });
+      if (current) {
+        update.allCodes = collectAllCodes(null, [
+          data.barcode ?? current.barcode,
+          data.supplierSku ?? current.supplierSku,
+          current.eanBox,
+          current.supplierRef,
+          data.externalId ?? current.externalId,
+          current.allCodes,
+        ]);
+      }
     }
     return this.prisma.product.update({
       where: { id, businessId },
@@ -1141,5 +1157,90 @@ export class ProductsService {
       }
     }
     return { updated, errors };
+  }
+
+  async generateInternalBarcode(businessId: string, used = new Set<string>()): Promise<{ barcode: string }> {
+    const prefix = `20${tenantPrefix(businessId)}`;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const serial = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+      const barcode = buildEan13(`${prefix}${serial}`);
+      if (used.has(barcode)) continue;
+      const exists = await this.prisma.product.findFirst({
+        where: { businessId, barcode },
+        select: { id: true },
+      });
+      if (!exists) {
+        used.add(barcode);
+        return { barcode };
+      }
+    }
+    throw new BadRequestException('No pudimos generar un código libre. Probá de nuevo.');
+  }
+
+  async assignMissingBarcodes(businessId: string, ids: string[]) {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (!unique.length) return { updated: 0, items: [] as Array<{ id: string; barcode: string }> };
+    const products = await this.prisma.product.findMany({
+      where: { businessId, id: { in: unique } },
+      select: { id: true, barcode: true, allCodes: true, supplierSku: true, eanBox: true, supplierRef: true, externalId: true },
+    });
+    const items: Array<{ id: string; barcode: string }> = [];
+    const used = new Set(products.map((p) => p.barcode?.trim()).filter(Boolean) as string[]);
+    let updated = 0;
+    for (const product of products) {
+      if (product.barcode?.trim()) {
+        items.push({ id: product.id, barcode: product.barcode.trim() });
+        continue;
+      }
+      const { barcode } = await this.generateInternalBarcode(businessId, used);
+      await this.prisma.product.update({
+        where: { id: product.id, businessId },
+        data: {
+          barcode,
+          allCodes: collectAllCodes(null, [barcode, product.supplierSku, product.eanBox, product.supplierRef, product.externalId, product.allCodes]),
+        },
+      });
+      updated += 1;
+      items.push({ id: product.id, barcode });
+    }
+    return { updated, items };
+  }
+
+  async catalogIds(businessId: string, query: ProductCatalogQuery) {
+    const catalog = await this.catalog(businessId, { ...query, page: 1, pageSize: 200 });
+    const ids: string[] = catalog.items.map((item: { id: string }) => item.id);
+    const total = Number(catalog.total || ids.length);
+    for (let page = 2; page <= Math.ceil(total / 200); page += 1) {
+      const next = await this.catalog(businessId, { ...query, page, pageSize: 200 });
+      ids.push(...next.items.map((item: { id: string }) => item.id));
+    }
+    return { ids, total: ids.length };
+  }
+
+  async labelData(businessId: string, ids: string[]) {
+    const unique = [...new Set(ids.filter(Boolean))].slice(0, 2000);
+    if (!unique.length) return [];
+    const products = await this.prisma.product.findMany({
+      where: { businessId, id: { in: unique } },
+      select: {
+        id: true,
+        name: true,
+        barcode: true,
+        supplierSku: true,
+        price: true,
+        category: { select: { name: true } },
+      },
+    });
+    const order = new Map(unique.map((id, i) => [id, i]));
+    return products
+      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        barcode: p.barcode?.trim() || '',
+        sku: p.supplierSku?.trim() || '',
+        category: p.category?.name?.trim() || '',
+        price: Number(p.price),
+      }));
   }
 }

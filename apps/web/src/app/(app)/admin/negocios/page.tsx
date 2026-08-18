@@ -68,6 +68,7 @@ function ListInner() {
           <option value="">Todos los estados</option>
           <option value="trial">Prueba</option>
           <option value="active">Activo</option>
+          <option value="complimentary">Cortesía</option>
           <option value="pending_payment">Pago pendiente</option>
           <option value="past_due">Pago vencido</option>
           <option value="canceled">Cancelado</option>

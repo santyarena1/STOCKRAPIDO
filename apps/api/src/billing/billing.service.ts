@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,7 +38,8 @@ export class BillingService {
         take: 24,
       }),
     ]);
-    const pending = invoices.find((inv) => inv.status === 'pending') ?? null;
+    const pending =
+      access.status === 'complimentary' ? null : invoices.find((inv) => inv.status === 'pending') ?? null;
     const lastPaid = invoices.find((inv) => inv.status === 'paid') ?? null;
     const trialActive = access.trialActive;
     const payment = this.paymentStatus(access.status, trialActive, !!pending);
@@ -71,6 +72,10 @@ export class BillingService {
   async subscribe(user: AuthUser, dto: { planId: PlanId; cycle: BillingCycle; method?: 'mercadopago' | 'transfer' }) {
     if (user.role !== 'OWNER' && user.role !== 'ADMIN') {
       throw new ForbiddenException('Solo el dueño o un admin puede cambiar el plan.');
+    }
+    const access = await resolvePlanAccess(this.prisma, user.businessId);
+    if (access.status === 'complimentary') {
+      throw new BadRequestException('Esta cuenta es de cortesía: no se cobra y el plan lo cambia el equipo de StockRápido.');
     }
     const plan = getPlan(dto.planId);
     const method = dto.method || (this.config.get<string>('MP_ACCESS_TOKEN')?.trim() ? 'mercadopago' : 'transfer');
@@ -174,20 +179,25 @@ export class BillingService {
         method: method || invoice.method,
       },
     });
+    const business = await this.prisma.business.findUnique({
+      where: { id: invoice.businessId },
+      select: { planStatus: true },
+    });
     await this.prisma.business.update({
       where: { id: invoice.businessId },
       data: {
         planId: invoice.planId,
         billingCycle: invoice.cycle,
-        planStatus: 'active',
-        planRenewsAt: invoice.periodEnd,
-        trialEndsAt: null,
+        ...(business?.planStatus === 'complimentary'
+          ? {}
+          : { planStatus: 'active', planRenewsAt: invoice.periodEnd, trialEndsAt: null }),
       },
     });
     return this.serializeInvoice(paid);
   }
 
   private paymentStatus(planStatus: string, trialActive: boolean, hasPending: boolean) {
+    if (planStatus === 'complimentary') return { key: 'complimentary', label: 'Cortesía · no se cobra' };
     if (hasPending || planStatus === 'pending_payment') return { key: 'pending', label: 'Pago pendiente' };
     if (trialActive || planStatus === 'trial') return { key: 'trial', label: 'Prueba activa' };
     if (planStatus === 'active') return { key: 'paid', label: 'Al día' };

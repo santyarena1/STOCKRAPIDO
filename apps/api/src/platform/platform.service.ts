@@ -21,6 +21,7 @@ export class PlatformService {
       trials,
       pendingPayment,
       active,
+      complimentary,
       openTickets,
       pendingInvoices,
       salesToday,
@@ -29,6 +30,7 @@ export class PlatformService {
       this.prisma.business.count({ where: { planStatus: 'trial' } }),
       this.prisma.business.count({ where: { planStatus: 'pending_payment' } }),
       this.prisma.business.count({ where: { planStatus: 'active' } }),
+      this.prisma.business.count({ where: { planStatus: 'complimentary' } }),
       this.support.openCount(),
       this.prisma.invoice.count({ where: { status: 'pending' } }),
       this.prisma.sale.aggregate({
@@ -42,6 +44,7 @@ export class PlatformService {
       trials,
       pendingPayment,
       active,
+      complimentary,
       openTickets,
       pendingInvoices,
       salesToday: {
@@ -115,14 +118,15 @@ export class PlatformService {
       salesCount: b._count.sales,
       openTickets: ticketMap.get(b.id) || 0,
       lastSaleAt: lastSaleMap.get(b.id) || null,
-      pendingInvoice: b.invoices[0]
-        ? {
-            id: b.invoices[0].id,
-            amount: Number(b.invoices[0].amount),
-            status: b.invoices[0].status,
-            method: b.invoices[0].method,
-          }
-        : null,
+      pendingInvoice:
+        b.planStatus === 'complimentary' || !b.invoices[0]
+          ? null
+          : {
+              id: b.invoices[0].id,
+              amount: Number(b.invoices[0].amount),
+              status: b.invoices[0].status,
+              method: b.invoices[0].method,
+            },
     }));
   }
 
@@ -188,7 +192,10 @@ export class PlatformService {
     ]);
 
     const lastPaid = business.invoices.find((inv) => inv.status === 'paid') || null;
-    const pending = business.invoices.find((inv) => inv.status === 'pending') || null;
+    const pending =
+      business.planStatus === 'complimentary'
+        ? null
+        : business.invoices.find((inv) => inv.status === 'pending') || null;
 
     return {
       id: business.id,
@@ -237,6 +244,12 @@ export class PlatformService {
     if (!business) throw new NotFoundException('Cuenta no encontrada');
     const trialEndsAt =
       dto.trialEndsAt === undefined ? undefined : dto.trialEndsAt ? new Date(dto.trialEndsAt) : null;
+    if (dto.planStatus === 'complimentary') {
+      await this.prisma.invoice.updateMany({
+        where: { businessId: id, status: 'pending' },
+        data: { status: 'void', notes: 'Anulada: cuenta pasada a cortesía' },
+      });
+    }
     await this.prisma.business.update({
       where: { id },
       data: {
@@ -244,6 +257,7 @@ export class PlatformService {
         ...(dto.planStatus ? { planStatus: dto.planStatus } : {}),
         ...(dto.billingCycle ? { billingCycle: dto.billingCycle } : {}),
         ...(trialEndsAt !== undefined ? { trialEndsAt } : {}),
+        ...(dto.planStatus === 'complimentary' ? { trialEndsAt: null, planRenewsAt: null } : {}),
       },
     });
     return this.getBusiness(id);
@@ -278,12 +292,12 @@ export class PlatformService {
   }
 
   private paymentStatus(planStatus: string, trialActive: boolean, hasPending: boolean) {
-    if (hasPending) return { key: 'pending', label: 'Pago pendiente' };
+    if (planStatus === 'complimentary') return { key: 'complimentary', label: 'Cortesía · no se cobra' };
+    if (hasPending || planStatus === 'pending_payment') return { key: 'pending', label: 'Pago pendiente' };
     if (trialActive || planStatus === 'trial') return { key: 'trial', label: 'Prueba' };
     if (planStatus === 'active') return { key: 'paid', label: 'Al día' };
     if (planStatus === 'past_due') return { key: 'overdue', label: 'Pago vencido' };
     if (planStatus === 'canceled') return { key: 'canceled', label: 'Cancelado' };
-    if (planStatus === 'pending_payment') return { key: 'pending', label: 'Pago pendiente' };
     return { key: planStatus, label: planStatus };
   }
 

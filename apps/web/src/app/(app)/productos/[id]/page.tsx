@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
+import { BarcodeField } from '@/components/BarcodeField';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
 import { ImageUploader } from '@/components/ImageUploader';
 import { SerperImagePicker } from '@/components/SerperImagePicker';
@@ -323,16 +324,19 @@ export default function EditarProductoPage() {
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-fg-muted mb-1">Código de barras</label>
-              <input
-                type="text"
-                value={form.barcode}
-                onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-              />
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <BarcodeField
+              barcode={form.barcode}
+              onBarcode={(barcode) => setForm((f) => ({ ...f, barcode }))}
+              labelItem={{
+                id,
+                name: form.name || product.name,
+                barcode: form.barcode,
+                sku: product.supplierSku || '',
+                category: categories.find((c) => c.id === form.categoryId)?.name || product.category?.name || '',
+                price: parseFloat(form.price) || Number(product.price) || 0,
+              }}
+            />
             <div>
               <label className="block text-sm text-fg-muted mb-1">Categoría</label>
               <CategorySelector

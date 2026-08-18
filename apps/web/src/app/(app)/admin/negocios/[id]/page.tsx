@@ -202,6 +202,7 @@ function DetailInner() {
             <select value={planStatus} onChange={(e) => setPlanStatus(e.target.value)} className="mt-1 block rounded-lg border border-hair-soft bg-raised px-3 py-2">
               <option value="trial">Prueba</option>
               <option value="active">Activo</option>
+              <option value="complimentary">Cortesía (nunca se cobra)</option>
               <option value="pending_payment">Pago pendiente</option>
               <option value="past_due">Pago vencido</option>
               <option value="canceled">Cancelado</option>
@@ -210,6 +211,9 @@ function DetailInner() {
           <button type="submit" disabled={!!busy} className="btn-brand rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">
             Guardar
           </button>
+          {planStatus === 'complimentary' ? (
+            <p className="w-full text-xs text-fg-faint">Cortesía: el kiosco usa el plan elegido sin pagar. Se anulan comprobantes pendientes y no puede contratar solo.</p>
+          ) : null}
         </form>
       </section>
 
