@@ -35,7 +35,7 @@ const TOUR_CONFIG: Record<string, TourStep[]> = {
   ],
   '/productos': [
     { target: '[data-tour="productos-nuevo"]', label: 'Nuevo producto: crea un producto con nombre, código, precio, stock, categoría.', placement: 'bottom' },
-    { target: '[data-tour="productos-filters"]', label: 'Buscar, filtrar por categoría, stock bajo o por vencer.', placement: 'bottom' },
+    { target: '[data-tour="productos-filters"]', label: 'Buscá, filtrá por categoría, proveedor o marca, y ordená la lista.', placement: 'bottom' },
     { target: '[data-tour="productos-table"]', label: 'Lista de productos. Clic en el nombre para editar.', placement: 'top' },
   ],
   '/movimientos': [
