@@ -29,7 +29,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'MEJORA',
         title: 'Lista de productos más clara',
-        desc: 'Las categorías ya no van sueltas. Arriba están categoría, proveedor, marca y el orden. Las estadísticas quedan plegadas, fuera de los filtros. Stock bajo filtra de verdad en todo el catálogo.',
+        desc: 'El buscador, la categoría, el proveedor, la marca y el orden van juntos en un solo bloque. Las categorías ya no aparecen como chips sueltos. Las estadísticas quedan abajo, plegadas.',
       },
     ],
   },
