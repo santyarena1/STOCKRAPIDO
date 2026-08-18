@@ -1,4 +1,5 @@
 import { api, getToken } from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/env-urls';
 
 export type SerperImageHit = {
   title: string;
@@ -7,61 +8,92 @@ export type SerperImageHit = {
   source: string;
 };
 
-export function isApiRouteMissing(err: unknown) {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /^Cannot (GET|POST|PATCH|PUT|DELETE)\b/i.test(msg);
+const STORAGE_KEY = 'sr-serper-key';
+
+export function getStoredSerperKey(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(STORAGE_KEY)?.trim() || '';
+  } catch {
+    return '';
+  }
 }
 
-async function localSerper<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-  if (!res.ok) throw new Error(data.error || data.message || 'No se pudo usar Serper.');
-  return data as T;
+export function hasStoredSerperKey() {
+  return Boolean(getStoredSerperKey());
+}
+
+function writeStoredSerperKey(key: string) {
+  if (typeof window === 'undefined') return;
+  const normalized = key.trim();
+  if (normalized) localStorage.setItem(STORAGE_KEY, normalized);
+  else localStorage.removeItem(STORAGE_KEY);
 }
 
 export async function fetchLocalSerperStatus() {
-  try {
-    return await localSerper<{ hasSerperKey: boolean }>('/api/serper/key');
-  } catch {
-    return { hasSerperKey: false };
-  }
+  return { hasSerperKey: hasStoredSerperKey() };
 }
 
 export async function saveSerperKey(key: string) {
+  const normalized = key.trim();
   try {
-    return await api<{ hasSerperKey?: boolean }>('/business/serper-key', {
-      method: 'PATCH',
-      body: JSON.stringify({ key }),
-    });
-  } catch (err) {
-    if (!isApiRouteMissing(err)) throw err;
-    return localSerper<{ hasSerperKey: boolean }>('/api/serper/key', {
-      method: 'POST',
-      body: JSON.stringify({ key }),
-    });
+    writeStoredSerperKey(normalized);
+  } catch {
+    throw new Error('El navegador no dejó guardar la key. Probá sin modo privado.');
   }
+
+  const token = getToken();
+  try {
+    const url = new URL('/business/serper-key', getApiBaseUrl());
+    const res = await fetch(url.toString(), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ key: normalized }),
+    });
+    if (res.ok) {
+      const updated = (await res.json().catch(() => ({}))) as { hasSerperKey?: boolean };
+      return { ...updated, hasSerperKey: Boolean(normalized) };
+    }
+  } catch {
+    // La API de Vercel todavía no tiene esta ruta: la key queda en este dispositivo.
+  }
+  return { hasSerperKey: Boolean(normalized) };
+}
+
+async function searchViaWeb(q: string, num: number, key: string) {
+  const token = getToken();
+  const res = await fetch('/api/serper/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ q, num, key }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string; images?: SerperImageHit[] };
+  if (!res.ok) throw new Error(data.error || data.message || 'No se pudo buscar en Serper.');
+  return { images: data.images || [] };
 }
 
 export async function searchSerperImages(q: string, num = 8) {
+  const key = getStoredSerperKey();
   try {
     return await api<{ query?: string; images: SerperImageHit[] }>('/products/serper/search', {
       method: 'POST',
       body: JSON.stringify({ q, num }),
     });
   } catch (err) {
-    if (!isApiRouteMissing(err)) throw err;
-    return localSerper<{ images: SerperImageHit[] }>('/api/serper/search', {
-      method: 'POST',
-      body: JSON.stringify({ q, num }),
-    });
+    if (!key) {
+      throw err instanceof Error ? err : new Error('Cargá la API key de Serper en Configuración → Imágenes Serper.');
+    }
+    try {
+      return await searchViaWeb(q, num, key);
+    } catch (webErr) {
+      throw webErr instanceof Error ? webErr : err;
+    }
   }
 }
 
@@ -71,8 +103,7 @@ export async function assignProductImage(productId: string, imageUrl: string) {
       method: 'POST',
       body: JSON.stringify({ productId, imageUrl }),
     });
-  } catch (err) {
-    if (!isApiRouteMissing(err)) throw err;
+  } catch {
     const updated = await api<{ id: string; imageUrl?: string | null }>(`/products/${productId}`, {
       method: 'PATCH',
       body: JSON.stringify({ imageUrl: imageUrl || null }),
@@ -87,8 +118,7 @@ export async function autoAssignSerperPhotos(ids: string[], onlyMissing = true) 
       method: 'POST',
       body: JSON.stringify({ ids, onlyMissing }),
     });
-  } catch (err) {
-    if (!isApiRouteMissing(err)) throw err;
+  } catch {
     return localAutoAssign(ids, onlyMissing);
   }
 }

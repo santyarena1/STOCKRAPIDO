@@ -59,7 +59,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'FIX',
         title: 'Guardar API de Serper',
-        desc: 'Si la API del servidor todavía no tiene PATCH /business/serper-key, la key se guarda igual y las búsquedas de fotos salen por la web.',
+        desc: 'La key de Serper se guarda en este dispositivo aunque la API del servidor no tenga esa ruta. Después podés buscar fotos igual.',
       },
     ],
   },

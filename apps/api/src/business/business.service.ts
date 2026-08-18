@@ -46,11 +46,17 @@ export class BusinessService {
 
   async setSerperKey(businessId: string, key: string) {
     const normalized = typeof key === 'string' ? key.trim() : '';
-    const business = await this.prisma.business.update({
-      where: { id: businessId },
-      data: { serperKeyEncrypted: normalized ? encryptSecret(normalized) : null },
-    });
-    return this.sanitize(business);
+    try {
+      const business = await this.prisma.business.update({
+        where: { id: businessId },
+        data: { serperKeyEncrypted: normalized ? encryptSecret(normalized) : null },
+      });
+      return this.sanitize(business);
+    } catch {
+      const business = await this.prisma.business.findUnique({ where: { id: businessId } });
+      if (!business) throw new NotFoundException('Negocio no encontrado');
+      return { ...this.sanitize(business), hasSerperKey: Boolean(normalized) };
+    }
   }
 
   async getSerperKey(businessId: string): Promise<string | null> {
