@@ -3,6 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ProductBulkInput, ProductCatalogQuery, ProductsService } from './products.service';
+import { SerperService } from './serper.service';
 
 type User = { businessId: string };
 
@@ -28,7 +29,10 @@ function positiveInteger(value: string | undefined, fallback: number, field: str
 @Controller('products')
 @UseGuards(JwtAuthGuard)
 export class ProductsController {
-  constructor(private products: ProductsService) {}
+  constructor(
+    private products: ProductsService,
+    private serper: SerperService,
+  ) {}
 
   @Get('search')
   search(
@@ -119,9 +123,43 @@ export class ProductsController {
   @Post('quick')
   quick(
     @CurrentUser() user: User,
-    @Body() body: { name: string; price: number; barcode?: string },
+    @Body() body: { name: string; price: number; barcode?: string; imageUrl?: string },
   ) {
     return this.products.quick(user.businessId, body);
+  }
+
+  @Post('serper/search')
+  serperSearch(@CurrentUser() user: User, @Body() body: { q?: string; num?: number }) {
+    return this.serper.searchImages(user.businessId, body?.q || '', body?.num);
+  }
+
+  @Post('serper/assign')
+  serperAssign(@CurrentUser() user: User, @Body() body: { productId?: string; imageUrl?: string }) {
+    return this.serper.assignImage(user.businessId, body?.productId || '', body?.imageUrl || '');
+  }
+
+  @Post('serper/auto')
+  serperAuto(
+    @CurrentUser() user: User,
+    @Body() body: { ids?: string[]; onlyMissing?: boolean },
+  ) {
+    return this.serper.autoAssign(user.businessId, body?.ids || [], body?.onlyMissing !== false);
+  }
+
+  @Get('serper/editor')
+  serperEditor(
+    @CurrentUser() user: User,
+    @Query('q') q?: string,
+    @Query('missingOnly') missingOnly?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.serper.listForEditor(user.businessId, {
+      q,
+      missingOnly: missingOnly !== 'false' && missingOnly !== '0',
+      page: page ? parseInt(page, 10) : 1,
+      pageSize: pageSize ? parseInt(pageSize, 10) : 24,
+    });
   }
 
   @Get('incomplete')

@@ -108,6 +108,7 @@ const GROUPS = [
       { href: '/config/proveedores', label: 'Proveedores' },
       { href: '/config/pantalla', label: 'Pantalla cliente' },
       { href: '/config/compras-ia', label: 'Compras IA' },
+      { href: '/config/serper', label: 'Imágenes Serper' },
       { href: '/config/categorias', label: 'Categorías' },
       { href: '/config/fiscal', label: 'Fiscal' },
       { href: '/config/eliminar-datos', label: 'Eliminar datos' },

@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { SerperImagePicker } from '@/components/SerperImagePicker';
 
 type Category = { id: string; name: string };
 
@@ -26,6 +27,7 @@ export default function NuevoProductoPage() {
     stockControl: true,
     silent: false,
     expiresAt: '',
+    imageUrl: '',
   });
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function NuevoProductoPage() {
           stockControl: form.stockControl,
           silent: form.silent,
           expiresAt: form.expiresAt || undefined,
+          imageUrl: form.imageUrl || undefined,
         }),
       });
       router.push('/productos');
@@ -176,6 +179,14 @@ export default function NuevoProductoPage() {
           />
           Producto silencioso <span className="text-xs text-fg-faint">(en el ticket impreso sale con el texto configurado)</span>
         </label>
+        <div>
+          <label className="mb-2 block text-sm text-fg-muted">Imagen (Serper)</label>
+          <SerperImagePicker
+            query={[form.name, form.brand].filter(Boolean).join(' ')}
+            value={form.imageUrl}
+            onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+          />
+        </div>
         <div data-tour="nuevo-producto-guardar" className="flex gap-2 pt-4">
           <button type="submit" disabled={loading} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
             {loading ? 'Guardando...' : 'Guardar'}

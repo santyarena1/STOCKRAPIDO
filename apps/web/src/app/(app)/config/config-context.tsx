@@ -10,6 +10,7 @@ export type Business = {
   address?: string;
   currency: string;
   hasOpenaiKey?: boolean;
+  hasSerperKey?: boolean;
   posConfig?: {
     aiInvoice?: { n8nWebhookUrl?: string; publicApiUrl?: string; hasWebhookSecret?: boolean };
     branding?: { accentColor?: string; logoUrl?: string; faviconUrl?: string; ticketLogoUrl?: string; appTitle?: string; receiptName?: string; receiptTemplate?: 'clasico' | 'moderno'; linkColor?: string; primaryButtonColor?: string; focusRingColor?: string; navActiveColor?: string; selectionColor?: string; shadowTintColor?: string };

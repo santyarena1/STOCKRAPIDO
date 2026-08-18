@@ -12,6 +12,7 @@ import {
 import { FiscalReceiptModal, printFiscalReceipt } from '@/components/FiscalCheckout';
 import { Search, ShoppingCart } from 'lucide-react';
 import { Loader } from '@/components/ui/Loader';
+import { SerperImagePicker } from '@/components/SerperImagePicker';
 
 type CartItem = {
   productId: string;
@@ -222,6 +223,7 @@ export default function POSPage() {
   const [quickPrice, setQuickPrice] = useState('');
   const [quickBarcode, setQuickBarcode] = useState('');
   const [quickBusy, setQuickBusy] = useState(false);
+  const [quickImageUrl, setQuickImageUrl] = useState('');
   const [sellers, setSellers] = useState<Vendedor[]>([]);
   const [activeSeller, setActiveSeller] = useState<Vendedor | null>(null);
   const [sellerBusy, setSellerBusy] = useState(false);
@@ -771,12 +773,13 @@ export default function POSPage() {
     try {
       const product = await api<{ id: string; name: string; price: string; stock: number; stockControl: boolean; imageUrl?: string | null }>('/products/quick', {
         method: 'POST',
-        body: JSON.stringify({ name, price, barcode: quickBarcode.trim() || undefined }),
+        body: JSON.stringify({ name, price, barcode: quickBarcode.trim() || undefined, imageUrl: quickImageUrl.trim() || undefined }),
       });
       addToCart(product);
       setQuickName('');
       setQuickPrice('');
       setQuickBarcode('');
+      setQuickImageUrl('');
       setShowQuickProduct(false);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Error al crear el producto rápido');
@@ -1356,7 +1359,11 @@ export default function POSPage() {
             <p className="mb-4 mt-1 text-sm text-fg-muted">Se crea como incompleto y sin control de stock.</p>
             <label className="mb-3 block text-sm text-fg-muted">Nombre<input autoFocus type="text" value={quickName} onChange={(event) => setQuickName(event.target.value)} placeholder="Nombre del producto" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand" /></label>
             <label className="mb-3 block text-sm text-fg-muted">Precio<input type="text" inputMode="decimal" value={quickPrice} onChange={(event) => setQuickPrice(event.target.value)} placeholder="0,00" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono tabular-nums text-fg placeholder:text-fg-faint focus-brand" /></label>
-            <label className="mb-5 block text-sm text-fg-muted">SKU / código de barras <span className="text-fg-faint">(opcional)</span><input type="text" value={quickBarcode} onChange={(event) => setQuickBarcode(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createQuickProduct(); }} placeholder="Código escaneable" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg placeholder:text-fg-faint focus-brand" /></label>
+            <label className="mb-3 block text-sm text-fg-muted">SKU / código de barras <span className="text-fg-faint">(opcional)</span><input type="text" value={quickBarcode} onChange={(event) => setQuickBarcode(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createQuickProduct(); }} placeholder="Código escaneable" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg placeholder:text-fg-faint focus-brand" /></label>
+            <div className="mb-5">
+              <p className="mb-2 text-sm text-fg-muted">Imagen (Serper)</p>
+              <SerperImagePicker compact query={[quickName].filter(Boolean).join(' ')} value={quickImageUrl} onChange={setQuickImageUrl} />
+            </div>
             <div className="flex gap-2"><button type="button" disabled={quickBusy} onClick={() => setShowQuickProduct(false)} className="flex-1 rounded-lg border border-hair bg-raised py-2 text-fg-muted hover:bg-raised2 disabled:opacity-50">Cancelar</button><button type="button" disabled={quickBusy} onClick={() => void createQuickProduct()} className="btn-brand flex-1 rounded-lg py-2 font-medium disabled:opacity-50">{quickBusy ? 'Creando…' : 'Crear y agregar'}</button></div>
           </div>
         </div>
