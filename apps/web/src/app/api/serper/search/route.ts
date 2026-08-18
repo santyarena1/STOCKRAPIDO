@@ -13,15 +13,15 @@ function isAuthed(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (!isAuthed(req)) return unauthorized();
+  const body = (await req.json().catch(() => ({}))) as { q?: string; num?: number; key?: string };
   const jar = await cookies();
-  const key = jar.get(COOKIE_SERPER_KEY)?.value?.trim();
+  const key = (typeof body.key === 'string' ? body.key.trim() : '') || jar.get(COOKIE_SERPER_KEY)?.value?.trim() || '';
   if (!key) {
     return NextResponse.json(
       { error: 'Cargá la API key de Serper en Configuración → Imágenes Serper.' },
       { status: 400 },
     );
   }
-  const body = (await req.json().catch(() => ({}))) as { q?: string; num?: number };
   const query = String(body.q || '').trim();
   if (query.length < 2) {
     return NextResponse.json({ error: 'Escribí el nombre del producto para buscar fotos.' }, { status: 400 });

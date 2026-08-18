@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { fetchLocalSerperStatus, saveSerperKey } from '@/lib/serper-client';
+import { hasStoredSerperKey, saveSerperKey } from '@/lib/serper-client';
 import { Business, useConfig } from '../config-context';
 
 export default function SerperConfigPage() {
@@ -10,25 +10,19 @@ export default function SerperConfigPage() {
   const [key, setKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
-  const hasKey = Boolean(business?.hasSerperKey);
+  const [localHasKey, setLocalHasKey] = useState(false);
+  const hasKey = Boolean(business?.hasSerperKey) || localHasKey;
 
   useEffect(() => {
-    setMsg('');
-  }, [business?.hasSerperKey]);
-
-  useEffect(() => {
-    if (business?.hasSerperKey) return;
-    void fetchLocalSerperStatus().then((status) => {
-      if (!status.hasSerperKey) return;
-      setBusiness((current) => current ? { ...current, hasSerperKey: true } : current);
-    });
-  }, [business?.hasSerperKey, setBusiness]);
+    setLocalHasKey(hasStoredSerperKey());
+  }, []);
 
   const persist = async (nextKey: string, okMsg: string) => {
     setSaving(true);
     setMsg('');
     try {
       const updated = await saveSerperKey(nextKey);
+      setLocalHasKey(Boolean(updated.hasSerperKey));
       setBusiness((current) => current ? { ...current, ...updated, hasSerperKey: Boolean(updated.hasSerperKey) } as Business : current);
       setKey('');
       setMsg(okMsg);

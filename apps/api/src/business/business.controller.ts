@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BusinessService } from './business.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { SetApiKeyDto } from './dto/set-api-key.dto';
 
 type User = { businessId: string };
 
@@ -22,12 +23,12 @@ export class BusinessController {
   }
 
   @Patch('openai-key')
-  setOpenaiKey(@CurrentUser() user: User, @Body() body: { key?: string }) {
+  setOpenaiKey(@CurrentUser() user: User, @Body() body: SetApiKeyDto) {
     return this.business.setOpenaiKey(user.businessId, body?.key ?? '');
   }
 
   @Patch('serper-key')
-  setSerperKey(@CurrentUser() user: User, @Body() body: { key?: string }) {
+  setSerperKey(@CurrentUser() user: User, @Body() body: SetApiKeyDto) {
     return this.business.setSerperKey(user.businessId, body?.key ?? '');
   }
 
