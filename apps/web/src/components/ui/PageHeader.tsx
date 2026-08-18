@@ -12,15 +12,19 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        'flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between',
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <h1 className="text-2xl font-bold leading-tight text-fg">{title}</h1>
-        {subtitle ? <p className="mt-1 text-sm text-fg-muted">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-1 max-w-xl text-sm text-fg-muted">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">{actions}</div> : null}
+      {actions ? (
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto lg:max-w-[min(100%,28rem)] lg:justify-end">
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }

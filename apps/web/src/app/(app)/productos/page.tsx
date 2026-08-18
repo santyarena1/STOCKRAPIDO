@@ -457,19 +457,29 @@ export default function ProductosPage() {
     return <div className="flex items-center gap-3"><button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setQuickViewProduct(product); }} className="text-fg-muted hover:text-fg">👁️ Vista rápida</button><Link href={`/productos/${product.id}`} className="text-brand hover:underline">Editar</Link></div>;
   };
 
+  const toolBtn = 'rounded-lg border border-hair bg-raised px-3 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50';
+
   return <Container className="space-y-6">
-    <PageHeader title="Productos" subtitle={view === 'cards' ? 'Tocá un producto para editarlo' : 'Gestioná catálogo, precios, costos y niveles de stock.'} actions={<div className="flex flex-wrap items-center gap-2">
+    <PageHeader
+      title="Productos"
+      subtitle={view === 'cards' ? 'Tocá un producto para editarlo' : 'Gestioná catálogo, precios, costos y niveles de stock.'}
+      actions={
+        <>
+          <button type="button" disabled={incompleteProducts.length === 0} onClick={() => { setShowIncomplete(true); void loadIncompleteProducts(); }} className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm font-medium text-warn hover:bg-raised2 disabled:cursor-not-allowed disabled:opacity-50">Completar <span className="font-mono tabular-nums">({incompleteProducts.length})</span></button>
+          <Link href="/productos/nuevo" data-tour="productos-nuevo" className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold">Nuevo producto</Link>
+        </>
+      }
+    />
+    <div className="flex flex-wrap items-center gap-2">
       {view === 'list' && <>
-        <a href="#" role="button" onClick={(event) => handleExportStock(event)} className="inline-block cursor-pointer select-none rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg no-underline hover:bg-raised2" style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}>{exporting ? 'Exportando…' : 'Exportar stock (Excel)'}</a>
-        <button type="button" onClick={handleExportTxt} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2">Exportar lista (CSV)</button>
-        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={importing} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2 disabled:opacity-50">{importing ? 'Importando…' : 'Importar stock (Excel)'}</button>
+        <a href="#" role="button" onClick={(event) => handleExportStock(event)} className={`${toolBtn} inline-block cursor-pointer select-none no-underline`} style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}>{exporting ? 'Exportando…' : 'Exportar stock'}</a>
+        <button type="button" onClick={handleExportTxt} className={toolBtn}>Exportar CSV</button>
+        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={importing} className={toolBtn}>{importing ? 'Importando…' : 'Importar stock'}</button>
       </>}
-      <button type="button" disabled={incompleteProducts.length === 0} onClick={() => { setShowIncomplete(true); void loadIncompleteProducts(); }} className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-4 py-2 font-medium text-warn hover:bg-raised2 disabled:cursor-not-allowed disabled:opacity-50">Completar productos <span className="font-mono tabular-nums">({incompleteProducts.length})</span></button>
-      <button type="button" disabled={labelsBusy} onClick={() => void printFiltered()} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2 disabled:opacity-50">{labelsBusy ? 'Armando etiquetas…' : 'Imprimir etiquetas (filtro)'}</button>
+      <button type="button" disabled={labelsBusy} onClick={() => void printFiltered()} className={toolBtn}>{labelsBusy ? 'Armando etiquetas…' : 'Imprimir etiquetas'}</button>
+      <Link href="/productos/imagenes" className={toolBtn}>Imágenes</Link>
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportStock} />
-      <Link href="/productos/imagenes" className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2">Imágenes (Serper)</Link>
-      <Link href="/productos/nuevo" data-tour="productos-nuevo" className={`btn-brand font-semibold ${view === 'cards' ? 'rounded-xl px-6 py-3 text-base' : 'rounded-lg px-4 py-2'}`}>{view === 'cards' ? '+ Nuevo producto' : 'Nuevo producto'}</Link>
-    </div>} />
+    </div>
     {exportMsg && <p className="text-sm text-warn">{exportMsg}</p>}
     {importResult && <div className="rounded-lg border border-hair bg-raised p-3 text-sm text-fg">Importación: <strong className="font-mono">{importResult.updated}</strong> producto(s) actualizado(s). {importResult.errors.length > 0 && <span className="text-warn">Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((error) => `Fila ${error.row}: ${error.message}`).join('; ')}</span>}</div>}
 
@@ -490,7 +500,7 @@ export default function ProductosPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <FilterField label="Categoría">
             <select value={filters.categoryId} onChange={(event) => changeFilter('categoryId', event.target.value)} className={FILTER_SELECT}>
               <option value="">Todas ({total})</option>
