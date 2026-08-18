@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
+import { autoAssignSerperPhotos } from '@/lib/serper-client';
 import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, List, Printer, Search, SlidersHorizontal } from 'lucide-react';
 
 type Product = {
@@ -102,10 +103,7 @@ async function assignSerperPhotos(ids: string[]) {
   let skipped = 0;
   const chunkSize = 40;
   for (let i = 0; i < ids.length; i += chunkSize) {
-    const result = await api<{ updated: number; skipped: { reason: string }[] }>('/products/serper/auto', {
-      method: 'POST',
-      body: JSON.stringify({ ids: ids.slice(i, i + chunkSize), onlyMissing: true }),
-    });
+    const result = await autoAssignSerperPhotos(ids.slice(i, i + chunkSize), true);
     updated += result.updated;
     skipped += result.skipped.length;
   }

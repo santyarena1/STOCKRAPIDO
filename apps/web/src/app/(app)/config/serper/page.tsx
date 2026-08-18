@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { api } from '@/lib/api';
+import { fetchLocalSerperStatus, saveSerperKey } from '@/lib/serper-client';
 import { Business, useConfig } from '../config-context';
 
 export default function SerperConfigPage() {
@@ -16,17 +16,22 @@ export default function SerperConfigPage() {
     setMsg('');
   }, [business?.hasSerperKey]);
 
-  const save = async () => {
+  useEffect(() => {
+    if (business?.hasSerperKey) return;
+    void fetchLocalSerperStatus().then((status) => {
+      if (!status.hasSerperKey) return;
+      setBusiness((current) => current ? { ...current, hasSerperKey: true } : current);
+    });
+  }, [business?.hasSerperKey, setBusiness]);
+
+  const persist = async (nextKey: string, okMsg: string) => {
     setSaving(true);
     setMsg('');
     try {
-      const updated = await api<Business>('/business/serper-key', {
-        method: 'PATCH',
-        body: JSON.stringify({ key }),
-      });
-      setBusiness(updated);
+      const updated = await saveSerperKey(nextKey);
+      setBusiness((current) => current ? { ...current, ...updated, hasSerperKey: Boolean(updated.hasSerperKey) } as Business : current);
       setKey('');
-      setMsg(key.trim() ? 'API de Serper guardada.' : 'Se quitó la API de Serper.');
+      setMsg(okMsg);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo guardar.');
     } finally {
@@ -34,22 +39,14 @@ export default function SerperConfigPage() {
     }
   };
 
+  const save = async () => {
+    await persist(key, key.trim() ? 'API de Serper guardada.' : 'Se quitó la API de Serper.');
+  };
+
   const clear = async () => {
     if (!confirm('¿Quitar la API key de Serper de este negocio?')) return;
     setKey('');
-    setSaving(true);
-    try {
-      const updated = await api<Business>('/business/serper-key', {
-        method: 'PATCH',
-        body: JSON.stringify({ key: '' }),
-      });
-      setBusiness(updated);
-      setMsg('Se quitó la API de Serper.');
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'No se pudo quitar.');
-    } finally {
-      setSaving(false);
-    }
+    await persist('', 'Se quitó la API de Serper.');
   };
 
   return (
