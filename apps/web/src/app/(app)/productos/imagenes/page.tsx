@@ -81,11 +81,19 @@ export default function ProductImagesEditorPage() {
 
   const autoPage = async () => {
     if (!items.length) return;
-    if (!confirm(`¿Buscar y aplicar la primera foto de Serper a estos ${items.length} productos?`)) return;
+    const missing = items.filter((row) => !row.imageUrl?.trim());
+    const already = items.length - missing.length;
+    if (!missing.length) {
+      setMsg('Todos los de esta página ya tienen imagen. No hay nada que buscar.');
+      return;
+    }
+    if (!confirm(`${missing.length} producto${missing.length === 1 ? '' : 's'} sin imagen. ${already ? `Los ${already} que ya tienen foto se saltean. ` : ''}¿Buscamos la primera foto de Serper?`)) return;
     setAutoBusy(true);
     setMsg('');
     try {
-      const result = await autoAssignSerperPhotos(items.map((row) => row.id), missingOnly);
+      const result = await autoAssignSerperPhotos(items, true, (done, total, name) => {
+        setMsg(`Foto ${done}/${total}: ${name}`);
+      });
       setMsg(`${result.updated} imágenes aplicadas${result.skipped.length ? ` · ${result.skipped.length} omitidos` : ''}.`);
       await load();
     } catch (err) {
@@ -129,7 +137,7 @@ export default function ProductImagesEditorPage() {
           Solo sin imagen
         </label>
         <button type="button" disabled={autoBusy || !items.length} onClick={() => void autoPage()} className="btn-brand rounded-lg px-4 py-2 text-sm disabled:opacity-50">
-          {autoBusy ? 'Aplicando…' : 'Primera foto a esta página'}
+          {autoBusy ? (msg.startsWith('Foto ') ? msg : 'Aplicando…') : 'Primera foto a esta página'}
         </button>
       </div>
       {msg ? <p className="text-sm text-fg-muted">{msg}</p> : null}

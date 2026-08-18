@@ -51,7 +51,7 @@ function labelHtml(item: LabelItem, fields: LabelFields) {
   if (fields.name && item.name) bits.push(`<p class="name">${escapeHtml(item.name)}</p>`);
   if (fields.sku && item.sku) bits.push(`<p class="meta">SKU ${escapeHtml(item.sku)}</p>`);
   if (fields.category && item.category) bits.push(`<p class="meta">${escapeHtml(item.category)}</p>`);
-  if (fields.barcode && item.barcode) bits.push(`<div class="bars">${barcodeSvg(item.barcode, 1.05, 28)}</div>`);
+  if (fields.barcode && item.barcode) bits.push(`<div class="bars">${barcodeSvg(item.barcode, 1.2, 48, true)}</div>`);
   if (fields.barcodeText && item.barcode) bits.push(`<p class="code">${escapeHtml(item.barcode)}</p>`);
   if (fields.price && item.price != null && Number.isFinite(item.price)) bits.push(`<p class="price">${formatPrice(item.price)}</p>`);
   if (!item.barcode) bits.push('<p class="meta">Sin código</p>');
@@ -89,25 +89,42 @@ export function LabelPrintDialog({
   const preview = useMemo(() => items.slice(0, 6), [items]);
 
   const print = () => {
+    const COLS = 3;
+    const ROWS = 7;
+    const PER_PAGE = COLS * ROWS;
+    const pages: string[] = [];
+    for (let i = 0; i < items.length; i += PER_PAGE) {
+      const chunk = items.slice(i, i + PER_PAGE);
+      pages.push(`<section class="page"><div class="sheet">${chunk.map((item) => labelHtml(item, fields)).join('')}</div></section>`);
+    }
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas</title>
 <style>
   @page { size: A4; margin: 8mm; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #111; }
-  .sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3.5mm; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; }
+  .page { page-break-after: always; break-after: page; }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  .sheet {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(7, 36mm);
+    gap: 3mm 4mm;
+  }
   .label {
-    width: 62mm; min-height: 28mm; max-height: 32mm;
+    width: 62mm; height: 36mm; max-height: 36mm;
     border: 0.4pt dashed #bbb; padding: 2mm 2.2mm;
-    display: flex; flex-direction: column; justify-content: center;
+    display: flex; flex-direction: column; justify-content: flex-start;
+    overflow: hidden;
     break-inside: avoid; page-break-inside: avoid;
   }
   .name { font-size: 9.5pt; font-weight: 700; line-height: 1.15; margin: 0 0 1mm; }
   .meta { font-size: 7.5pt; margin: 0; color: #333; }
-  .bars { margin: 1.2mm 0 0.4mm; overflow: hidden; }
-  .bars svg { display: block; max-width: 100%; height: 26px; }
-  .code { font-size: 8pt; font-family: ui-monospace, monospace; letter-spacing: 0.04em; margin: 0; }
+  .bars { margin-top: auto; width: 100%; }
+  .bars svg { display: block; width: 100% !important; height: 12mm !important; }
+  .code { font-size: 8pt; font-family: ui-monospace, monospace; letter-spacing: 0.04em; margin: 0.4mm 0 0; }
   .price { font-size: 9pt; font-weight: 700; margin: 1mm 0 0; }
-</style></head><body><div class="sheet">${items.map((item) => labelHtml(item, fields)).join('')}</div></body></html>`;
+</style></head><body>${pages.join('')}</body></html>`;
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
@@ -122,15 +139,18 @@ export function LabelPrintDialog({
     doc.write(html);
     doc.close();
     const frameWindow = iframe.contentWindow;
+    let cleaned = false;
     const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
       iframe.remove();
     };
     frameWindow?.addEventListener('afterprint', cleanup);
     setTimeout(() => {
       frameWindow?.focus();
       frameWindow?.print();
-      setTimeout(cleanup, 1500);
     }, 250);
+    setTimeout(cleanup, 8 * 60 * 1000);
   };
 
   const toggle = (key: keyof LabelFields) => setFields((current) => ({ ...current, [key]: !current[key] }));

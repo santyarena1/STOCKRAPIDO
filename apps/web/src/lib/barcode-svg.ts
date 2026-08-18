@@ -43,7 +43,7 @@ export function isEan13(value: string): boolean {
   return code === code.slice(0, 12) + ean13CheckDigit(code.slice(0, 12));
 }
 
-function barsToSvg(pattern: string, module = 1.2, height = 36): string {
+function barsToSvg(pattern: string, module = 1.2, height = 36, stretch = false): string {
   let x = 0;
   const rects: string[] = [];
   for (const bit of pattern) {
@@ -51,10 +51,12 @@ function barsToSvg(pattern: string, module = 1.2, height = 36): string {
     x += module;
   }
   const width = pattern.length * module;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges" aria-hidden="true">${rects.join('')}</svg>`;
+  const wAttr = stretch ? '100%' : String(width);
+  const fit = stretch ? 'none' : 'xMidYMid meet';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${wAttr}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="${fit}" shape-rendering="crispEdges" aria-hidden="true">${rects.join('')}</svg>`;
 }
 
-export function ean13Svg(code: string, module = 1.15, height = 34): string {
+export function ean13Svg(code: string, module = 1.15, height = 34, stretch = false): string {
   const digits = code.replace(/\D/g, '');
   if (digits.length !== 13) return '';
   const parity = EAN_PARITY[Number(digits[0])];
@@ -66,7 +68,7 @@ export function ean13Svg(code: string, module = 1.15, height = 34): string {
   pattern += '01010';
   for (let i = 7; i < 13; i += 1) pattern += EAN_R[Number(digits[i])];
   pattern += '101';
-  return barsToSvg(pattern, module, height);
+  return barsToSvg(pattern, module, height, stretch);
 }
 
 function code128BValue(ch: string): number {
@@ -75,7 +77,7 @@ function code128BValue(ch: string): number {
   return -1;
 }
 
-export function code128Svg(text: string, module = 1.05, height = 34): string {
+export function code128Svg(text: string, module = 1.05, height = 34, stretch = false): string {
   const chars = [...text].filter((ch) => code128BValue(ch) >= 0);
   if (!chars.length) return '';
   const values = [104, ...chars.map((ch) => code128BValue(ch))];
@@ -83,12 +85,12 @@ export function code128Svg(text: string, module = 1.05, height = 34): string {
   for (let i = 1; i < values.length; i += 1) checksum += values[i] * i;
   values.push(checksum % 103, 106);
   const pattern = values.map((v) => C128_PATTERNS[v]).join('');
-  return barsToSvg(pattern, module, height);
+  return barsToSvg(pattern, module, height, stretch);
 }
 
-export function barcodeSvg(code: string, module?: number, height?: number): string {
+export function barcodeSvg(code: string, module?: number, height?: number, stretch = false): string {
   const trimmed = code.trim();
   if (!trimmed) return '';
-  if (isEan13(trimmed)) return ean13Svg(trimmed, module, height);
-  return code128Svg(trimmed, module, height);
+  if (isEan13(trimmed)) return ean13Svg(trimmed, module, height, stretch);
+  return code128Svg(trimmed, module, height, stretch);
 }

@@ -9,8 +9,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
-import { autoAssignSerperPhotos } from '@/lib/serper-client';
-import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, List, Printer, Search, SlidersHorizontal } from 'lucide-react';
+import { autoAssignSerperPhotos, type PhotoProduct } from '@/lib/serper-client';
+import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, ImageIcon, List, Printer, Search, SlidersHorizontal } from 'lucide-react';
 
 type Product = {
   id: string; name: string; barcode?: string | null; price: string | number; cost?: string | number | null;
@@ -98,16 +98,12 @@ function toLabelItem(product: Product): LabelItem {
   };
 }
 
-async function assignSerperPhotos(ids: string[]) {
-  let updated = 0;
-  let skipped = 0;
-  const chunkSize = 40;
-  for (let i = 0; i < ids.length; i += chunkSize) {
-    const result = await autoAssignSerperPhotos(ids.slice(i, i + chunkSize), true);
-    updated += result.updated;
-    skipped += result.skipped.length;
-  }
-  return { updated, skipped };
+function toPhotoProduct(product: Product): PhotoProduct {
+  return { id: product.id, name: product.name, brand: product.brand, imageUrl: product.imageUrl };
+}
+
+function productHasPhoto(product: { imageUrl?: string | null }) {
+  return Boolean(product.imageUrl?.trim());
 }
 
 export default function ProductosPage() {
@@ -154,6 +150,8 @@ export default function ProductosPage() {
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [labelItems, setLabelItems] = useState<LabelItem[] | null>(null);
   const [labelsBusy, setLabelsBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
 
@@ -432,6 +430,71 @@ export default function ProductosPage() {
     }
   };
 
+  const loadPhotoProducts = async (ids: string[]) => {
+    const unique = [...new Set(ids.filter(Boolean))];
+    const byId = new Map(products.map((product) => [product.id, toPhotoProduct(product)]));
+    const unknown = unique.filter((id) => !byId.has(id));
+    if (unknown.length) {
+      const need = new Set(unknown);
+      try {
+        let pageNum = 1;
+        let pages = 1;
+        do {
+          const result = await api<{ items: Product[]; totalPages: number }>('/products/catalog', {
+            params: { ...catalogParams(), page: String(pageNum), pageSize: '200' },
+          });
+          pages = result.totalPages || 1;
+          for (const item of result.items) {
+            if (need.has(item.id)) {
+              byId.set(item.id, toPhotoProduct(item));
+              need.delete(item.id);
+            }
+          }
+          pageNum += 1;
+        } while (need.size && pageNum <= pages);
+      } catch {
+        // Usamos los que ya están cargados en pantalla.
+      }
+    }
+    return unique.map((id) => byId.get(id)).filter((item): item is PhotoProduct => Boolean(item));
+  };
+
+  const applyFirstPhotos = async () => {
+    if (photoBusy) return;
+    const fromSelection = selected.size > 0;
+    const candidates = fromSelection ? await loadPhotoProducts([...selected]) : products.map(toPhotoProduct);
+    if (!candidates.length) {
+      alert('No hay productos para buscar fotos.');
+      return;
+    }
+    const missing = candidates.filter((item) => !productHasPhoto(item));
+    const already = candidates.length - missing.length;
+    if (!missing.length) {
+      alert('Todos ya tienen imagen. No hay nada que buscar.');
+      return;
+    }
+    const scope = fromSelection ? 'seleccionados' : 'de esta página';
+    if (!confirm(`${missing.length} producto${missing.length === 1 ? '' : 's'} ${scope} sin imagen.${already ? ` Los ${already} que ya tienen foto se saltean.` : ''} ¿Buscamos la primera foto de Serper?`)) {
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoProgress('Buscando fotos…');
+    setBulkMessage(null);
+    try {
+      const result = await autoAssignSerperPhotos(candidates, true, (done, total, name) => {
+        setPhotoProgress(`Foto ${done}/${total}: ${name}`);
+      });
+      setBulkMessage(`${result.updated} imágenes aplicadas${result.skipped.length ? ` · ${result.skipped.length} omitidos` : ''}.`);
+      setPhotoProgress(null);
+      await fetchProducts();
+    } catch (error) {
+      setPhotoProgress(null);
+      alert(error instanceof Error ? error.message : 'Error al buscar imágenes');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   const exportSelected = async () => {
     if (!selected.size) return;
     setBulkMenuOpen(false);
@@ -519,11 +582,17 @@ export default function ProductosPage() {
         <button type="button" onClick={() => fileInputRef.current?.click()} disabled={importing} className={toolBtn}>{importing ? 'Importando…' : 'Importar stock'}</button>
       </>}
       <button type="button" disabled={labelsBusy} onClick={() => void printFiltered()} className={`inline-flex items-center gap-1.5 ${toolBtn}`}>{labelsBusy ? 'Armando etiquetas…' : selected.size > 0 ? `Imprimir etiquetas (${selected.size})` : 'Imprimir etiquetas'}</button>
+      <button type="button" disabled={photoBusy} onClick={() => void applyFirstPhotos()} className={`inline-flex items-center gap-1.5 ${toolBtn}`}>
+        <ImageIcon className="h-4 w-4" />
+        {photoBusy ? 'Buscando…' : selected.size > 0 ? `Primera foto (${selected.size})` : 'Primera foto'}
+      </button>
       <Link href="/productos/imagenes" className={toolBtn}>Imágenes</Link>
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportStock} />
     </div>
     {exportMsg && <p className="text-sm text-warn">{exportMsg}</p>}
     {importResult && <div className="rounded-lg border border-hair bg-raised p-3 text-sm text-fg">Importación: <strong className="font-mono">{importResult.updated}</strong> producto(s) actualizado(s). {importResult.errors.length > 0 && <span className="text-warn">Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((error) => `Fila ${error.row}: ${error.message}`).join('; ')}</span>}</div>}
+    {photoProgress && <p className="text-sm text-fg-muted">{photoProgress}</p>}
+    {bulkMessage && <div className="rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-4 py-3 text-sm text-ok">{bulkMessage}</div>}
 
     <section data-tour="productos-filters" className="space-y-3 rounded-xl border border-hair-soft bg-surface p-3 sm:p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -676,8 +745,7 @@ export default function ProductosPage() {
       {showColumns && <div className="grid gap-2 rounded-lg border border-hair bg-raised p-3 sm:grid-cols-2 lg:grid-cols-3">{columns.map((column, index) => <div key={column.key} className="flex items-center gap-2"><input type="checkbox" checked={column.visible} onChange={(event) => setColumns((current) => current.map((item) => item.key === column.key ? { ...item, visible: event.target.checked } : item))} /><span className="min-w-0 flex-1 text-sm text-fg-muted">{column.label}</span><button type="button" onClick={() => moveColumn(index, -1)} className="text-fg-faint">↑</button><button type="button" onClick={() => moveColumn(index, 1)} className="text-fg-faint">↓</button></div>)}</div>}
     </section>
 
-    {selected.size > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><div className="flex items-center gap-3"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button type="button" onClick={() => setSelected(new Set())} className="text-sm text-fg-muted hover:text-fg">Limpiar</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="text-sm text-fg-muted hover:text-fg disabled:opacity-50">Seleccionar todos los de esta búsqueda</button><button type="button" onClick={() => { if (!confirm(`¿Buscar en Serper la primera foto para ${selected.size} productos sin imagen?`)) return; void (async () => { try { const result = await assignSerperPhotos([...selected]); setBulkMessage(`${result.updated} imágenes aplicadas${result.skipped ? ` · ${result.skipped} omitidos` : ''}`); setSelected(new Set()); setBulkMenuOpen(false); await fetchProducts(); } catch (error) { alert(error instanceof Error ? error.message : 'Error al buscar imágenes'); } })(); }} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg">Fotos Serper</button><button type="button" disabled={labelsBusy} onClick={() => void openLabels([...selected])} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">Imprimir etiquetas</button></div><div ref={bulkMenuRef} className="relative"><button type="button" onClick={() => setBulkMenuOpen((current) => !current)} aria-expanded={bulkMenuOpen} className="btn-brand flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold">Acciones rápidas <ChevronDown className={`h-4 w-4 transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} /></button>{bulkMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-hair bg-surface p-2 shadow-2xl"><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Estado</p><button type="button" onClick={() => void runBulk('setActive', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Habilitar</button><button type="button" onClick={() => void runBulk('setActive', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Deshabilitar</button><button type="button" onClick={() => void runBulk('setSilent', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Marcar como silencioso</button><button type="button" onClick={() => void runBulk('setSilent', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Quitar silencioso</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Catálogo</p><button type="button" onClick={() => openBulkDialog({ action: 'setCategory', title: 'Cambiar categoría', label: 'Nueva categoría', kind: 'category' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar categoría</button><button type="button" onClick={() => openBulkDialog({ action: 'setBrand', title: 'Cambiar marca', label: 'Nueva marca', kind: 'text' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar marca</button><button type="button" onClick={() => openBulkDialog({ action: 'setIva', title: 'Cambiar IVA', label: 'IVA (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar IVA</button><button type="button" onClick={() => void exportSelected()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Exportar seleccionados</button><button type="button" disabled={labelsBusy} onClick={() => { setBulkMenuOpen(false); void openLabels([...selected]); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised disabled:opacity-50">Imprimir etiquetas</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Precio</p><button type="button" onClick={() => openBulkDialog({ action: 'applyMarkup', title: 'Aplicar rentabilidad', label: 'Rentabilidad / markup (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Aplicar rentabilidad %</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustPrice', title: 'Ajustar precio', label: 'Porcentaje (usá negativo para bajar)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar precio ±%</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Inventario</p><button type="button" onClick={() => openBulkDialog({ action: 'setStock', title: 'Fijar stock', label: 'Cantidad final', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Fijar stock</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustStock', title: 'Ajustar stock', label: 'Cantidad a sumar o restar', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar stock ±</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Admin</p><button type="button" onClick={() => confirm('¿Dejar de sincronizar los productos seleccionados?') && void runBulk('stopSync')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Dejar de sincronizar</button><button type="button" onClick={() => confirm('¿Eliminar definitivamente los productos seleccionados?') && void runBulk('delete')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>}</div></div>}
-    {bulkMessage && <div className="rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-4 py-3 text-sm text-ok">{bulkMessage}</div>}
+    {selected.size > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><div className="flex items-center gap-3"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button type="button" onClick={() => setSelected(new Set())} className="text-sm text-fg-muted hover:text-fg">Limpiar</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="text-sm text-fg-muted hover:text-fg disabled:opacity-50">Seleccionar todos los de esta búsqueda</button><button type="button" disabled={photoBusy} onClick={() => void applyFirstPhotos()} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">{photoBusy ? (photoProgress || 'Buscando…') : 'Primera foto'}</button><button type="button" disabled={labelsBusy} onClick={() => void openLabels([...selected])} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">Imprimir etiquetas</button></div><div ref={bulkMenuRef} className="relative"><button type="button" onClick={() => setBulkMenuOpen((current) => !current)} aria-expanded={bulkMenuOpen} className="btn-brand flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold">Acciones rápidas <ChevronDown className={`h-4 w-4 transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} /></button>{bulkMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-hair bg-surface p-2 shadow-2xl"><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Estado</p><button type="button" onClick={() => void runBulk('setActive', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Habilitar</button><button type="button" onClick={() => void runBulk('setActive', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Deshabilitar</button><button type="button" onClick={() => void runBulk('setSilent', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Marcar como silencioso</button><button type="button" onClick={() => void runBulk('setSilent', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Quitar silencioso</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Catálogo</p><button type="button" onClick={() => openBulkDialog({ action: 'setCategory', title: 'Cambiar categoría', label: 'Nueva categoría', kind: 'category' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar categoría</button><button type="button" onClick={() => openBulkDialog({ action: 'setBrand', title: 'Cambiar marca', label: 'Nueva marca', kind: 'text' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar marca</button><button type="button" onClick={() => openBulkDialog({ action: 'setIva', title: 'Cambiar IVA', label: 'IVA (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar IVA</button><button type="button" onClick={() => void exportSelected()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Exportar seleccionados</button><button type="button" disabled={labelsBusy} onClick={() => { setBulkMenuOpen(false); void openLabels([...selected]); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised disabled:opacity-50">Imprimir etiquetas</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Precio</p><button type="button" onClick={() => openBulkDialog({ action: 'applyMarkup', title: 'Aplicar rentabilidad', label: 'Rentabilidad / markup (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Aplicar rentabilidad %</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustPrice', title: 'Ajustar precio', label: 'Porcentaje (usá negativo para bajar)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar precio ±%</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Inventario</p><button type="button" onClick={() => openBulkDialog({ action: 'setStock', title: 'Fijar stock', label: 'Cantidad final', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Fijar stock</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustStock', title: 'Ajustar stock', label: 'Cantidad a sumar o restar', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar stock ±</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Admin</p><button type="button" onClick={() => confirm('¿Dejar de sincronizar los productos seleccionados?') && void runBulk('stopSync')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Dejar de sincronizar</button><button type="button" onClick={() => confirm('¿Eliminar definitivamente los productos seleccionados?') && void runBulk('delete')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>}</div></div>}
 
     <div data-tour="productos-table"><div className="hidden overflow-x-auto rounded-xl border border-hair-soft bg-surface md:block"><table className="w-full text-sm"><thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3"><input type="checkbox" checked={products.length > 0 && products.every((product) => selected.has(product.id))} onChange={(event) => setSelected(event.target.checked ? new Set(products.map((product) => product.id)) : new Set())} /></th>{visibleColumns.map((column) => <th key={column.key} className="whitespace-nowrap p-3 text-left">{SORTABLE[column.key] ? <button type="button" onClick={() => changeSort(SORTABLE[column.key]!)} className="hover:text-fg">{column.label}{sort === SORTABLE[column.key] ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}</button> : column.label}</th>)}</tr></thead><tbody className="divide-y divide-hair-soft">{products.map((product) => <tr key={product.id} className="hover:bg-raised/70"><td className="p-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></td>{visibleColumns.map((column) => <td key={column.key} className={`whitespace-nowrap p-3 ${['cost', 'price', 'margin', 'stock', 'minStock'].includes(column.key) ? 'text-right font-mono tabular-nums' : ''}`}>{renderCell(product, column.key)}</td>)}</tr>)}{!loading && products.length === 0 && <tr><td colSpan={visibleColumns.length + 1} className="p-10 text-center text-fg-faint">No hay productos para estos filtros.</td></tr>}</tbody></table></div><div className="space-y-3 md:hidden">{products.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); return <article key={product.id} className="rounded-xl border border-hair-soft bg-surface p-3"><div className="flex items-start gap-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} className="mt-3 shrink-0" />{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-hair-soft bg-white object-contain" /> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair-soft bg-raised2 text-sm font-semibold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}<div className="min-w-0 flex-1"><span className="flex items-center gap-1.5"><Link href={`/productos/${product.id}`} className="truncate text-[14.5px] font-semibold leading-tight text-fg">{product.name}</Link>{product.silent && <span title="Producto silencioso" className="shrink-0 rounded border border-[color:var(--brand-accent)] bg-brand-highlight px-1 text-[9px] font-bold uppercase leading-4 text-brand">PS</span>}</span><p className="mt-1 truncate font-mono text-[10.5px] text-fg-faint">{product.barcode || 'Sin código'}{product.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 ? ` · bulto ×${product.unitsPerBoxNum}` : ''}</p></div><div className="shrink-0 text-right"><p className="font-mono text-base font-bold tabular-nums text-brand">{formatMoneyArs(Number(product.price))}</p><p className="font-mono text-[10.5px] tabular-nums text-fg-faint">{product.cost == null ? 'sin costo' : `costo ${formatMoneyArs(Number(product.cost))}`}</p></div></div><div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-hair-soft pt-3"><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Stock</span><span className={`mt-1 inline-flex rounded-md border px-2 py-0.5 font-mono text-xs tabular-nums ${product.stock <= product.minStock ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{product.stock}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Categoría</span><span className="mt-1 block truncate text-sm text-fg-muted">{product.category?.name || '—'}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Origen</span>{product.sourceProvider ? <span className="mt-1 inline-flex rounded-md border border-hair bg-raised2 px-2 py-0.5 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="mt-1 block text-sm text-fg-faint">—</span>}</div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">{product.incomplete ? 'Estado' : 'Vencimiento'}</span>{product.incomplete ? <span className="mt-1 inline-flex rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-0.5 text-xs text-warn">Incompleto</span> : <span className={`mt-1 block font-mono text-xs tabular-nums ${expiryDays != null && expiryDays <= 30 ? 'text-crit' : 'text-fg-muted'}`}>{product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : '—'}</span>}</div></div><div className="mt-3 flex justify-end gap-3 border-t border-hair-soft pt-3"><button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setQuickViewProduct(product); }} className="text-sm font-medium text-fg-muted">👁️ Vista rápida</button><button type="button" onClick={() => void openLabels([product.id])} className="text-sm font-medium text-fg-muted">Etiqueta</button><Link href={`/productos/${product.id}`} className="text-sm font-medium text-brand">Editar</Link></div></article>; })}{!loading && products.length === 0 && <p className="rounded-xl border border-hair-soft bg-surface p-6 text-center text-fg-faint">No hay productos para estos filtros.</p>}</div>{loading && <Loader />}</div>
 

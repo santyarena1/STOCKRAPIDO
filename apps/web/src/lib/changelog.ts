@@ -61,6 +61,16 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Guardar API de Serper',
         desc: 'La key de Serper se guarda en este dispositivo aunque la API del servidor no tenga esa ruta. Después podés buscar fotos igual.',
       },
+      {
+        tag: 'FIX',
+        title: 'Fotos masivas solo si falta imagen',
+        desc: 'El botón Primera foto pone la primera coincidencia de Serper y saltea los productos que ya tienen foto. Muestra el progreso (Foto 3/40) y, si no hay selección, usa la página actual.',
+      },
+      {
+        tag: 'FIX',
+        title: 'Etiquetas A4 completas',
+        desc: 'Al imprimir ya no se cortan páginas. El código de barras ocupa todo el ancho de la etiqueta.',
+      },
     ],
   },
   {
