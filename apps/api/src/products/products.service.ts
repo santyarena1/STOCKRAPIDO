@@ -20,6 +20,7 @@ export type ProductCatalogQuery = {
   stockControl?: boolean;
   status: 'active' | 'inactive' | 'all';
   hasStock?: boolean;
+  lowStock?: boolean;
   sort: 'name' | 'price' | 'cost' | 'stock' | 'updatedAt' | 'brand' | 'category';
   dir: 'asc' | 'desc';
   page: number;
@@ -619,6 +620,12 @@ export class ProductsService {
           { categoryId: null },
           { categoryId: { notIn: query.excludeCategoryIds } },
         ],
+      });
+    }
+    if (query.lowStock) {
+      and.push({
+        stockControl: true,
+        stock: { lte: this.prisma.product.fields.minStock },
       });
     }
     const where: Record<string, unknown> = {

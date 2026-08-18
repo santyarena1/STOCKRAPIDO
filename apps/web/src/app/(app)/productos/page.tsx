@@ -8,7 +8,7 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { usePersistedState } from '@/lib/use-persisted-state';
-import { ChevronDown, Grid2X2, List, Search } from 'lucide-react';
+import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, List, Search, SlidersHorizontal } from 'lucide-react';
 
 type Product = {
   id: string; name: string; barcode?: string | null; price: string | number; cost?: string | number | null;
@@ -36,7 +36,7 @@ type StockSummary = {
   expiringByProduct: { name: string; expiresAt: string; qtyExpiring: number }[];
   expiringBatches: { id: string; productId: string; productName: string; qty: number; expiresAt: string; unitCost: number }[];
 };
-type Filters = { q: string; categoryId: string; brand: string; provider: string; type: string; status: 'active' | 'inactive' | 'all'; hasStock: boolean; stockControl: boolean };
+type Filters = { q: string; categoryId: string; brand: string; provider: string; type: string; status: 'active' | 'inactive' | 'all'; hasStock: boolean; stockControl: boolean; lowStock: boolean };
 type SortKey = 'name' | 'price' | 'cost' | 'stock' | 'updatedAt' | 'brand' | 'category';
 type ColumnKey = 'image' | 'name' | 'origin' | 'sku' | 'category' | 'brand' | 'type' | 'cost' | 'price' | 'margin' | 'stock' | 'minStock' | 'expiresAt' | 'stockControl' | 'actions';
 type ColumnSetting = { key: ColumnKey; label: string; visible: boolean };
@@ -44,7 +44,7 @@ type SavedView = { id: string; name: string; filters: Filters; columns: ColumnSe
 type BulkAction = 'setPrice' | 'applyMarkup' | 'adjustPrice' | 'setCategory' | 'setBrand' | 'setIva' | 'setStock' | 'adjustStock' | 'setStockControl' | 'setActive' | 'setSilent' | 'stopSync' | 'delete';
 type BulkDialog = { action: BulkAction; title: string; label: string; kind: 'number' | 'text' | 'category'; value: string };
 
-const EMPTY_FILTERS: Filters = { q: '', categoryId: '', brand: '', provider: '', type: '', status: 'active', hasStock: false, stockControl: false };
+const EMPTY_FILTERS: Filters = { q: '', categoryId: '', brand: '', provider: '', type: '', status: 'active', hasStock: false, stockControl: false, lowStock: false };
 const DEFAULT_COLUMNS: ColumnSetting[] = [
   { key: 'image', label: 'Imagen', visible: true }, { key: 'name', label: 'Nombre', visible: true },
   { key: 'origin', label: 'Origen', visible: true }, { key: 'sku', label: 'SKU', visible: true },
@@ -57,9 +57,32 @@ const DEFAULT_COLUMNS: ColumnSetting[] = [
 ];
 const STOCK_COLUMNS = new Set<ColumnKey>(['stock', 'minStock', 'expiresAt', 'stockControl']);
 const SORTABLE: Partial<Record<ColumnKey, SortKey>> = { name: 'name', price: 'price', cost: 'cost', stock: 'stock', brand: 'brand', category: 'category' };
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Nombre' },
+  { key: 'price', label: 'Precio' },
+  { key: 'stock', label: 'Stock' },
+  { key: 'brand', label: 'Marca' },
+  { key: 'category', label: 'Categoría' },
+  { key: 'cost', label: 'Costo' },
+  { key: 'updatedAt', label: 'Actualizado' },
+];
+const FILTER_SELECT = 'mt-1.5 h-11 w-full rounded-xl border border-hair bg-raised px-3 text-sm text-fg';
 
 function formatMoneyArs(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
+}
+
+function alpha<T>(items: T[], name: (item: T) => string) {
+  return [...items].sort((a, b) => name(a).localeCompare(name(b), 'es', { sensitivity: 'base' }));
+}
+
+function FilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="min-w-[10rem] flex-1 text-xs font-medium text-fg-muted">
+      {label}
+      {children}
+    </label>
+  );
 }
 
 export default function ProductosPage() {
@@ -72,8 +95,8 @@ export default function ProductosPage() {
   const [searchInput, setSearchInput] = useState('');
   const [mode, setMode] = useState<'catalog' | 'stock'>('catalog');
   const [view, setView] = useState<'cards' | 'list'>('cards');
-  const [showCardFilters, setShowCardFilters] = useState(false);
-  const [cardsLowStock, setCardsLowStock] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [columns, setColumns] = useState<ColumnSetting[]>(DEFAULT_COLUMNS);
   const [showColumns, setShowColumns] = useState(false);
   const [views, setViews] = useState<SavedView[]>([]);
@@ -122,6 +145,10 @@ export default function ProductosPage() {
       if (savedMode === 'stock' || savedMode === 'catalog') setMode(savedMode);
       const savedView = localStorage.getItem('sr-prod-view');
       if (savedView === 'cards' || savedView === 'list') setView(savedView);
+      const savedSort = localStorage.getItem('sr-prod-sort');
+      if (savedSort && SORT_OPTIONS.some((option) => option.key === savedSort)) setSort(savedSort as SortKey);
+      const savedDir = localStorage.getItem('sr-prod-dir');
+      if (savedDir === 'asc' || savedDir === 'desc') setDir(savedDir);
       const savedColumns = JSON.parse(localStorage.getItem('sr-prod-columns') || 'null');
       if (Array.isArray(savedColumns)) setColumns(savedColumns);
       const savedViews = JSON.parse(localStorage.getItem('sr-prod-views') || '[]');
@@ -134,6 +161,8 @@ export default function ProductosPage() {
   }, []);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-mode', mode); }, [hydrated, mode]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-view', view); }, [hydrated, view]);
+  useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-sort', sort); }, [hydrated, sort]);
+  useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-dir', dir); }, [hydrated, dir]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-columns', JSON.stringify(columns)); }, [hydrated, columns]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-views', JSON.stringify(views)); }, [hydrated, views]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-hide-cats-on', String(hideCategories)); }, [hydrated, hideCategories]);
@@ -151,6 +180,7 @@ export default function ProductosPage() {
           provider: filters.provider || undefined, type: filters.type || undefined, status: filters.status,
           excludeCategoryIds: hideCategories && hiddenCategoryIds.length ? hiddenCategoryIds.join(',') : undefined,
           hasStock: filters.hasStock ? 'true' : undefined, stockControl: filters.stockControl ? 'true' : undefined,
+          lowStock: filters.lowStock ? 'true' : undefined,
           sort, dir, page: String(page), pageSize: String(pageSize),
         },
       });
@@ -177,7 +207,6 @@ export default function ProductosPage() {
   useEffect(() => { setPage(1); setSelected(new Set()); }, [filters, sort, dir, pageSize]);
 
   const filtered = products;
-  const cardProducts = cardsLowStock ? products.filter((product) => product.stock <= product.minStock) : products;
   const now = new Date();
   const visibleColumns = columns.filter((column) => column.visible && (mode === 'stock' || !STOCK_COLUMNS.has(column.key)));
   const daysUntilExpiry = (value?: string | null) => value ? Math.ceil((new Date(value).getTime() - now.getTime()) / 86400000) : null;
@@ -233,6 +262,17 @@ export default function ProductosPage() {
   };
 
   const changeFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => setFilters((current) => ({ ...current, [key]: value }));
+  const clearFilters = () => { setFilters(EMPTY_FILTERS); setSearchInput(''); };
+  const categories = alpha(facets.categories, (item) => item.name);
+  const providers = alpha(facets.providers, (item) => item.label);
+  const brands = alpha(facets.brands, (item) => item.value);
+  const types = alpha(facets.types, (item) => item.value);
+  const selectedCategory = categories.find((item) => item.id === filters.categoryId);
+  const selectedProvider = providers.find((item) => item.value === filters.provider);
+  const hasActiveFilters = Boolean(
+    filters.q || filters.categoryId || filters.brand || filters.provider || filters.type
+    || filters.hasStock || filters.stockControl || filters.lowStock || filters.status !== 'active',
+  );
   const saveHiddenCategories = async () => {
     setSavingHiddenCategories(true);
     try {
@@ -255,7 +295,7 @@ export default function ProductosPage() {
     const name = prompt('Nombre de la vista:')?.trim(); if (!name) return;
     setViews((current) => [...current, { id: `${Date.now()}`, name, filters, columns, mode, sort, dir }]);
   };
-  const applyView = (id: string) => { const view = views.find((item) => item.id === id); if (!view) return; setFilters(view.filters); setSearchInput(view.filters.q); setColumns(view.columns); setMode(view.mode); setSort(view.sort); setDir(view.dir); };
+  const applyView = (id: string) => { const view = views.find((item) => item.id === id); if (!view) return; setFilters({ ...EMPTY_FILTERS, ...view.filters }); setSearchInput(view.filters.q); setColumns(view.columns); setMode(view.mode); setSort(view.sort); setDir(view.dir); };
 
   const runBulk = async (action: BulkAction, value?: unknown) => {
     if (selected.size === 0) return;
@@ -346,44 +386,189 @@ export default function ProductosPage() {
         <a href="#" role="button" onClick={(event) => handleExportStock(event)} className="inline-block cursor-pointer select-none rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg no-underline hover:bg-raised2" style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}>{exporting ? 'Exportando…' : 'Exportar stock (Excel)'}</a>
         <button type="button" onClick={handleExportTxt} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2">Exportar lista (CSV)</button>
         <button type="button" onClick={() => fileInputRef.current?.click()} disabled={importing} className="rounded-lg border border-hair bg-raised px-4 py-2 font-medium text-fg hover:bg-raised2 disabled:opacity-50">{importing ? 'Importando…' : 'Importar stock (Excel)'}</button>
-        <button type="button" disabled={incompleteProducts.length === 0} onClick={() => { setShowIncomplete(true); void loadIncompleteProducts(); }} className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-4 py-2 font-medium text-warn hover:bg-raised2 disabled:cursor-not-allowed disabled:opacity-50">Completar productos <span className="font-mono tabular-nums">({incompleteProducts.length})</span></button>
       </>}
+      <button type="button" disabled={incompleteProducts.length === 0} onClick={() => { setShowIncomplete(true); void loadIncompleteProducts(); }} className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-4 py-2 font-medium text-warn hover:bg-raised2 disabled:cursor-not-allowed disabled:opacity-50">Completar productos <span className="font-mono tabular-nums">({incompleteProducts.length})</span></button>
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportStock} />
       <Link href="/productos/nuevo" data-tour="productos-nuevo" className={`btn-brand font-semibold ${view === 'cards' ? 'rounded-xl px-6 py-3 text-base' : 'rounded-lg px-4 py-2'}`}>{view === 'cards' ? '+ Nuevo producto' : 'Nuevo producto'}</Link>
     </div>} />
     {exportMsg && <p className="text-sm text-warn">{exportMsg}</p>}
     {importResult && <div className="rounded-lg border border-hair bg-raised p-3 text-sm text-fg">Importación: <strong className="font-mono">{importResult.updated}</strong> producto(s) actualizado(s). {importResult.errors.length > 0 && <span className="text-warn">Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((error) => `Fila ${error.row}: ${error.message}`).join('; ')}</span>}</div>}
 
-    <section data-tour="productos-filters" className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-fg-faint" />
-            <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Buscar un producto…" className="h-16 w-full rounded-2xl border-2 border-hair bg-surface pl-14 pr-5 text-lg text-fg shadow-sm outline-none placeholder:text-fg-faint focus:border-[color:var(--brand-accent)]" />
-          </div>
-          <div className="inline-flex self-end rounded-xl border border-hair bg-surface p-1 shadow-sm sm:self-auto" aria-label="Vista de productos">
-            <button type="button" onClick={() => setView('cards')} className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm ${view === 'cards' ? 'bg-raised2 font-semibold text-fg' : 'text-fg-muted hover:bg-raised'}`}><Grid2X2 className="h-4 w-4" />Tarjetas</button>
-            <button type="button" onClick={() => setView('list')} className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm ${view === 'list' ? 'bg-raised2 font-semibold text-fg' : 'text-fg-muted hover:bg-raised'}`}><List className="h-4 w-4" />Lista</button>
+    <section data-tour="productos-filters" className="space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-fg-faint" />
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Buscar por nombre, código, marca o SKU…"
+            className="h-12 w-full rounded-xl border border-hair bg-surface pl-12 pr-4 text-base text-fg shadow-sm outline-none placeholder:text-fg-faint focus:border-[color:var(--brand-accent)]"
+          />
+        </div>
+        <div className="inline-flex self-end rounded-xl border border-hair bg-surface p-1 sm:self-auto" aria-label="Vista de productos">
+          <button type="button" onClick={() => setView('cards')} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${view === 'cards' ? 'bg-raised2 font-semibold text-fg' : 'text-fg-muted hover:bg-raised'}`}><Grid2X2 className="h-4 w-4" />Tarjetas</button>
+          <button type="button" onClick={() => setView('list')} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${view === 'list' ? 'bg-raised2 font-semibold text-fg' : 'text-fg-muted hover:bg-raised'}`}><List className="h-4 w-4" />Lista</button>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-hair-soft bg-surface p-3 sm:p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <FilterField label="Categoría">
+            <select value={filters.categoryId} onChange={(event) => changeFilter('categoryId', event.target.value)} className={FILTER_SELECT}>
+              <option value="">Todas ({total})</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name} ({category.count})</option>)}
+            </select>
+          </FilterField>
+          <FilterField label="Proveedor">
+            <select value={filters.provider} onChange={(event) => changeFilter('provider', event.target.value)} className={FILTER_SELECT}>
+              <option value="">Todos</option>
+              {providers.map((item) => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}
+            </select>
+          </FilterField>
+          <FilterField label="Marca">
+            <select value={filters.brand} onChange={(event) => changeFilter('brand', event.target.value)} className={FILTER_SELECT}>
+              <option value="">Todas</option>
+              {brands.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}
+            </select>
+          </FilterField>
+          <div className="min-w-[10rem] flex-1">
+            <p className="text-xs font-medium text-fg-muted">Ordenar</p>
+            <div className="mt-1.5 flex gap-2">
+              <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} className={`${FILTER_SELECT} mt-0`}>
+                {SORT_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={() => setDir((current) => current === 'asc' ? 'desc' : 'asc')}
+                title={dir === 'asc' ? 'Ascendente' : 'Descendente'}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-hair bg-raised text-fg-muted hover:bg-raised2 hover:text-fg"
+              >
+                {dir === 'asc' ? <ArrowDownAZ className="h-4 w-4" /> : <ArrowUpAZ className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         </div>
-        <div data-tour="productos-stock-summary" className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => { changeFilter('categoryId', ''); setCardsLowStock(false); }} className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${!filters.categoryId && !cardsLowStock ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-brand' : 'border-hair bg-surface text-fg-muted hover:bg-raised'}`}>Todas <span className="font-mono tabular-nums">({total})</span></button>
-          {facets.categories.map((category) => <button key={category.id} type="button" onClick={() => { changeFilter('categoryId', category.id); setCardsLowStock(false); }} className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${filters.categoryId === category.id && !cardsLowStock ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-brand' : 'border-hair bg-surface text-fg-muted hover:bg-raised'}`}>{category.name} <span className="font-mono tabular-nums">({category.count})</span></button>)}
-          <button type="button" onClick={() => { setCardsLowStock((current) => !current); changeFilter('categoryId', ''); }} className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${cardsLowStock ? 'border-warn bg-[var(--warn-soft)] text-warn' : 'border-warn/30 bg-surface text-warn hover:bg-[var(--warn-soft)]'}`}>⚠ Stock bajo <span className="font-mono tabular-nums">({stockSummary?.lowStockCount ?? 0})</span></button>
-          <button type="button" onClick={() => setShowCardFilters((current) => !current)} className="rounded-full border border-hair bg-surface px-4 py-2 text-sm font-medium text-fg-muted hover:bg-raised">{showCardFilters ? 'Menos filtros' : 'Más filtros'}</button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => changeFilter('lowStock', !filters.lowStock)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium ${filters.lowStock ? 'border-warn bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised text-fg-muted hover:bg-raised2'}`}
+          >
+            Stock bajo {stockSummary ? <span className="font-mono tabular-nums">({stockSummary.lowStockCount})</span> : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => changeFilter('hasStock', !filters.hasStock)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium ${filters.hasStock ? 'border-[color:var(--brand-accent)] bg-brand-highlight-soft text-brand' : 'border-hair bg-raised text-fg-muted hover:bg-raised2'}`}
+          >
+            Con stock
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMoreFilters((current) => !current)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-hair bg-raised px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-raised2"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {showMoreFilters ? 'Menos filtros' : 'Más filtros'}
+          </button>
+          {hasActiveFilters && (
+            <button type="button" onClick={clearFilters} className="text-sm font-medium text-brand hover:underline">
+              Limpiar filtros
+            </button>
+          )}
         </div>
-        {showCardFilters && <div className="grid gap-3 rounded-2xl border border-hair-soft bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="text-xs font-medium text-fg-muted">Proveedor<select value={filters.provider} onChange={(event) => changeFilter('provider', event.target.value)} className="mt-1.5 w-full rounded-xl border border-hair bg-raised px-3 py-2.5 text-sm text-fg"><option value="">Todos</option>{facets.providers.map((item) => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select></label>
-          <label className="text-xs font-medium text-fg-muted">Marca<select value={filters.brand} onChange={(event) => changeFilter('brand', event.target.value)} className="mt-1.5 w-full rounded-xl border border-hair bg-raised px-3 py-2.5 text-sm text-fg"><option value="">Todas</option>{facets.brands.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}</select></label>
-          <label className="text-xs font-medium text-fg-muted">Tipo<select value={filters.type} onChange={(event) => changeFilter('type', event.target.value)} className="mt-1.5 w-full rounded-xl border border-hair bg-raised px-3 py-2.5 text-sm text-fg"><option value="">Todos</option>{facets.types.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}</select></label>
-          <label className="text-xs font-medium text-fg-muted">Estado<select value={filters.status} onChange={(event) => changeFilter('status', event.target.value as Filters['status'])} className="mt-1.5 w-full rounded-xl border border-hair bg-raised px-3 py-2.5 text-sm text-fg"><option value="active">Activos</option><option value="inactive">Inactivos</option><option value="all">Todos</option></select></label>
-          <div className="flex flex-wrap items-center gap-4 sm:col-span-2 lg:col-span-4"><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={filters.hasStock} onChange={(event) => changeFilter('hasStock', event.target.checked)} />Con stock</label><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={filters.stockControl} onChange={(event) => changeFilter('stockControl', event.target.checked)} />Control de stock</label><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={showBulkInternal} onChange={(event) => setShowBulkInternal(event.target.checked)} />Ver bulto interno</label><label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={hideCategories} onChange={(event) => setHideCategories(event.target.checked)} />Ocultar categorías</label><span className="rounded-md border border-hair bg-raised2 px-2 py-1 font-mono text-xs tabular-nums text-fg-faint">{hiddenCategoryIds.length} categorías ocultas</span><button type="button" onClick={() => setShowHiddenCategories(true)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:bg-raised">Elegir categorías ocultas</button><button type="button" onClick={() => { setFilters(EMPTY_FILTERS); setSearchInput(''); setCardsLowStock(false); }} className="text-sm font-medium text-brand hover:underline">Limpiar filtros</button></div>
-        </div>}
+
+        {showMoreFilters && (
+          <div className="grid gap-3 border-t border-hair-soft pt-3 sm:grid-cols-2 lg:grid-cols-4">
+            <FilterField label="Tipo">
+              <select value={filters.type} onChange={(event) => changeFilter('type', event.target.value)} className={FILTER_SELECT}>
+                <option value="">Todos</option>
+                {types.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}
+              </select>
+            </FilterField>
+            <FilterField label="Estado">
+              <select value={filters.status} onChange={(event) => changeFilter('status', event.target.value as Filters['status'])} className={FILTER_SELECT}>
+                <option value="active">Activos</option>
+                <option value="inactive">Inactivos</option>
+                <option value="all">Todos</option>
+              </select>
+            </FilterField>
+            <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={filters.stockControl} onChange={(event) => changeFilter('stockControl', event.target.checked)} />Control de stock</label>
+              <label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={showBulkInternal} onChange={(event) => setShowBulkInternal(event.target.checked)} />Ver bulto interno</label>
+              <label className="flex items-center gap-2 text-sm text-fg-muted"><input type="checkbox" checked={hideCategories} onChange={(event) => setHideCategories(event.target.checked)} />Ocultar categorías</label>
+              <span className="rounded-md border border-hair bg-raised2 px-2 py-1 font-mono text-xs tabular-nums text-fg-faint">{hiddenCategoryIds.length} ocultas</span>
+              <button type="button" onClick={() => setShowHiddenCategories(true)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:bg-raised">Elegir ocultas</button>
+            </div>
+          </div>
+        )}
+
+        {(filters.categoryId || filters.provider || filters.brand || filters.type || filters.lowStock) && (
+          <div className="flex flex-wrap gap-2 border-t border-hair-soft pt-3">
+            {selectedCategory && <button type="button" onClick={() => changeFilter('categoryId', '')} className="rounded-full border border-hair bg-raised px-3 py-1 text-xs text-fg-muted hover:text-fg">Categoría: {selectedCategory.name} ×</button>}
+            {selectedProvider && <button type="button" onClick={() => changeFilter('provider', '')} className="rounded-full border border-hair bg-raised px-3 py-1 text-xs text-fg-muted hover:text-fg">Proveedor: {selectedProvider.label} ×</button>}
+            {filters.brand && <button type="button" onClick={() => changeFilter('brand', '')} className="rounded-full border border-hair bg-raised px-3 py-1 text-xs text-fg-muted hover:text-fg">Marca: {filters.brand} ×</button>}
+            {filters.type && <button type="button" onClick={() => changeFilter('type', '')} className="rounded-full border border-hair bg-raised px-3 py-1 text-xs text-fg-muted hover:text-fg">Tipo: {filters.type} ×</button>}
+            {filters.lowStock && <button type="button" onClick={() => changeFilter('lowStock', false)} className="rounded-full border border-warn/40 bg-[var(--warn-soft)] px-3 py-1 text-xs text-warn">Stock bajo ×</button>}
+          </div>
+        )}
+      </div>
     </section>
+
+    {stockSummary && (
+      <section className="rounded-xl border border-hair-soft bg-surface" data-tour="productos-stock-summary">
+        <button
+          type="button"
+          onClick={() => setShowStats((current) => !current)}
+          className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
+        >
+          <span className="text-sm font-medium text-fg">Estadísticas de inventario</span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+            <span><span className="font-mono tabular-nums text-fg">{stockSummary.productCount}</span> productos</span>
+            <span>Venta <span className="font-mono tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</span></span>
+            <span className="text-warn">{stockSummary.lowStockCount} stock bajo</span>
+            <span className="text-crit">{stockSummary.expiringUnitsInWindow} por vencer</span>
+            <ChevronDown className={`h-4 w-4 text-fg-faint transition-transform ${showStats ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+        {showStats && (
+          <div className="space-y-4 border-t border-hair-soft p-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-raised p-4"><p className="text-xs text-fg-muted">Productos</p><p className="font-mono text-3xl font-bold tabular-nums text-fg">{stockSummary.productCount}</p><p className="font-mono text-xs text-fg-faint">Con stock {stockSummary.productsWithStock} · Sin stock {stockSummary.productsNoStock}</p></div>
+              <div className="rounded-xl border border-hair-soft bg-raised p-4"><p className="text-xs text-fg-muted">Valor de venta</p><p className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</p><p className="font-mono text-xs text-ok">Margen {formatMoneyArs(stockSummary.potentialMargin)}</p></div>
+              <button type="button" onClick={() => changeFilter('lowStock', true)} className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4 text-left"><p className="text-xs text-warn">Stock bajo</p><p className="font-mono text-3xl font-bold text-warn">{stockSummary.lowStockCount}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.totalUnits} unidades totales</p></button>
+              <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4"><p className="text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p><p className="font-mono text-3xl font-bold text-crit">{stockSummary.expiringUnitsInWindow}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.expiringProductsCount} productos</p></div>
+            </div>
+            <details className="rounded-xl border border-hair-soft bg-raised p-4">
+              <summary className="cursor-pointer font-medium text-fg">Más estadísticas y vencimientos</summary>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <p className="text-sm text-fg-muted">Costo productos <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</strong></p>
+                <p className="text-sm text-fg-muted">Costo lotes <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostBatches)}</strong></p>
+                <p className="text-sm text-fg-muted">Sin costo con stock <strong className="block font-mono text-warn">{stockSummary.productsWithoutCostWithStock}</strong></p>
+              </div>
+              {(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && (
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-fg">Lotes por vencer</h3>
+                    {stockSummary.expiringBatches.map((batch) => <div key={batch.id} className="flex justify-between border-t border-hair-soft py-2 text-sm"><Link href={`/productos/${batch.productId}`} className="text-brand">{batch.productName}</Link><span className="font-mono text-fg-muted">{batch.qty} · {new Date(batch.expiresAt).toLocaleDateString('es-AR')}</span></div>)}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-fg">Próximo vencimiento por producto</h3>
+                    {stockSummary.expiringByProduct.map((item, index) => <div key={`${item.name}-${index}`} className="flex justify-between border-t border-hair-soft py-2 text-sm"><span className="text-fg">{item.name}</span><span className="font-mono text-fg-muted">{item.qtyExpiring} · {new Date(`${item.expiresAt}T12:00:00`).toLocaleDateString('es-AR')}</span></div>)}
+                  </div>
+                </div>
+              )}
+            </details>
+          </div>
+        )}
+      </section>
+    )}
 
     {view === 'cards' ? <>
 
       <div data-tour="productos-table">
-        {loading ? <Loader /> : cardProducts.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4">{cardProducts.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); const lowStock = product.stock <= product.minStock; return <Link key={product.id} href={`/productos/${product.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-hair-soft bg-surface shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[color:var(--brand-accent)] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-accent)]">
+        {loading ? <Loader /> : products.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4">{products.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); const lowStock = product.stock <= product.minStock; return <Link key={product.id} href={`/productos/${product.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-hair-soft bg-surface shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[color:var(--brand-accent)] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-accent)]">
           <div className="relative aspect-square overflow-hidden bg-raised p-5">
             <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">{lowStock && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-2 py-1 text-xs font-semibold text-warn backdrop-blur">Stock bajo</span>}{expiryDays != null && expiryDays <= 30 && <span className="rounded-md border border-crit/40 bg-[var(--crit-soft)] px-2 py-1 text-xs font-semibold text-crit backdrop-blur">Vence pronto</span>}{product.incomplete && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-2 py-1 text-xs font-semibold text-warn backdrop-blur">Incompleto</span>}{product.silent && <span title="Producto silencioso" className="rounded-md border border-[color:var(--brand-accent)]/50 bg-brand-highlight px-2 py-1 text-xs font-bold uppercase text-brand backdrop-blur">PS</span>}</div>
             {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.03]" /> : <div className="flex h-full w-full items-center justify-center rounded-xl border border-hair-soft bg-surface text-5xl font-bold text-fg-faint">{product.name.trim().slice(0, 2).toUpperCase()}</div>}
@@ -398,15 +583,8 @@ export default function ProductosPage() {
         </Link>; })}</div> : <div className="rounded-2xl border border-hair-soft bg-surface p-10 text-center"><p className="text-lg font-medium text-fg">No encontramos productos</p><p className="mt-1 text-sm text-fg-muted">Probá con otra búsqueda o cambiá los filtros.</p></div>}
       </div>
 
-      <div className="flex flex-col gap-4 rounded-2xl border border-hair-soft bg-surface p-4 text-sm text-fg-muted sm:flex-row sm:items-center sm:justify-between"><p><span className="font-mono tabular-nums text-fg">{cardsLowStock ? cardProducts.length : total}</span> productos · Página <span className="font-mono">{page}</span> de <span className="font-mono">{totalPages || 1}</span></p><div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="min-h-11 flex-1 rounded-xl border border-hair px-5 py-2 font-medium disabled:opacity-40 sm:flex-none">Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="min-h-11 flex-1 rounded-xl border border-hair px-5 py-2 font-medium disabled:opacity-40 sm:flex-none">Siguiente</button></div></div>
+      <div className="flex flex-col gap-4 rounded-2xl border border-hair-soft bg-surface p-4 text-sm text-fg-muted sm:flex-row sm:items-center sm:justify-between"><p><span className="font-mono tabular-nums text-fg">{total}</span> productos · Página <span className="font-mono">{page}</span> de <span className="font-mono">{totalPages || 1}</span></p><div className="flex flex-wrap items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="min-h-11 flex-1 rounded-xl border border-hair px-5 py-2 font-medium disabled:opacity-40 sm:flex-none">Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="min-h-11 flex-1 rounded-xl border border-hair px-5 py-2 font-medium disabled:opacity-40 sm:flex-none">Siguiente</button><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-xl border border-hair bg-raised px-3 py-2 text-fg">{[25, 50, 100, 200].map((size) => <option key={size} value={size}>{size} por página</option>)}</select></div></div>
     </> : <>
-    {stockSummary && <section className="space-y-4"><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-surface p-4"><p className="text-xs text-fg-muted">Productos</p><p className="font-mono text-3xl font-bold tabular-nums text-fg">{stockSummary.productCount}</p><p className="font-mono text-xs text-fg-faint">Con stock {stockSummary.productsWithStock} · Sin stock {stockSummary.productsNoStock}</p></div>
-      <div className="rounded-xl border border-hair-soft bg-surface p-4"><p className="text-xs text-fg-muted">Valor de venta</p><p className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</p><p className="font-mono text-xs text-ok">Margen {formatMoneyArs(stockSummary.potentialMargin)}</p></div>
-      <div className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4"><p className="text-xs text-warn">Stock bajo</p><p className="font-mono text-3xl font-bold text-warn">{stockSummary.lowStockCount}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.totalUnits} unidades totales</p></div>
-      <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4"><p className="text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p><p className="font-mono text-3xl font-bold text-crit">{stockSummary.expiringUnitsInWindow}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.expiringProductsCount} productos</p></div>
-    </div><details className="rounded-xl border border-hair-soft bg-surface p-4"><summary className="cursor-pointer font-medium text-fg">Más estadísticas y vencimientos</summary><div className="mt-4 grid gap-3 sm:grid-cols-3"><p className="text-sm text-fg-muted">Costo productos <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</strong></p><p className="text-sm text-fg-muted">Costo lotes <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostBatches)}</strong></p><p className="text-sm text-fg-muted">Sin costo con stock <strong className="block font-mono text-warn">{stockSummary.productsWithoutCostWithStock}</strong></p></div>{(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && <div className="mt-4 grid gap-4 lg:grid-cols-2"><div><h3 className="mb-2 text-sm font-semibold text-fg">Lotes por vencer</h3>{stockSummary.expiringBatches.map((batch) => <div key={batch.id} className="flex justify-between border-t border-hair-soft py-2 text-sm"><Link href={`/productos/${batch.productId}`} className="text-brand">{batch.productName}</Link><span className="font-mono text-fg-muted">{batch.qty} · {new Date(batch.expiresAt).toLocaleDateString('es-AR')}</span></div>)}</div><div><h3 className="mb-2 text-sm font-semibold text-fg">Próximo vencimiento por producto</h3>{stockSummary.expiringByProduct.map((item, index) => <div key={`${item.name}-${index}`} className="flex justify-between border-t border-hair-soft py-2 text-sm"><span className="text-fg">{item.name}</span><span className="font-mono text-fg-muted">{item.qtyExpiring} · {new Date(`${item.expiresAt}T12:00:00`).toLocaleDateString('es-AR')}</span></div>)}</div></div>}</details></section>}
-
     <section className="space-y-3 rounded-xl border border-hair-soft bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2"><div className="inline-flex rounded-lg border border-hair bg-raised p-1"><button type="button" onClick={() => setMode('catalog')} className={`rounded-md px-3 py-1.5 text-sm ${mode === 'catalog' ? 'bg-raised2 text-fg' : 'text-fg-faint'}`}>Catálogo</button><button type="button" onClick={() => setMode('stock')} className={`rounded-md px-3 py-1.5 text-sm ${mode === 'stock' ? 'bg-raised2 text-fg' : 'text-fg-faint'}`}>Stock</button></div>
         <select defaultValue="" onChange={(event) => { applyView(event.target.value); event.target.value = ''; }} className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg"><option value="">Mis vistas</option>{views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}</select><button type="button" onClick={saveView} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Guardar vista</button>{views.length > 0 && <button type="button" onClick={() => { const id = prompt(`ID de vista a borrar:\n${views.map((view) => `${view.id}: ${view.name}`).join('\n')}`); if (id) setViews((current) => current.filter((view) => view.id !== id)); }} className="rounded-lg border border-hair px-3 py-2 text-sm text-crit">Borrar vista</button>}

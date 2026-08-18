@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.8',
+    date: '2026-08-18',
+    summary: 'La lista de productos se reordenó: filtros juntos, categorías en un selector, y se puede ordenar y filtrar por proveedor.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Lista de productos más clara',
+        desc: 'Las categorías ya no van sueltas. Arriba están categoría, proveedor, marca y el orden. Las estadísticas quedan plegadas, fuera de los filtros. Stock bajo filtra de verdad en todo el catálogo.',
+      },
+    ],
+  },
+  {
     version: 'v1.7',
     date: '2026-08-18',
     summary: 'En el POS volvió el botón para asociar un código de barras que no coincidía exacto.',
