@@ -211,6 +211,7 @@ export class ProductsController {
     @Query('stockControl') stockControl?: string,
     @Query('status') status?: string,
     @Query('hasStock') hasStock?: string,
+    @Query('lowStock') lowStock?: string,
     @Query('sort') sort?: string,
     @Query('dir') dir?: string,
   ) {
@@ -234,6 +235,7 @@ export class ProductsController {
       stockControl: optionalBoolean(stockControl, 'stockControl'),
       status: parsedStatus as ProductCatalogQuery['status'],
       hasStock: optionalBoolean(hasStock, 'hasStock'),
+      lowStock: optionalBoolean(lowStock, 'lowStock'),
       sort: parsedSort as ProductCatalogQuery['sort'],
       dir: (dir ?? 'asc') as ProductCatalogQuery['dir'],
       page: 1,

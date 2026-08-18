@@ -89,12 +89,7 @@ export function LabelPrintDialog({
   const preview = useMemo(() => items.slice(0, 6), [items]);
 
   const print = () => {
-    const w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
-    if (!w) {
-      alert('El navegador bloqueó la ventana de impresión. Permití pop-ups para este sitio.');
-      return;
-    }
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas</title>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas</title>
 <style>
   @page { size: A4; margin: 8mm; }
   * { box-sizing: border-box; }
@@ -112,11 +107,29 @@ export function LabelPrintDialog({
   .bars svg { display: block; max-width: 100%; height: 26px; }
   .code { font-size: 8pt; font-family: ui-monospace, monospace; letter-spacing: 0.04em; margin: 0; }
   .price { font-size: 9pt; font-weight: 700; margin: 1mm 0 0; }
-</style></head><body><div class="sheet">${items.map((item) => labelHtml(item, fields)).join('')}</div></body></html>`);
-    w.document.close();
-    w.focus();
+</style></head><body><div class="sheet">${items.map((item) => labelHtml(item, fields)).join('')}</div></body></html>`;
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) {
+      iframe.remove();
+      alert('No se pudo armar la impresión. Probá de nuevo.');
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    const frameWindow = iframe.contentWindow;
+    const cleanup = () => {
+      iframe.remove();
+    };
+    frameWindow?.addEventListener('afterprint', cleanup);
     setTimeout(() => {
-      w.print();
+      frameWindow?.focus();
+      frameWindow?.print();
+      setTimeout(cleanup, 1500);
     }, 250);
   };
 
