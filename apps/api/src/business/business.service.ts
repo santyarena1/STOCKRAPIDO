@@ -9,11 +9,12 @@ export class BusinessService {
   constructor(private prisma: PrismaService) {}
 
   private sanitize<T extends Record<string, any>>(business: T) {
-    const { openaiKeyEncrypted, ...safe } = business;
+    const { openaiKeyEncrypted, serperKeyEncrypted, ...safe } = business;
     return {
       ...safe,
       posConfig: sanitizePosConfigForApi(business.posConfig),
       hasOpenaiKey: !!openaiKeyEncrypted,
+      hasSerperKey: !!serperKeyEncrypted,
     };
   }
 
@@ -41,6 +42,24 @@ export class BusinessService {
     });
     if (!business?.openaiKeyEncrypted) return null;
     return decryptSecret(business.openaiKeyEncrypted);
+  }
+
+  async setSerperKey(businessId: string, key: string) {
+    const normalized = typeof key === 'string' ? key.trim() : '';
+    const business = await this.prisma.business.update({
+      where: { id: businessId },
+      data: { serperKeyEncrypted: normalized ? encryptSecret(normalized) : null },
+    });
+    return this.sanitize(business);
+  }
+
+  async getSerperKey(businessId: string): Promise<string | null> {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { serperKeyEncrypted: true },
+    });
+    if (!business?.serperKeyEncrypted) return null;
+    return decryptSecret(business.serperKeyEncrypted);
   }
 
   async update(businessId: string, data: UpdateBusinessDto) {

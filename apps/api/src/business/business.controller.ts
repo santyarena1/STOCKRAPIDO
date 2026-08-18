@@ -26,6 +26,11 @@ export class BusinessController {
     return this.business.setOpenaiKey(user.businessId, body?.key ?? '');
   }
 
+  @Patch('serper-key')
+  setSerperKey(@CurrentUser() user: User, @Body() body: { key?: string }) {
+    return this.business.setSerperKey(user.businessId, body?.key ?? '');
+  }
+
   @Get('categories')
   categories(@CurrentUser() user: User) {
     return this.business.listCategories(user.businessId);

@@ -24,8 +24,13 @@ export const CHANGELOG: ChangelogVersion[] = [
   {
     version: 'v1.8',
     date: '2026-08-18',
-    summary: 'La lista de productos se reordenó: filtros juntos, categorías en un selector, y se puede ordenar y filtrar por proveedor.',
+    summary: 'Fotos de productos con Serper, y una lista de productos más clara para filtrar y ordenar.',
     items: [
+      {
+        tag: 'NUEVO',
+        title: 'Imágenes con Serper',
+        desc: 'En Configuración cargás la API key de Serper. Después podés buscar fotos de Google y asignarlas al crear o editar un producto, en el producto rápido del POS, o en el editor masivo de imágenes.',
+      },
       {
         tag: 'MEJORA',
         title: 'Lista de productos más clara',

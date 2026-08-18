@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
 import { ImageUploader } from '@/components/ImageUploader';
+import { SerperImagePicker } from '@/components/SerperImagePicker';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
@@ -175,7 +176,7 @@ export default function EditarProductoPage() {
           stockControl: form.stockControl,
           silent: form.silent,
           expiresAt: form.expiresAt || undefined,
-          imageUrl: form.imageUrl || undefined,
+          imageUrl: form.imageUrl || null,
           unitsPerBox: form.unitsPerBox || undefined,
           weight: form.weight || undefined,
           format: form.format || undefined,
@@ -418,6 +419,14 @@ export default function EditarProductoPage() {
                 previewClass="w-16 h-16 object-contain"
                 label="Subir imagen"
               />
+              <div className="mt-3">
+                <p className="mb-2 text-xs text-fg-faint">O buscá una foto en Google (Serper). La key se carga en Configuración → Imágenes Serper.</p>
+                <SerperImagePicker
+                  query={[form.name, form.brand].filter(Boolean).join(' ')}
+                  value={form.imageUrl}
+                  onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {([

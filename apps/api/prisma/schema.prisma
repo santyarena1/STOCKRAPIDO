@@ -28,6 +28,7 @@ model Business {
   currency  String   @default("ARS")
   posConfig Json?
   openaiKeyEncrypted String?
+  serperKeyEncrypted String?
   planId       String    @default("mostrador")
   planStatus   String    @default("active") // trial | active | pending_payment | past_due | canceled
   billingCycle String    @default("monthly") // monthly | yearly

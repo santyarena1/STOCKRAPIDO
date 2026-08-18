@@ -683,7 +683,9 @@ export class ProductsService {
         brand: data.brand,
         iva: data.iva != null ? new Decimal(data.iva) : null,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
-        imageUrl: data.imageUrl,
+        imageUrl: typeof data.imageUrl === 'string' && /^https?:\/\//i.test(data.imageUrl.trim())
+          ? data.imageUrl.trim()
+          : undefined,
         unitsPerBox: data.unitsPerBox,
         weight: data.weight,
         format: data.format,
@@ -710,17 +712,21 @@ export class ProductsService {
     return product;
   }
 
-  async quick(businessId: string, data: { name: string; price: number; barcode?: string }) {
+  async quick(businessId: string, data: { name: string; price: number; barcode?: string; imageUrl?: string }) {
     const name = typeof data?.name === 'string' ? data.name.trim() : '';
     const price = Number(data?.price);
     if (!name) throw new BadRequestException('El nombre es obligatorio.');
     if (!Number.isFinite(price) || price < 0) {
       throw new BadRequestException('El precio debe ser un número mayor o igual a cero.');
     }
+    const imageUrl = typeof data.imageUrl === 'string' && /^https?:\/\//i.test(data.imageUrl.trim())
+      ? data.imageUrl.trim()
+      : undefined;
     const product = await this.create(businessId, {
       name,
       price,
       barcode: typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : undefined,
+      imageUrl,
       stockControl: false,
       incomplete: true,
     });
@@ -751,7 +757,7 @@ export class ProductsService {
     brand: string;
     iva: number;
     expiresAt: string;
-    imageUrl: string;
+    imageUrl: string | null;
     unitsPerBox: string;
     weight: string;
     format: string;
@@ -766,6 +772,10 @@ export class ProductsService {
     if (data.price != null) update.price = new Decimal(data.price);
     if (data.iva != null) update.iva = new Decimal(data.iva);
     if (data.expiresAt != null) update.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+    if (data.imageUrl !== undefined) {
+      const url = typeof data.imageUrl === 'string' ? data.imageUrl.trim() : '';
+      update.imageUrl = url && /^https?:\/\//i.test(url) ? url : null;
+    }
     return this.prisma.product.update({
       where: { id, businessId },
       data: update,
