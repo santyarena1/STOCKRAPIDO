@@ -10,6 +10,11 @@ export type SerperImageHit = {
 
 const STORAGE_KEY = 'sr-serper-key';
 
+export function isApiRouteMissing(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /^Cannot (GET|POST|PATCH|PUT|DELETE)\b/i.test(msg);
+}
+
 export function getStoredSerperKey(): string {
   if (typeof window === 'undefined') return '';
   try {
