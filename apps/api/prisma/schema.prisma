@@ -59,6 +59,9 @@ model Business {
   dataBackups          DataBackup[]
   invoices             Invoice[]
   supportTickets       SupportTicket[]
+  consignmentParties   ConsignmentParty[]
+  consignmentLedger    ConsignmentLedgerEntry[]
+  consignmentPayments  ConsignmentPayment[]
 }
 
 model Invoice {
@@ -152,6 +155,10 @@ model Product {
   isActive    Boolean   @default(true)
   incomplete  Boolean   @default(false)
   silent      Boolean   @default(false)
+  consigned   Boolean   @default(false)
+  consignmentPartyId String?
+  /** % sobre el costo; null = usa el default de la entidad */
+  consignmentCommissionPercent Decimal?
   businessId  String
   brand       String?
   iva         Decimal?
@@ -174,10 +181,73 @@ model Product {
 
   business   Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
   category   Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  consignmentParty ConsignmentParty? @relation(fields: [consignmentPartyId], references: [id], onDelete: SetNull)
   saleItems   SaleItem[]
   stockMoves StockMove[]
   purchaseItems PurchaseItem[]
   batches   ProductBatch[]
+  consignmentLedger ConsignmentLedgerEntry[]
+
+  @@index([businessId, consigned])
+  @@index([consignmentPartyId])
+}
+
+/** Persona/entidad dueña de productos en consignación (comisionados). */
+model ConsignmentParty {
+  id                       String   @id @default(cuid())
+  businessId               String
+  name                     String
+  notes                    String?
+  defaultCommissionPercent Decimal  @default(0)
+  active                   Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  business  Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products  Product[]
+  ledger    ConsignmentLedgerEntry[]
+  payments  ConsignmentPayment[]
+
+  @@index([businessId, active])
+}
+
+/** Deuda generada al vender un producto comisionado. */
+model ConsignmentLedgerEntry {
+  id                 String   @id @default(cuid())
+  businessId         String
+  partyId            String
+  productId          String?
+  saleId             String?
+  saleItemId         String?
+  qty                Int
+  unitCost           Decimal
+  commissionPercent  Decimal  @default(0)
+  amount             Decimal
+  note               String?
+  voided             Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  party    ConsignmentParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  product  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, partyId, createdAt])
+  @@index([saleId])
+}
+
+/** Pagos parciales a la entidad comisionada. */
+model ConsignmentPayment {
+  id         String   @id @default(cuid())
+  businessId String
+  partyId    String
+  amount     Decimal
+  note       String?
+  createdAt  DateTime @default(now())
+
+  business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  party    ConsignmentParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, partyId, createdAt])
 }
 
 model Sale {

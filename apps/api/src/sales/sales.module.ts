@@ -3,9 +3,10 @@ import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 import { ProductsModule } from '../products/products.module';
 import { FiscalModule } from '../fiscal/fiscal.module';
+import { ConsignmentModule } from '../consignment/consignment.module';
 
 @Module({
-  imports: [ProductsModule, FiscalModule],
+  imports: [ProductsModule, FiscalModule, ConsignmentModule],
   controllers: [SalesController],
   providers: [SalesService],
   exports: [SalesService],

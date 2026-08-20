@@ -67,6 +67,7 @@ const GROUPS = [
       { href: '/ventas', label: 'Historial de ventas' },
       { href: '/caja', label: 'Caja' },
       { href: '/clientes', label: 'Clientes / Fiados' },
+      { href: '/comisionados', label: 'Comisionados' },
     ],
   },
   {

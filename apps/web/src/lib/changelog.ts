@@ -96,6 +96,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Precios Claros (base)',
         desc: 'Quedó el módulo y el plan para consultar la API/dataset del gobierno por EAN o nombre. La búsqueda live se completa en el próximo paso.',
       },
+      {
+        tag: 'NUEVO',
+        title: 'Productos comisionados',
+        desc: 'En la ficha activás Producto comisionado y lo asociás a una entidad (Juan, etc.). En Ventas y caja → Comisionados ves productos, saldo (costo + %) y registrás pagos parciales. La deuda se suma al vender.',
+      },
     ],
   },
   {

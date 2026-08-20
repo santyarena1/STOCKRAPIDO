@@ -849,6 +849,9 @@ export class ProductsService {
     isActive: boolean;
     incomplete: boolean;
     silent: boolean;
+    consigned?: boolean;
+    consignmentPartyId?: string | null;
+    consignmentCommissionPercent?: number | null;
     brand: string;
     iva: number;
     expiresAt: string;
@@ -867,6 +870,17 @@ export class ProductsService {
     if (data.price != null) update.price = new Decimal(data.price);
     if (data.iva != null) update.iva = new Decimal(data.iva);
     if (data.expiresAt != null) update.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+    if (data.consignmentCommissionPercent !== undefined) {
+      update.consignmentCommissionPercent =
+        data.consignmentCommissionPercent == null
+          ? null
+          : new Decimal(data.consignmentCommissionPercent);
+    }
+    if (data.consigned === false) {
+      update.consigned = false;
+      update.consignmentPartyId = null;
+      update.consignmentCommissionPercent = null;
+    }
     if (data.imageUrl !== undefined) {
       const url = typeof data.imageUrl === 'string' ? data.imageUrl.trim() : '';
       update.imageUrl = url && /^https?:\/\//i.test(url) ? url : null;
@@ -887,7 +901,7 @@ export class ProductsService {
     return this.prisma.product.update({
       where: { id, businessId },
       data: update,
-      include: { category: true },
+      include: { category: true, consignmentParty: true },
     });
   }
 
@@ -984,6 +998,7 @@ export class ProductsService {
       where: { id, businessId },
       include: {
         category: true,
+        consignmentParty: true,
         batches: { orderBy: [{ expiresAt: 'asc' }, { createdAt: 'asc' }] },
       },
     });

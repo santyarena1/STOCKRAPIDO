@@ -55,6 +55,10 @@ type Product = {
   incomplete?: boolean;
   isActive?: boolean;
   silent?: boolean;
+  consigned?: boolean;
+  consignmentPartyId?: string | null;
+  consignmentCommissionPercent?: string | number | null;
+  consignmentParty?: { id: string; name: string; defaultCommissionPercent?: string | number } | null;
 };
 type Category = { id: string; name: string };
 type StockMove = { id: string; qty: number; reason: string; reference?: string; createdAt: string };
@@ -106,6 +110,11 @@ export default function EditarProductoPage() {
   const [silentBusy, setSilentBusy] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [extraOpen, setExtraOpen] = useState<Record<string, boolean>>({});
+  const [consignBusy, setConsignBusy] = useState(false);
+  const [consignModal, setConsignModal] = useState(false);
+  const [consignParties, setConsignParties] = useState<Array<{ id: string; name: string; defaultCommissionPercent: number }>>([]);
+  const [consignPartyId, setConsignPartyId] = useState('');
+  const [consignPct, setConsignPct] = useState('');
 
   const toggleSilent = async () => {
     if (!product || silentBusy) return;
@@ -119,6 +128,53 @@ export default function EditarProductoPage() {
       alert(err instanceof Error ? err.message : 'No se pudo actualizar');
     } finally {
       setSilentBusy(false);
+    }
+  };
+
+  const applyConsigned = async (partyId: string | null, commissionPercent?: number | null) => {
+    setConsignBusy(true);
+    try {
+      const updated = await api<Product>(`/consignment/products/${id}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({
+          consigned: Boolean(partyId),
+          consignmentPartyId: partyId,
+          consignmentCommissionPercent: commissionPercent === undefined ? undefined : commissionPercent,
+        }),
+      });
+      setProduct((p) => (p ? { ...p, ...updated } : updated));
+      setConsignModal(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo actualizar comisionado');
+    } finally {
+      setConsignBusy(false);
+    }
+  };
+
+  const toggleConsigned = async () => {
+    if (!product || consignBusy) return;
+    if (product.consigned) {
+      if (!confirm('¿Quitar este producto de comisionados?')) return;
+      await applyConsigned(null);
+      return;
+    }
+    try {
+      const parties = await api<Array<{ id: string; name: string; defaultCommissionPercent: number }>>('/consignment/parties');
+      const active = parties.filter((p) => (p as { active?: boolean }).active !== false);
+      if (!active.length) {
+        alert('Primero creá una entidad en Ventas y caja → Comisionados.');
+        return;
+      }
+      if (active.length === 1) {
+        await applyConsigned(active[0].id);
+        return;
+      }
+      setConsignParties(active);
+      setConsignPartyId(active[0].id);
+      setConsignPct('');
+      setConsignModal(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudieron cargar las entidades');
     }
   };
 
@@ -254,6 +310,28 @@ export default function EditarProductoPage() {
         </span>
         <span className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${product.silent ? 'bg-[color:var(--brand-accent)]' : 'bg-raised2'}`}>
           <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${product.silent ? 'translate-x-5' : 'translate-x-1'}`} />
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => void toggleConsigned()}
+        disabled={consignBusy}
+        className={`flex w-full items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left transition disabled:opacity-60 ${product.consigned ? 'border-warn/50 bg-[var(--warn-soft)]' : 'border-hair-soft bg-surface hover:bg-raised'}`}
+      >
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-semibold text-fg">
+            Producto comisionado
+            {product.consigned && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-1.5 py-0.5 text-[10px] font-bold uppercase text-warn">PC</span>}
+          </span>
+          <span className="mt-0.5 block text-xs text-fg-faint">
+            {product.consigned
+              ? `Asociado a ${product.consignmentParty?.name || '—'}. Al vender se suma deuda (costo + %).`
+              : 'Activá si el producto es de un proveedor en consignación.'}
+          </span>
+        </span>
+        <span className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${product.consigned ? 'bg-warn' : 'bg-raised2'}`}>
+          <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${product.consigned ? 'translate-x-5' : 'translate-x-1'}`} />
         </span>
       </button>
 
@@ -575,6 +653,42 @@ export default function EditarProductoPage() {
           </button>
         </div>
       </div>
+
+      {consignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setConsignModal(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-hair bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg">Producto comisionado</h2>
+            <p className="mt-1 text-sm text-fg-muted">¿A quién lo asociamos? Al venderse, se adeuda el costo del producto más el %.</p>
+            <label className="mt-4 block text-sm text-fg-muted">
+              Entidad
+              <select value={consignPartyId} onChange={(e) => setConsignPartyId(e.target.value)} className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg">
+                {consignParties.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} (% {p.defaultCommissionPercent})</option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-3 block text-sm text-fg-muted">
+              % de este producto (opcional, vacío = usa el de la entidad)
+              <input value={consignPct} onChange={(e) => setConsignPct(e.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg" placeholder="Ej. 0" />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setConsignModal(false)} className="rounded-xl border border-hair px-4 py-2 text-sm text-fg-muted">Cancelar</button>
+              <button
+                type="button"
+                disabled={consignBusy || !consignPartyId}
+                onClick={() => {
+                  const pctRaw = consignPct.trim();
+                  const pct = pctRaw === '' ? undefined : Number(pctRaw.replace(',', '.'));
+                  void applyConsigned(consignPartyId, pct);
+                }}
+                className="btn-brand rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              >
+                {consignBusy ? 'Guardando…' : 'Activar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </Container>
   );

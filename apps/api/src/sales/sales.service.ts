@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ProductsService } from '../products/products.service';
 import { FiscalService } from '../fiscal/fiscal.service';
+import { ConsignmentService } from '../consignment/consignment.service';
 
 export type SaleItemInput =
   | { productId: string; qty: number; unitPrice: number; silentTicket?: boolean }
@@ -14,6 +15,7 @@ export class SalesService {
     private prisma: PrismaService,
     private products: ProductsService,
     private fiscal: FiscalService,
+    private consignment: ConsignmentService,
   ) {}
 
   async create(
@@ -115,6 +117,12 @@ export class SalesService {
       });
     }
 
+    await this.consignment.recordSaleDebts(
+      businessId,
+      sale.id,
+      sale.items.map((it) => ({ id: it.id, productId: it.productId, qty: it.qty })),
+    );
+
     const fiscalDocument = options?.fiscalMode === 'factura_c'
       ? await this.fiscal.issueFacturaC(businessId, sale.id)
       : await this.fiscal.createInternal(businessId, sale.id);
@@ -176,6 +184,8 @@ export class SalesService {
       });
     }
 
+    await this.consignment.voidSaleDebts(businessId, saleId);
+
     await this.prisma.sale.delete({ where: { id: saleId } });
     return { ok: true };
   }
@@ -213,6 +223,8 @@ export class SalesService {
         data: { balance: { decrement: Number(sale.totalFinal) } },
       });
     }
+
+    await this.consignment.voidSaleDebts(businessId, saleId);
 
     await this.prisma.sale.update({
       where: { id: saleId },

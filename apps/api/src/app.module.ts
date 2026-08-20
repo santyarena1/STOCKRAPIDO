@@ -24,6 +24,7 @@ import { DataAdminModule } from './data-admin/data-admin.module';
 import { SupportModule } from './support/support.module';
 import { PlatformModule } from './platform/platform.module';
 import { PreciosClarosModule } from './precios-claros/precios-claros.module';
+import { ConsignmentModule } from './consignment/consignment.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { PreciosClarosModule } from './precios-claros/precios-claros.module';
     SupportModule,
     PlatformModule,
     PreciosClarosModule,
+    ConsignmentModule,
   ],
 })
 export class AppModule {}
