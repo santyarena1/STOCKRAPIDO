@@ -59,6 +59,7 @@ type Product = {
   consignmentPartyId?: string | null;
   consignmentCommissionPercent?: string | number | null;
   consignmentParty?: { id: string; name: string; defaultCommissionPercent?: string | number } | null;
+  allCodes?: string | null;
 };
 type Category = { id: string; name: string };
 type StockMove = { id: string; qty: number; reason: string; reference?: string; createdAt: string };
@@ -115,6 +116,19 @@ export default function EditarProductoPage() {
   const [consignParties, setConsignParties] = useState<Array<{ id: string; name: string; defaultCommissionPercent: number }>>([]);
   const [consignPartyId, setConsignPartyId] = useState('');
   const [consignPct, setConsignPct] = useState('');
+  const [pcBusy, setPcBusy] = useState(false);
+  const [pcMsg, setPcMsg] = useState('');
+  const [pcHits, setPcHits] = useState<Array<{
+    ean: string;
+    name: string;
+    brand?: string | null;
+    presentation?: string | null;
+    priceMin?: number | null;
+    priceMax?: number | null;
+    score?: number;
+    alreadyLinked?: boolean;
+  }>>([]);
+  const [pcAiUsed, setPcAiUsed] = useState(false);
 
   const toggleSilent = async () => {
     if (!product || silentBusy) return;
@@ -175,6 +189,71 @@ export default function EditarProductoPage() {
       setConsignModal(true);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'No se pudieron cargar las entidades');
+    }
+  };
+
+  const searchPreciosClaros = async () => {
+    setPcBusy(true);
+    setPcMsg('');
+    setPcHits([]);
+    try {
+      const data = await api<{
+        items: typeof pcHits;
+        aiUsed?: boolean;
+      }>(`/precios-claros/match/${id}`);
+      setPcHits(data.items || []);
+      setPcAiUsed(Boolean(data.aiUsed));
+      setPcMsg(
+        data.items?.length
+          ? `${data.items.length} coincidencia${data.items.length === 1 ? '' : 's'}${data.aiUsed ? ' (ordenadas con IA)' : ''}.`
+          : 'Sin coincidencias en Precios Claros para esta zona.',
+      );
+    } catch (err) {
+      setPcMsg(err instanceof Error ? err.message : 'No se pudo consultar Precios Claros');
+    } finally {
+      setPcBusy(false);
+    }
+  };
+
+  const applyPreciosClaros = async (hit: (typeof pcHits)[number]) => {
+    setPcBusy(true);
+    setPcMsg('');
+    try {
+      const res = await api<{
+        ok: boolean;
+        eanAdded: string;
+        coexist?: boolean;
+        product: Product;
+      }>(`/precios-claros/apply/${id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ean: hit.ean,
+          name: hit.name,
+          brand: hit.brand,
+          presentation: hit.presentation,
+          fillEmptyOnly: true,
+        }),
+      });
+      setProduct((p) => (p ? { ...p, ...res.product } : res.product));
+      setForm((f) => ({
+        ...f,
+        barcode: res.product.barcode || f.barcode,
+        brand: res.product.brand || f.brand,
+        presentation: res.product.presentation || f.presentation,
+        name: res.product.name || f.name,
+      }));
+      setPcHits((rows) =>
+        rows.map((r) => (r.ean === hit.ean ? { ...r, alreadyLinked: true } : r)),
+      );
+      setPcMsg(
+        res.coexist
+          ? `EAN ${res.eanAdded} asociado. El código actual se mantiene; ambos sirven para buscar.`
+          : `EAN ${res.eanAdded} guardado.`,
+      );
+    } catch (err) {
+      setPcMsg(err instanceof Error ? err.message : 'No se pudo aplicar');
+    } finally {
+      setPcBusy(false);
     }
   };
 
@@ -355,6 +434,7 @@ export default function EditarProductoPage() {
             <InfoCell label="SKU proveedor" value={displayValue(product.supplierSku)} mono />
             <InfoCell label="Ref. proveedor" value={displayValue(product.supplierRef)} mono />
             <InfoCell label="ID externo" value={displayValue(product.externalId)} mono />
+            <InfoCell label="Todos los códigos" value={displayValue(product.allCodes)} mono />
           </InfoSection>
           <InfoSection title="Precios e IVA">
             <InfoCell label="Costo local" value={moneyValue(product.cost)} mono />
@@ -437,6 +517,52 @@ export default function EditarProductoPage() {
             <div className="mt-3">
               <SerperImagePicker query={[form.name, form.brand].filter(Boolean).join(' ')} value={form.imageUrl} onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))} />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-hair bg-raised p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-fg">Precios Claros</h3>
+                <p className="mt-1 text-xs text-fg-muted">
+                  Busca por nombre aproximado (y EAN si hay). Al aplicar, el código de barras de Precios Claros se suma sin reemplazar el actual.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={pcBusy}
+                onClick={() => void searchPreciosClaros()}
+                className="rounded-lg border border-hair bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50"
+              >
+                {pcBusy ? 'Buscando…' : 'Buscar coincidencias'}
+              </button>
+            </div>
+            {pcMsg ? <p className="mt-2 text-sm text-fg-muted">{pcMsg}{pcAiUsed && pcHits.length ? '' : ''}</p> : null}
+            {pcHits.length > 0 ? (
+              <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+                {pcHits.map((hit) => (
+                  <li key={hit.ean} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-hair-soft bg-surface px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium text-fg">{hit.name}</p>
+                      <p className="font-mono text-[11px] text-fg-faint">
+                        {hit.ean}
+                        {hit.brand ? ` · ${hit.brand}` : ''}
+                        {hit.presentation ? ` · ${hit.presentation}` : ''}
+                        {hit.score != null ? ` · score ${Math.round(hit.score * 100)}%` : ''}
+                        {hit.priceMin != null ? ` · desde $${hit.priceMin}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={pcBusy || hit.alreadyLinked}
+                      onClick={() => void applyPreciosClaros(hit)}
+                      className="shrink-0 rounded-lg border border-hair px-3 py-1.5 text-xs font-semibold text-fg hover:bg-raised disabled:opacity-50"
+                    >
+                      {hit.alreadyLinked ? 'Ya asociado' : 'Aplicar EAN + datos'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           {product?.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 && (

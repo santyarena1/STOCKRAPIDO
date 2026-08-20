@@ -13,6 +13,7 @@ type PartyDetail = {
   name: string;
   notes?: string | null;
   defaultCommissionPercent: number;
+  commissionBase?: 'cost' | 'sale';
   active: boolean;
   balance: number;
   products: Array<{
@@ -34,6 +35,7 @@ type PartyDetail = {
     voided: boolean;
     createdAt: string;
     note?: string | null;
+    commissionBase?: 'cost' | 'sale';
   }>;
   payments: Array<{ id: string; amount: number; note?: string | null; createdAt: string }>;
 };
@@ -51,6 +53,7 @@ export default function ComisionadoDetailPage() {
   const [payNote, setPayNote] = useState('');
   const [paying, setPaying] = useState(false);
   const [pct, setPct] = useState('0');
+  const [base, setBase] = useState<'cost' | 'sale'>('cost');
   const [savingPct, setSavingPct] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -60,6 +63,7 @@ export default function ComisionadoDetailPage() {
       const data = await api<PartyDetail>(`/consignment/parties/${id}`);
       setParty(data);
       setPct(String(data.defaultCommissionPercent));
+      setBase(data.commissionBase === 'sale' ? 'sale' : 'cost');
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo cargar.');
       setParty(null);
@@ -77,10 +81,13 @@ export default function ComisionadoDetailPage() {
     try {
       await api(`/consignment/parties/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ defaultCommissionPercent: Number(pct.replace(',', '.')) || 0 }),
+        body: JSON.stringify({
+          defaultCommissionPercent: Number(pct.replace(',', '.')) || 0,
+          commissionBase: base,
+        }),
       });
       await load();
-      setMsg('% actualizado.');
+      setMsg('% y base actualizados.');
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo guardar el %.');
     } finally {
@@ -132,11 +139,15 @@ export default function ComisionadoDetailPage() {
           <p className={`mt-1 font-mono text-3xl font-bold tabular-nums ${party.balance > 0 ? 'text-warn' : 'text-ok'}`}>{money(party.balance)}</p>
         </div>
         <div className="rounded-xl border border-hair-soft bg-surface p-4 sm:col-span-2">
-          <p className="text-xs text-fg-muted">% comisión default (sobre costo del producto)</p>
+          <p className="text-xs text-fg-muted">% comisión default</p>
           <div className="mt-2 flex flex-wrap items-end gap-2">
             <input value={pct} onChange={(e) => setPct(e.target.value)} className="w-28 rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg" />
+            <select value={base} onChange={(e) => setBase(e.target.value === 'sale' ? 'sale' : 'cost')} className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg">
+              <option value="cost">Sobre costo</option>
+              <option value="sale">Sobre venta</option>
+            </select>
             <button type="button" disabled={savingPct} onClick={() => void savePct()} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised disabled:opacity-50">
-              {savingPct ? 'Guardando…' : 'Guardar %'}
+              {savingPct ? 'Guardando…' : 'Guardar'}
             </button>
           </div>
           {party.notes ? <p className="mt-2 text-sm text-fg-faint">{party.notes}</p> : null}
@@ -155,6 +166,7 @@ export default function ComisionadoDetailPage() {
                 <tr>
                   <th className="pb-2 pr-3">Producto</th>
                   <th className="pb-2 pr-3 text-right">Costo</th>
+                  <th className="pb-2 pr-3 text-right">Venta</th>
                   <th className="pb-2 pr-3 text-right">%</th>
                   <th className="pb-2 text-right">Stock</th>
                 </tr>
@@ -167,6 +179,7 @@ export default function ComisionadoDetailPage() {
                       {p.barcode ? <span className="mt-0.5 block font-mono text-[11px] text-fg-faint">{p.barcode}</span> : null}
                     </td>
                     <td className="py-2 pr-3 text-right font-mono tabular-nums">{p.cost == null ? '—' : money(p.cost)}</td>
+                    <td className="py-2 pr-3 text-right font-mono tabular-nums">{money(p.price)}</td>
                     <td className="py-2 pr-3 text-right font-mono tabular-nums">{p.effectiveCommissionPercent}%</td>
                     <td className="py-2 text-right font-mono tabular-nums">{p.stock}</td>
                   </tr>
@@ -205,7 +218,7 @@ export default function ComisionadoDetailPage() {
                     <span className="font-mono tabular-nums text-warn">+{money(e.amount)}</span>
                   </div>
                   <p className="text-xs text-fg-faint">
-                    {e.qty} × {money(e.unitCost)} + {e.commissionPercent}% · {new Date(e.createdAt).toLocaleString('es-AR')}
+                    {e.qty} × {money(e.unitCost)} + {e.commissionPercent}% ({(e.commissionBase ?? party.commissionBase) === 'sale' ? 'venta' : 'costo'}) · {new Date(e.createdAt).toLocaleString('es-AR')}
                     {e.voided ? ' · anulado' : ''}
                   </p>
                 </li>

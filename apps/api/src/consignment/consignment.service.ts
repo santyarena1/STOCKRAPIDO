@@ -2,6 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 
+export type CommissionBase = 'cost' | 'sale';
+
+function normalizeCommissionBase(value: unknown): CommissionBase {
+  return value === 'sale' ? 'sale' : 'cost';
+}
+
 @Injectable()
 export class ConsignmentService {
   constructor(private prisma: PrismaService) {}
@@ -11,11 +17,11 @@ export class ConsignmentService {
     return Number.isFinite(n) ? n : 0;
   }
 
-  /** Monto adeudado por unidad: costo + % del costo. */
-  computeUnitAmount(unitCost: number, commissionPercent: number) {
-    const cost = Math.max(0, unitCost);
+  /** Monto adeudado por unidad: base + % de la base (costo o venta). */
+  computeUnitAmount(unitBase: number, commissionPercent: number) {
+    const base = Math.max(0, unitBase);
     const pct = Math.max(0, commissionPercent);
-    return cost + (cost * pct) / 100;
+    return base + (base * pct) / 100;
   }
 
   async listParties(businessId: string) {
@@ -33,6 +39,7 @@ export class ConsignmentService {
       name: party.name,
       notes: party.notes,
       defaultCommissionPercent: this.toNum(party.defaultCommissionPercent),
+      commissionBase: normalizeCommissionBase(party.commissionBase),
       active: party.active,
       productCount: party._count.products,
       balance: balances[i],
@@ -42,18 +49,25 @@ export class ConsignmentService {
 
   async createParty(
     businessId: string,
-    data: { name: string; notes?: string; defaultCommissionPercent?: number },
+    data: {
+      name: string;
+      notes?: string;
+      defaultCommissionPercent?: number;
+      commissionBase?: CommissionBase;
+    },
   ) {
     const name = data.name?.trim();
     if (!name) throw new BadRequestException('El nombre es obligatorio.');
     const pct = data.defaultCommissionPercent ?? 0;
     if (!Number.isFinite(pct) || pct < 0) throw new BadRequestException('% inválido.');
+    const commissionBase = normalizeCommissionBase(data.commissionBase);
     return this.prisma.consignmentParty.create({
       data: {
         businessId,
         name,
         notes: data.notes?.trim() || null,
         defaultCommissionPercent: new Decimal(pct),
+        commissionBase,
       },
     });
   }
@@ -61,7 +75,13 @@ export class ConsignmentService {
   async updateParty(
     id: string,
     businessId: string,
-    data: Partial<{ name: string; notes: string | null; defaultCommissionPercent: number; active: boolean }>,
+    data: Partial<{
+      name: string;
+      notes: string | null;
+      defaultCommissionPercent: number;
+      commissionBase: CommissionBase;
+      active: boolean;
+    }>,
   ) {
     const existing = await this.prisma.consignmentParty.findFirst({ where: { id, businessId } });
     if (!existing) throw new NotFoundException('Entidad no encontrada');
@@ -77,6 +97,9 @@ export class ConsignmentService {
         throw new BadRequestException('% inválido.');
       }
       patch.defaultCommissionPercent = new Decimal(data.defaultCommissionPercent);
+    }
+    if (data.commissionBase !== undefined) {
+      patch.commissionBase = normalizeCommissionBase(data.commissionBase);
     }
     if (data.active !== undefined) patch.active = Boolean(data.active);
     return this.prisma.consignmentParty.update({ where: { id }, data: patch });
@@ -104,6 +127,7 @@ export class ConsignmentService {
     });
     if (!party) throw new NotFoundException('Entidad no encontrada');
     const balance = await this.balanceFor(businessId, id);
+    const commissionBase = normalizeCommissionBase(party.commissionBase);
     const [ledger, payments] = await Promise.all([
       this.prisma.consignmentLedgerEntry.findMany({
         where: { businessId, partyId: id },
@@ -122,6 +146,7 @@ export class ConsignmentService {
       name: party.name,
       notes: party.notes,
       defaultCommissionPercent: this.toNum(party.defaultCommissionPercent),
+      commissionBase,
       active: party.active,
       balance,
       products: party.products.map((p) => ({
@@ -147,6 +172,7 @@ export class ConsignmentService {
         note: e.note,
         voided: e.voided,
         createdAt: e.createdAt,
+        commissionBase,
       })),
       payments: payments.map((p) => ({
         id: p.id,
@@ -261,12 +287,14 @@ export class ConsignmentService {
       if (!item.productId || item.qty <= 0) continue;
       const product = byId.get(item.productId);
       if (!product?.consignmentPartyId || !product.consignmentParty) continue;
-      const unitCost = this.toNum(product.cost);
+      const commissionBase = normalizeCommissionBase(product.consignmentParty.commissionBase);
+      const unitBase =
+        commissionBase === 'sale' ? this.toNum(product.price) : this.toNum(product.cost);
       const commissionPercent =
         product.consignmentCommissionPercent != null
           ? this.toNum(product.consignmentCommissionPercent)
           : this.toNum(product.consignmentParty.defaultCommissionPercent);
-      const unitAmount = this.computeUnitAmount(unitCost, commissionPercent);
+      const unitAmount = this.computeUnitAmount(unitBase, commissionPercent);
       const amount = unitAmount * item.qty;
       await this.prisma.consignmentLedgerEntry.create({
         data: {
@@ -276,10 +304,11 @@ export class ConsignmentService {
           saleId,
           saleItemId: item.id,
           qty: item.qty,
-          unitCost: new Decimal(unitCost),
+          // Guarda la base usada (costo o venta) para que la cuenta corriente sea auditable.
+          unitCost: new Decimal(unitBase),
           commissionPercent: new Decimal(commissionPercent),
           amount: new Decimal(amount),
-          note: `Venta ${saleId.slice(0, 8)} · ${product.name}`,
+          note: `Venta ${saleId.slice(0, 8)} · ${product.name} (${commissionBase === 'sale' ? 'venta' : 'costo'})`,
         },
       });
     }

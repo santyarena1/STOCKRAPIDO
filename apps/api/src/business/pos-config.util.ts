@@ -87,6 +87,12 @@ type PosConfigPatchBody = {
     silentItemLabel?: string;
     /** Plaintext: el service la encripta en posConfig.serperKeyEncrypted */
     serperKey?: string | null;
+    preciosClaros?: {
+      enabled?: boolean;
+      lat?: number;
+      lng?: number;
+      branchIds?: string[] | null;
+    };
   };
   clearAiInvoiceWebhookSecret?: boolean;
 };
@@ -131,11 +137,14 @@ export function mergePosConfigUpdate(
   const incomingAi = patch.posConfig?.aiInvoice;
   const incomingBrand = patch.posConfig?.branding;
   const incomingCd = patch.posConfig?.customerDisplay;
+  const incomingPc = patch.posConfig?.preciosClaros;
   const hasHiddenCategoryIds =
     patch.posConfig !== undefined && 'hiddenCategoryIds' in patch.posConfig;
   const hasSilentItemLabel =
     patch.posConfig !== undefined && 'silentItemLabel' in patch.posConfig;
   const hasSerperKey = patch.posConfig !== undefined && 'serperKey' in patch.posConfig;
+  const hasPreciosClaros =
+    incomingPc !== undefined && typeof incomingPc === 'object' && Object.keys(incomingPc).length > 0;
   const hasAi =
     incomingAi !== undefined &&
     typeof incomingAi === 'object' &&
@@ -149,7 +158,17 @@ export function mergePosConfigUpdate(
     typeof incomingCd === 'object' &&
     Object.keys(incomingCd as object).length > 0;
 
-  if (!hasAi && !hasBrand && !hasCd && !hasHiddenCategoryIds && !hasSilentItemLabel && !hasSerperKey) return undefined;
+  if (
+    !hasAi &&
+    !hasBrand &&
+    !hasCd &&
+    !hasHiddenCategoryIds &&
+    !hasSilentItemLabel &&
+    !hasSerperKey &&
+    !hasPreciosClaros
+  ) {
+    return undefined;
+  }
 
   const base = existing && typeof existing === 'object' ? { ...(existing as Record<string, unknown>) } : {};
 
@@ -295,6 +314,41 @@ export function mergePosConfigUpdate(
       }
     }
     base.aiInvoice = nextAi;
+  }
+
+  if (hasPreciosClaros) {
+    const prev =
+      base.preciosClaros && typeof base.preciosClaros === 'object'
+        ? { ...(base.preciosClaros as Record<string, unknown>) }
+        : {};
+    const inc = incomingPc as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...prev };
+    if ('enabled' in inc) next.enabled = Boolean(inc.enabled);
+    if ('lat' in inc) {
+      const lat = Number(inc.lat);
+      if (Number.isFinite(lat)) next.lat = lat;
+      else delete next.lat;
+    }
+    if ('lng' in inc) {
+      const lng = Number(inc.lng);
+      if (Number.isFinite(lng)) next.lng = lng;
+      else delete next.lng;
+    }
+    if ('branchIds' in inc) {
+      if (Array.isArray(inc.branchIds)) {
+        next.branchIds = [
+          ...new Set(
+            inc.branchIds
+              .filter((id): id is string => typeof id === 'string')
+              .map((id) => id.trim())
+              .filter(Boolean),
+          ),
+        ].slice(0, 50);
+      } else {
+        delete next.branchIds;
+      }
+    }
+    base.preciosClaros = next;
   }
 
   return base;

@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.9',
+    date: '2026-08-20',
+    summary: 'Comisión sobre costo o venta, y Precios Claros con EAN coexistente.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Comisión: base costo o venta',
+        desc: 'En cada entidad de Comisionados elegís si el % se calcula sobre el costo o sobre el precio de venta.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Precios Claros: match y EAN',
+        desc: 'En la ficha del producto buscás coincidencias por nombre (y IA si hay key). Al aplicar, se completa lo vacío y el EAN de Precios Claros se suma junto al código actual, sin reemplazarlo.',
+      },
+    ],
+  },
+  {
     version: 'v1.8',
     date: '2026-08-18',
     summary: 'Fotos con Serper, lista de productos más clara, códigos internos y etiquetas A4.',

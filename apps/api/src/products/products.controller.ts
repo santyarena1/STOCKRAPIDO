@@ -309,8 +309,19 @@ export class ProductsController {
   }
 
   @Post(':id/add-code')
-  addCode(@CurrentUser() user: User, @Param('id') id: string, @Body() body: { code: string }) {
-    return this.products.addCode(id, user.businessId, body?.code);
+  addCode(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body: { code: string; keepPrimary?: boolean },
+  ) {
+    return this.products.addCode(id, user.businessId, body?.code, {
+      keepPrimary: body?.keepPrimary === true,
+    });
+  }
+
+  @Post(':id/add-alternate-code')
+  addAlternateCode(@CurrentUser() user: User, @Param('id') id: string, @Body() body: { code: string }) {
+    return this.products.addAlternateCode(id, user.businessId, body?.code);
   }
 
   @Get('barcode-lookup')

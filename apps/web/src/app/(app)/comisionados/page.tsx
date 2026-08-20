@@ -12,6 +12,7 @@ type PartyRow = {
   name: string;
   notes?: string | null;
   defaultCommissionPercent: number;
+  commissionBase?: 'cost' | 'sale';
   active: boolean;
   productCount: number;
   balance: number;
@@ -26,6 +27,7 @@ export default function ComisionadosPage() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [pct, setPct] = useState('0');
+  const [base, setBase] = useState<'cost' | 'sale'>('cost');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -58,11 +60,13 @@ export default function ComisionadosPage() {
           name: name.trim(),
           notes: notes.trim() || undefined,
           defaultCommissionPercent: Number(pct.replace(',', '.')) || 0,
+          commissionBase: base,
         }),
       });
       setName('');
       setNotes('');
       setPct('0');
+      setBase('cost');
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo crear.');
@@ -75,19 +79,26 @@ export default function ComisionadosPage() {
     <Container className="space-y-6">
       <PageHeader
         title="Comisionados"
-        subtitle="Productos en consignación: agrupás por persona/entidad, ves lo que se debe (costo + %) y registrás pagos."
+        subtitle="Productos en consignación: agrupás por persona/entidad, ves lo que se debe (base + %) y registrás pagos."
       />
 
       <form onSubmit={create} className="space-y-3 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
         <h2 className="text-base font-semibold text-fg">Nueva entidad</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm text-fg-muted sm:col-span-1">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-sm text-fg-muted">
             Nombre
             <input value={name} onChange={(e) => setName(e.target.value)} required className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" placeholder="Ej. Juan" />
           </label>
           <label className="text-sm text-fg-muted">
-            % comisión (sobre costo)
+            % comisión
             <input value={pct} onChange={(e) => setPct(e.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg" />
+          </label>
+          <label className="text-sm text-fg-muted">
+            Base del %
+            <select value={base} onChange={(e) => setBase(e.target.value === 'sale' ? 'sale' : 'cost')} className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg">
+              <option value="cost">Costo</option>
+              <option value="sale">Precio de venta</option>
+            </select>
           </label>
           <label className="text-sm text-fg-muted">
             Notas
@@ -111,7 +122,7 @@ export default function ComisionadosPage() {
               <Link href={`/comisionados/${row.id}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 hover:bg-raised">
                 <div className="min-w-0">
                   <p className="font-semibold text-fg">{row.name}{!row.active ? <span className="ml-2 text-xs text-fg-faint">(inactiva)</span> : null}</p>
-                  <p className="text-xs text-fg-faint">{row.productCount} producto{row.productCount === 1 ? '' : 's'} · % default {row.defaultCommissionPercent}</p>
+                  <p className="text-xs text-fg-faint">{row.productCount} producto{row.productCount === 1 ? '' : 's'} · % {row.defaultCommissionPercent} sobre {row.commissionBase === 'sale' ? 'venta' : 'costo'}</p>
                 </div>
                 <div className="text-right">
                   <p className={`font-mono text-lg font-bold tabular-nums ${row.balance > 0 ? 'text-warn' : 'text-ok'}`}>{money(row.balance)}</p>

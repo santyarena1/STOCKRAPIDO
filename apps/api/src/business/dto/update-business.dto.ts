@@ -85,6 +85,24 @@ export class BusinessCustomerDisplayDto {
   promoImageUrls?: string[];
 }
 
+export class BusinessPreciosClarosDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  lat?: number;
+
+  @IsOptional()
+  lng?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  branchIds?: string[];
+}
+
 export class BusinessPosConfigDto {
   @IsOptional()
   @IsArray()
@@ -114,6 +132,11 @@ export class BusinessPosConfigDto {
   @ValidateNested()
   @Type(() => BusinessCustomerDisplayDto)
   customerDisplay?: BusinessCustomerDisplayDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BusinessPreciosClarosDto)
+  preciosClaros?: BusinessPreciosClarosDto;
 }
 
 export class UpdateBusinessDto {

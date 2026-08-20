@@ -18,7 +18,13 @@ export class ConsignmentController {
   @Post('parties')
   create(
     @CurrentUser() user: User,
-    @Body() body: { name: string; notes?: string; defaultCommissionPercent?: number },
+    @Body()
+    body: {
+      name: string;
+      notes?: string;
+      defaultCommissionPercent?: number;
+      commissionBase?: 'cost' | 'sale';
+    },
   ) {
     return this.consignment.createParty(user.businessId, body);
   }
@@ -32,7 +38,14 @@ export class ConsignmentController {
   update(
     @CurrentUser() user: User,
     @Param('id') id: string,
-    @Body() body: Partial<{ name: string; notes: string | null; defaultCommissionPercent: number; active: boolean }>,
+    @Body()
+    body: Partial<{
+      name: string;
+      notes: string | null;
+      defaultCommissionPercent: number;
+      commissionBase: 'cost' | 'sale';
+      active: boolean;
+    }>,
   ) {
     return this.consignment.updateParty(id, user.businessId, body);
   }

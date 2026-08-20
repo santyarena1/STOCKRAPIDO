@@ -1038,18 +1038,29 @@ export class ProductsService {
   }
 
   /** Asocia un código (ej. de barras escaneado) a un producto, para que la próxima búsqueda sea exacta. */
-  async addCode(id: string, businessId: string, code: string) {
+  async addCode(id: string, businessId: string, code: string, opts?: { keepPrimary?: boolean }) {
     const clean = String(code ?? '').trim();
     if (clean.length < 3 || clean.length > 40) throw new BadRequestException('Código inválido.');
     const p = await this.prisma.product.findFirst({ where: { id, businessId }, select: { id: true, barcode: true, allCodes: true } });
     if (!p) throw new NotFoundException('Producto no encontrado.');
     const codes = new Set((p.allCodes ?? '').split(/\s+/).filter(Boolean));
     codes.add(clean);
-    if (p.barcode && p.barcode !== clean) codes.add(p.barcode);
+    if (p.barcode) codes.add(p.barcode);
     const data: Prisma.ProductUpdateInput = { allCodes: [...codes].join(' ') };
-    if (p.barcode !== clean) data.barcode = clean;
+    const keepPrimary = opts?.keepPrimary === true;
+    if (!keepPrimary && p.barcode !== clean) data.barcode = clean;
+    else if (!p.barcode) data.barcode = clean;
     await this.prisma.product.update({ where: { id }, data });
-    return { ok: true, barcodeSet: p.barcode !== clean };
+    return {
+      ok: true,
+      barcodeSet: !keepPrimary && p.barcode !== clean,
+      coexist: Boolean(p.barcode) && p.barcode !== clean,
+    };
+  }
+
+  /** Suma un código alternativo (ej. EAN de Precios Claros) sin pisar el barcode principal. */
+  async addAlternateCode(id: string, businessId: string, code: string) {
+    return this.addCode(id, businessId, code, { keepPrimary: true });
   }
 
   /** Completa Product.allCodes con todos los códigos (columnas + del proveedor vinculado). */

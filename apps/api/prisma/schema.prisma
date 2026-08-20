@@ -157,7 +157,7 @@ model Product {
   silent      Boolean   @default(false)
   consigned   Boolean   @default(false)
   consignmentPartyId String?
-  /** % sobre el costo; null = usa el default de la entidad */
+  /** % sobre la base (costo o venta según la entidad); null = default de la entidad */
   consignmentCommissionPercent Decimal?
   businessId  String
   brand       String?
@@ -199,6 +199,8 @@ model ConsignmentParty {
   name                     String
   notes                    String?
   defaultCommissionPercent Decimal  @default(0)
+  /** 'cost' = % sobre costo; 'sale' = % sobre precio de venta */
+  commissionBase           String   @default("cost")
   active                   Boolean  @default(true)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
