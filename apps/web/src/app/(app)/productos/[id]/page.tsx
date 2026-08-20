@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
@@ -93,7 +93,6 @@ function SupplierRawData({ raw }: { raw: unknown }) {
 
 export default function EditarProductoPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -105,6 +104,8 @@ export default function EditarProductoPage() {
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
   const [silentBusy, setSilentBusy] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [extraOpen, setExtraOpen] = useState<Record<string, boolean>>({});
 
   const toggleSilent = async () => {
     if (!product || silentBusy) return;
@@ -164,7 +165,7 @@ export default function EditarProductoPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api(`/products/${id}`, {
+      const updated = await api<Product>(`/products/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: form.name,
@@ -186,7 +187,9 @@ export default function EditarProductoPage() {
           subcategory: form.subcategory || undefined,
         }),
       });
-      router.push('/productos');
+      setProduct((current) => current ? { ...current, ...updated, category: updated.category ?? categories.find((c) => c.id === form.categoryId) ?? current.category } : updated);
+      setSaveMsg('Guardado');
+      window.setTimeout(() => setSaveMsg(''), 2000);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -261,70 +264,65 @@ export default function EditarProductoPage() {
         </div>
       </section>
 
-      <InfoSection title="General">
-        <InfoCell label="Nombre" value={product.name} />
-        <InfoCell label="Marca" value={displayValue(product.brand)} />
-        <InfoCell label="Categoría" value={displayValue(product.category?.name)} />
-        <InfoCell label="Subcategoría" value={displayValue(product.subcategory)} />
-        <InfoCell label="Estado" value={product.isActive === false ? 'Inactivo' : 'Activo'} />
-        <InfoCell label="Ficha" value={product.incomplete ? 'Incompleta' : 'Completa'} />
-        <InfoCell label="URL de imagen" value={displayValue(product.imageUrl)} mono />
-      </InfoSection>
 
-      <InfoSection title="Códigos">
-        <InfoCell label="EAN unidad" value={displayValue(product.barcode)} mono />
-        <InfoCell label="EAN bulto" value={displayValue(product.eanBox)} mono />
-        <InfoCell label="SKU proveedor" value={displayValue(product.supplierSku)} mono />
-        <InfoCell label="Ref. proveedor" value={displayValue(product.supplierRef)} mono />
-        <InfoCell label="ID externo" value={displayValue(product.externalId)} mono />
-      </InfoSection>
+      <details className="rounded-xl border border-hair-soft bg-surface open:shadow-sm">
+        <summary className="cursor-pointer list-none p-4 font-semibold text-fg sm:p-5 [&::-webkit-details-marker]:hidden flex items-center justify-between gap-2">
+          <span>Datos de lectura / proveedor</span>
+          <ChevronDown className="h-5 w-5 text-fg-muted" />
+        </summary>
+        <div className="space-y-4 border-t border-hair-soft p-4 sm:p-5">
+          <InfoSection title="Códigos">
+            <InfoCell label="EAN unidad" value={displayValue(product.barcode)} mono />
+            <InfoCell label="EAN bulto" value={displayValue(product.eanBox)} mono />
+            <InfoCell label="SKU proveedor" value={displayValue(product.supplierSku)} mono />
+            <InfoCell label="Ref. proveedor" value={displayValue(product.supplierRef)} mono />
+            <InfoCell label="ID externo" value={displayValue(product.externalId)} mono />
+          </InfoSection>
+          <InfoSection title="Precios e IVA">
+            <InfoCell label="Costo local" value={moneyValue(product.cost)} mono />
+            <InfoCell label="Precio de venta" value={moneyValue(product.price)} mono />
+            <InfoCell label="Precio base proveedor" value={moneyValue(synced?.basePrice)} mono />
+            <InfoCell label="Precio lista proveedor" value={moneyValue(synced?.listPrice)} mono />
+            <InfoCell label="IVA local" value={product.iva == null ? '—' : `${Number(product.iva)}%`} mono />
+            <InfoCell label="IVA proveedor" value={synced?.ivaAlicuota == null ? '—' : `${Number(synced.ivaAlicuota)}%`} mono />
+          </InfoSection>
+          <section className="space-y-5 rounded-xl border border-hair-soft bg-raised p-4">
+            <h2 className="text-base font-semibold text-fg">Origen / Proveedor</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <InfoCell label="Proveedor de origen" value={displayValue(product.sourceProvider)} />
+              <InfoCell label="Vínculo sincronizado" value={supplierData.linked ? 'Vinculado' : 'Sin vínculo'} />
+              <InfoCell label="Conexión vinculada" value={displayValue(synced?.connection?.name)} />
+            </div>
+            {synced ? (
+              <p className="text-sm text-fg-muted">Hay datos sincronizados. Abrí “Todos los datos del proveedor” más abajo para el JSON completo.</p>
+            ) : (
+              <p className="text-sm text-fg-muted">Este producto todavía no tiene datos sincronizados de un proveedor.</p>
+            )}
+          </section>
+          {synced && <SupplierRawData raw={synced.raw} />}
+        </div>
+      </details>
 
-      <InfoSection title="Precios e IVA">
-        <InfoCell label="Costo local" value={moneyValue(product.cost)} mono />
-        <InfoCell label="Precio de venta" value={moneyValue(product.price)} mono />
-        <InfoCell label="Precio base proveedor" value={moneyValue(synced?.basePrice)} mono />
-        <InfoCell label="Precio lista proveedor" value={moneyValue(synced?.listPrice)} mono />
-        <InfoCell label="IVA local" value={product.iva == null ? '—' : `${Number(product.iva)}%`} mono />
-        <InfoCell label="IVA proveedor" value={synced?.ivaAlicuota == null ? '—' : `${Number(synced.ivaAlicuota)}%`} mono />
-      </InfoSection>
+      <div className="border-t border-hair-soft pt-2">
+        <h2 className="text-xl font-semibold text-fg">Editar producto</h2>
+        <p className="text-sm text-fg-muted">Lo frecuente arriba. Lo vacío o poco usado, en los desplegables.</p>
+      </div>
 
-      <InfoSection title="Logística">
-        <InfoCell label="Unidades por bulto" value={displayValue(product.unitsPerBox ?? synced?.unitsPerBox)} mono />
-        <InfoCell label="Unidades por display" value={displayValue(synced?.unitsPerDisplay)} mono />
-        <InfoCell label="Displays por bulto" value={displayValue(synced?.displaysPerBox)} mono />
-        <InfoCell label="Peso" value={displayValue(product.weight ?? synced?.weight)} mono />
-        <InfoCell label="Formato" value={displayValue(product.format ?? synced?.format)} />
-        <InfoCell label="Sabor" value={displayValue(product.flavor ?? synced?.flavor)} />
-        <InfoCell label="Presentación" value={displayValue(product.presentation ?? synced?.presentation)} />
-        <InfoCell label="Retornable" value={synced?.retornable == null ? '—' : synced.retornable ? 'Sí' : 'No'} />
-        <InfoCell label="Stock" value={product.stock} mono />
-        <InfoCell label="Stock mínimo" value={product.minStock} mono />
-        <InfoCell label="Control de stock" value={product.stockControl ? 'Sí' : 'No'} />
-      </InfoSection>
-
-      <section className="space-y-5 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-        <h2 className="text-base font-semibold text-fg">Origen / Proveedor</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><InfoCell label="Proveedor de origen" value={displayValue(product.sourceProvider)} /><InfoCell label="Conexión de origen" value={displayValue(product.sourceConnectionId)} mono /><InfoCell label="Vínculo sincronizado" value={supplierData.linked ? 'Vinculado' : 'Sin vínculo'} /><InfoCell label="Conexión vinculada" value={displayValue(synced?.connection?.name)} /><InfoCell label="Provider" value={displayValue(synced?.connection?.provider)} mono /><InfoCell label="SyncedProduct ID" value={displayValue(synced?.id)} mono /></div>
-        {synced ? <><div><h3 className="mb-3 text-sm font-semibold text-fg">Variantes UN / DI / BU</h3><div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[900px] text-sm"><thead className="bg-raised text-left text-xs uppercase text-fg-faint"><tr><th className="p-3">UOM</th><th className="p-3 text-right">Multiplicador</th><th className="p-3 text-right">Costo</th><th className="p-3 text-right">Precio lista</th><th className="p-3 text-right">Precio venta</th><th className="p-3 text-right">Con IVA</th><th className="p-3 text-right">Stock</th><th className="p-3">RefId</th><th className="p-3">EAN</th></tr></thead><tbody className="divide-y divide-[color:var(--hair-soft)]">{synced.variants.length ? synced.variants.map((variant) => <tr key={variant.id}><td className="p-3"><span className="rounded-md bg-brand-highlight-soft px-2 py-1 font-mono font-semibold text-brand">{variant.uom}</span></td><td className="p-3 text-right font-mono">×{variant.multiplier}</td><td className="p-3 text-right font-mono">{moneyValue(variant.cost)}</td><td className="p-3 text-right font-mono">{moneyValue(variant.listPrice)}</td><td className="p-3 text-right font-mono">{moneyValue(variant.sellingPrice)}</td><td className="p-3 text-right font-mono">{moneyValue(variant.priceWithTax)}</td><td className="p-3 text-right font-mono">{displayValue(variant.stock)}</td><td className="p-3 font-mono text-xs">{displayValue(variant.refId)}</td><td className="p-3 font-mono text-xs">{displayValue(variant.ean)}</td></tr>) : <tr><td colSpan={9} className="p-6 text-center text-fg-faint">Sin variantes</td></tr>}</tbody></table></div></div><div><h3 className="mb-3 text-sm font-semibold text-fg">Historial de precios</h3><div className="overflow-x-auto rounded-xl border border-hair-soft"><table className="w-full min-w-[560px] text-sm"><thead className="bg-raised text-left text-xs uppercase text-fg-faint"><tr><th className="p-3">Fecha</th><th className="p-3 text-right">Costo</th><th className="p-3 text-right">Precio lista</th><th className="p-3 text-right">Precio venta</th></tr></thead><tbody className="divide-y divide-[color:var(--hair-soft)]">{synced.priceHistory.length ? synced.priceHistory.map((entry) => <tr key={entry.id}><td className="p-3 font-mono text-fg-muted">{new Date(entry.capturedAt).toLocaleString('es-AR')}</td><td className="p-3 text-right font-mono">{moneyValue(entry.cost)}</td><td className="p-3 text-right font-mono">{moneyValue(entry.listPrice)}</td><td className="p-3 text-right font-mono">{moneyValue(entry.sellingPrice)}</td></tr>) : <tr><td colSpan={4} className="p-6 text-center text-fg-faint">Sin historial registrado todavía</td></tr>}</tbody></table></div></div></> : <p className="rounded-xl border border-hair-soft bg-raised p-4 text-sm text-fg-muted">Este producto todavía no tiene datos sincronizados de un proveedor.</p>}
-      </section>
-
-      {synced && <SupplierRawData raw={synced.raw} />}
-
-      <div className="border-t border-hair-soft pt-2"><h2 className="text-xl font-semibold text-fg">Editar producto</h2><p className="text-sm text-fg-muted">Los cambios de esta sección actualizan la ficha local de StockRápido.</p></div>
-
-      <div className="flex flex-col gap-6">
-        <form data-tour="editar-producto-form" onSubmit={handleSave} className="w-full space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
-          <div>
-            <label className="block text-sm text-fg-muted mb-1">Nombre *</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-6 pb-24">
+        <form id="editar-producto-form" data-tour="editar-producto-form" onSubmit={handleSave} className="w-full space-y-4 rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm text-fg-muted">Nombre *</label>
+              <input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 text-fg" required />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-fg-muted">Precio venta *</label>
+              <input type="number" step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} className="w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 font-mono text-fg" required />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-fg-muted">Costo unitario</label>
+              <input type="number" step="0.01" value={form.cost} onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))} className="w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 font-mono text-fg" />
+            </div>
             <BarcodeField
               barcode={form.barcode}
               onBarcode={(barcode) => setForm((f) => ({ ...f, barcode }))}
@@ -338,129 +336,96 @@ export default function EditarProductoPage() {
               }}
             />
             <div>
-              <label className="block text-sm text-fg-muted mb-1">Categoría</label>
-              <CategorySelector
-                value={form.categoryId}
-                onChange={(id) => setForm((f) => ({ ...f, categoryId: id }))}
-                categories={categories}
-                onCategoriesChange={setCategories}
-                placeholder="Sin categoría"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-fg-muted mb-1">Costo unitario</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.cost}
-                onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-              />
-              <p className="text-xs text-fg-faint mt-0.5">Siempre por unidad · se actualiza con la última compra</p>
+              <label className="mb-1 block text-sm text-fg-muted">Categoría</label>
+              <CategorySelector value={form.categoryId} onChange={(cid) => setForm((f) => ({ ...f, categoryId: cid }))} categories={categories} onCategoriesChange={setCategories} placeholder="Sin categoría" />
             </div>
             <div>
-              <label className="block text-sm text-fg-muted mb-1">Precio venta unitario *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.price}
-                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-                required
-              />
-              <p className="text-xs text-fg-faint mt-0.5">Precio por unidad · se actualiza con la última compra</p>
+              <label className="mb-1 block text-sm text-fg-muted">Marca</label>
+              <input value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} className="w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 text-fg" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-fg-muted">Stock mínimo</label>
+              <input type="number" value={form.minStock} onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))} className="w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 font-mono text-fg" />
+            </div>
+            <label className="flex items-center gap-2 self-end rounded-lg border border-hair bg-raised px-3 py-2.5 text-sm text-fg-muted">
+              <input type="checkbox" checked={form.stockControl} onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))} />
+              Controlar stock
+            </label>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-fg-muted">Imagen</label>
+            <ImageUploader value={form.imageUrl} onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))} maxPx={1200} previewClass="w-16 h-16 object-contain" label="Subir imagen" />
+            <div className="mt-3">
+              <SerperImagePicker query={[form.name, form.brand].filter(Boolean).join(' ')} value={form.imageUrl} onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))} />
             </div>
           </div>
+
           {product?.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 && (
-            <div className="rounded-lg border border-hair bg-raised px-4 py-3 text-sm">
-              <p className="text-fg font-medium mb-1">Producto por bulto · {product.unitsPerBoxNum} unidades</p>
-              <div className="flex gap-6 text-fg-muted">
-                {product.costBox != null && <span>Costo bulto: <strong>${Number(product.costBox).toFixed(0)}</strong></span>}
-                {product.priceBox != null && <span>Precio bulto: <strong>${Number(product.priceBox).toFixed(0)}</strong></span>}
-              </div>
-              <p className="text-fg-faint text-xs mt-1">Referencia interna — los precios unitarios arriba son los que usa el sistema</p>
+            <div className="rounded-lg border border-hair bg-raised px-4 py-3 text-sm text-fg-muted">
+              Bulto × {product.unitsPerBoxNum}
+              {product.costBox != null && <> · costo bulto <strong className="text-fg">${Number(product.costBox).toFixed(0)}</strong></>}
+              {product.priceBox != null && <> · precio bulto <strong className="text-fg">${Number(product.priceBox).toFixed(0)}</strong></>}
             </div>
           )}
-          <div>
-            <label className="block text-sm text-fg-muted mb-1">Stock mínimo</label>
-            <input
-              type="number"
-              value={form.minStock}
-              onChange={(e) => setForm((f) => ({ ...f, minStock: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-fg-muted mb-1">Vencimiento (referencia)</label>
-            <input
-              type="date"
-              value={form.expiresAt}
-              onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-            />
-            <p className="text-xs text-fg-faint mt-0.5">El vencimiento por lote se define en cada compra (ver Lotes abajo)</p>
-          </div>
-          <div>
-            <label className="block text-sm text-fg-muted mb-1">Marca</label>
-            <input
-              value={form.brand}
-              onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-            />
-          </div>
 
-          <div className="border-t border-hair-soft pt-3">
-            <p className="text-sm font-medium text-fg-muted mb-1">Datos internos / catálogo</p>
-            <p className="text-xs text-fg-faint mb-3">Campos del proveedor. Unidades por bulto define si el producto se vende por bulto (referencia interna).</p>
-            <div className="mb-3">
-              <label className="block text-sm text-fg-muted mb-2">Imagen del producto</label>
-              <ImageUploader
-                value={form.imageUrl}
-                onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
-                maxPx={1200}
-                previewClass="w-16 h-16 object-contain"
-                label="Subir imagen"
-              />
-              <div className="mt-3">
-                <p className="mb-2 text-xs text-fg-faint">O buscá una foto en Google (Serper). La key se carga en Configuración → Imágenes Serper.</p>
-                <SerperImagePicker
-                  query={[form.name, form.brand].filter(Boolean).join(' ')}
-                  value={form.imageUrl}
-                  onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                ['unitsPerBox', 'Unidades por bulto'],
-                ['weight', 'Peso'],
-                ['format', 'Formato'],
-                ['flavor', 'Sabor'],
-                ['presentation', 'Presentación'],
-                ['subcategory', 'Subcategoría'],
-              ] as const).map(([key, label]) => (
-                <div key={key}>
-                  <label className="block text-sm text-fg-muted mb-1">{label}</label>
-                  <input
-                    value={form[key]}
-                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-raised border border-hair-soft text-fg"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-fg-muted cursor-pointer">
-            <input type="checkbox" checked={form.stockControl} onChange={(e) => setForm((f) => ({ ...f, stockControl: e.target.checked }))} />
-            Controlar stock
-          </label>
-          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
-            {saving ? 'Guardando...' : 'Guardar'}
-          </button>
+          {(() => {
+            const groups: { key: string; title: string; fields: { key: keyof typeof form; label: string; type?: string }[] }[] = [
+              { key: 'logistica', title: 'Logística y presentación', fields: [
+                { key: 'unitsPerBox', label: 'Unidades por bulto' },
+                { key: 'weight', label: 'Peso' },
+                { key: 'format', label: 'Formato' },
+                { key: 'flavor', label: 'Sabor' },
+                { key: 'presentation', label: 'Presentación' },
+                { key: 'subcategory', label: 'Subcategoría' },
+              ]},
+              { key: 'otros', title: 'Otros', fields: [
+                { key: 'expiresAt', label: 'Vencimiento (referencia)', type: 'date' },
+              ]},
+            ];
+            const emptyGroups = groups.map((g) => ({
+              ...g,
+              fields: g.fields.filter((f) => !String(form[f.key] ?? '').trim()),
+            })).filter((g) => g.fields.length);
+            const filledExtras = groups.flatMap((g) => g.fields.filter((f) => String(form[f.key] ?? '').trim()));
+            return (
+              <>
+                {filledExtras.length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {filledExtras.map((f) => (
+                      <div key={f.key}>
+                        <label className="mb-1 block text-sm text-fg-muted">{f.label}</label>
+                        <input type={f.type || 'text'} value={String(form[f.key] ?? '')} onChange={(e) => setForm((cur) => ({ ...cur, [f.key]: e.target.value }))} className="w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 text-fg" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {emptyGroups.length > 0 && (
+                  <div className="space-y-2 border-t border-hair-soft pt-3">
+                    <p className="text-sm font-medium text-fg-muted">Campos vacíos ({emptyGroups.reduce((n, g) => n + g.fields.length, 0)})</p>
+                    {emptyGroups.map((g) => (
+                      <details key={g.key} className="rounded-lg border border-hair-soft bg-raised" open={Boolean(extraOpen[g.key])} onToggle={(e) => setExtraOpen((cur) => ({ ...cur, [g.key]: (e.target as HTMLDetailsElement).open }))}>
+                        <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-fg [&::-webkit-details-marker]:hidden flex items-center justify-between">
+                          <span>{g.title}</span>
+                          <span className="font-mono text-xs text-fg-faint">{g.fields.length}</span>
+                        </summary>
+                        <div className="grid gap-3 border-t border-hair-soft p-3 sm:grid-cols-2">
+                          {g.fields.map((f) => (
+                            <div key={f.key}>
+                              <label className="mb-1 block text-xs text-fg-muted">{f.label}</label>
+                              <input type={f.type || 'text'} value={String(form[f.key] ?? '')} onChange={(e) => setForm((cur) => ({ ...cur, [f.key]: e.target.value }))} className="w-full rounded-lg border border-hair bg-surface px-3 py-2 text-sm text-fg" />
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </form>
+
 
         <div className="space-y-6 w-full">
           {(nextExpiry || product.expiresAt) && (
@@ -598,6 +563,16 @@ export default function EditarProductoPage() {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-hair bg-surface/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+          <p className="text-sm text-fg-muted">{saveMsg || 'Los cambios se guardan en la ficha local.'}</p>
+          <button type="submit" form="editar-producto-form" disabled={saving} className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
         </div>
       </div>
 

@@ -300,7 +300,14 @@ export class FiscalService {
     const silentLabel =
       (typeof posConfig.silentItemLabel === 'string' && posConfig.silentItemLabel.trim()) || 'Item kiosco';
     return { id: sale.id, createdAt: sale.createdAt, total: sale.total, discount: sale.discount, totalFinal: sale.totalFinal, paymentMethod: sale.paymentMethod,
-      items: sale.items.map(i => ({ name: (!reveal && i.product?.silent) ? silentLabel : (i.product?.name || i.productName || 'Producto'), qty: i.qty, unitPrice: i.unitPrice, subtotal: i.subtotal })),
+      items: sale.items.map(i => ({
+        name: (!reveal && (i.product?.silent || Boolean(i.productId && i.productName)))
+          ? (i.productName || silentLabel)
+          : (i.product?.name || i.productName || 'Producto'),
+        qty: i.qty,
+        unitPrice: i.unitPrice,
+        subtotal: i.subtotal,
+      })),
       business: { name: legalName, cuit: fc?.cuit || sale.business.cuit, address: fc?.address || sale.business.address,
         grossIncomeNumber: fc?.grossIncomeNumber, activityStartDate: fc?.activityStartDate },
       ticket: { fantasyName, logoUrl, template, legalName }, fiscalDocument: sale.fiscalDocument };

@@ -11,21 +11,31 @@ export default function SerperConfigPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [localHasKey, setLocalHasKey] = useState(false);
-  const hasKey = Boolean(business?.hasSerperKey) || localHasKey;
+  const businessHasKey = Boolean(business?.hasSerperKey);
 
   useEffect(() => {
     setLocalHasKey(hasStoredSerperKey());
   }, []);
 
-  const persist = async (nextKey: string, okMsg: string) => {
+  const persist = async (nextKey: string) => {
     setSaving(true);
     setMsg('');
     try {
       const updated = await saveSerperKey(nextKey);
-      setLocalHasKey(Boolean(updated.hasSerperKey));
-      setBusiness((current) => current ? { ...current, ...updated, hasSerperKey: Boolean(updated.hasSerperKey) } as Business : current);
+      setLocalHasKey(hasStoredSerperKey());
+      setBusiness((current) =>
+        current
+          ? ({ ...current, ...updated, hasSerperKey: updated.savedOnBusiness && updated.hasSerperKey } as Business)
+          : current,
+      );
       setKey('');
-      setMsg(okMsg);
+      if (!nextKey.trim()) {
+        setMsg('Se quitó la API de Serper.');
+      } else if (updated.savedOnBusiness) {
+        setMsg('API guardada en el negocio. Ya se puede usar desde cualquier PC.');
+      } else {
+        setMsg('Quedó solo en este navegador. En otra PC no va a andar: revisá que la API esté actualizada o reintentá.');
+      }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo guardar.');
     } finally {
@@ -34,13 +44,13 @@ export default function SerperConfigPage() {
   };
 
   const save = async () => {
-    await persist(key, key.trim() ? 'API de Serper guardada.' : 'Se quitó la API de Serper.');
+    await persist(key);
   };
 
   const clear = async () => {
     if (!confirm('¿Quitar la API key de Serper de este negocio?')) return;
     setKey('');
-    await persist('', 'Se quitó la API de Serper.');
+    await persist('');
   };
 
   return (
@@ -61,14 +71,14 @@ export default function SerperConfigPage() {
           <a href="https://serper.dev" target="_blank" rel="noopener noreferrer" className="font-semibold text-brand hover:underline">
             serper.dev
           </a>
-          {' '}y pegala acá. Se usa para buscar fotos en el alta, la edición, el producto rápido del POS y el{' '}
-          <a href="/productos/imagenes" className="font-semibold text-brand hover:underline">
-            editor masivo de imágenes
-          </a>
-          .
+          {' '}y pegala acá. Tiene que guardarse en el negocio para usarla en otra PC.
         </p>
-        <p className={`text-sm ${hasKey ? 'text-ok' : 'text-warn'}`}>
-          {hasKey ? 'Este negocio ya tiene una API key cargada.' : 'Todavía no hay una API key cargada.'}
+        <p className={`text-sm ${businessHasKey ? 'text-ok' : localHasKey ? 'text-warn' : 'text-warn'}`}>
+          {businessHasKey
+            ? 'Key cargada en el negocio (cualquier PC).'
+            : localHasKey
+              ? 'Hay una key solo en este navegador. Guardala de nuevo para sincronizar el negocio.'
+              : 'Todavía no hay una API key cargada.'}
         </p>
         <div>
           <label className="mb-1 block text-sm text-fg-muted">API key de Serper</label>
@@ -76,16 +86,16 @@ export default function SerperConfigPage() {
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={hasKey ? 'Ingresá una nueva key para reemplazarla' : 'Pegá la key de serper.dev'}
+            placeholder={businessHasKey || localHasKey ? 'Ingresá una nueva key para reemplazarla' : 'Pegá la key de serper.dev'}
             autoComplete="new-password"
             className="w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-sm text-fg"
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={saving || (!key.trim() && !hasKey)} className="btn-brand rounded-lg px-4 py-2 disabled:opacity-50">
+          <button type="submit" disabled={saving || (!key.trim() && !businessHasKey && !localHasKey)} className="btn-brand rounded-lg px-4 py-2 disabled:opacity-50">
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
-          {hasKey ? (
+          {businessHasKey || localHasKey ? (
             <button type="button" disabled={saving} onClick={() => void clear()} className="rounded-lg border border-hair px-4 py-2 text-fg-muted hover:text-crit">
               Quitar key
             </button>

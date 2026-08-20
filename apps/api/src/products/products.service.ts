@@ -269,10 +269,53 @@ export class ProductsService {
     return list.map(decorateProductUnits);
   }
 
+  private looksLikeCodeQuery(q: string) {
+    const term = q.trim();
+    if (!term || /\s/.test(term)) return false;
+    return /^\d{8,14}$/.test(term) || /^[a-z0-9._\/-]{6,}$/i.test(term);
+  }
+
+  private async findExactCatalogCodeIds(businessId: string, term: string) {
+    const rows = await this.prisma.product.findMany({
+      where: {
+        businessId,
+        OR: [
+          { barcode: term },
+          { eanBox: term },
+          { supplierSku: term },
+          { supplierRef: term },
+          { externalId: term },
+          ...(term.length >= 6 ? [{ allCodes: { contains: term } as const }] : []),
+        ],
+      },
+      select: { id: true, barcode: true, eanBox: true, supplierSku: true, supplierRef: true, externalId: true, allCodes: true },
+    });
+    // Preferí igualdad exacta de campo; allCodes contains solo si el token está aislado.
+    return rows
+      .filter((row) => {
+        if ([row.barcode, row.eanBox, row.supplierSku, row.supplierRef, row.externalId].includes(term)) return true;
+        return (row.allCodes ?? '').split(/\s+/).includes(term);
+      })
+      .map((row) => row.id);
+  }
+
   async catalog(businessId: string, query: ProductCatalogQuery) {
     let where: Record<string, unknown>;
-    const tokens = query.q?.trim().split(/\s+/).filter(Boolean) ?? [];
-    if (tokens.length) {
+    const rawQ = query.q?.trim() ?? '';
+    const tokens = rawQ.split(/\s+/).filter(Boolean);
+    let rankedIds: string[] | null = null;
+    const codeQuery = this.looksLikeCodeQuery(rawQ);
+
+    if (codeQuery) {
+      const exactIds = await this.findExactCatalogCodeIds(businessId, rawQ);
+      if (exactIds.length) {
+        where = this.catalogWhere(businessId, { ...query, q: undefined });
+        where.id = { in: exactIds };
+        rankedIds = exactIds;
+      }
+    }
+
+    if (!rankedIds && tokens.length) {
       try {
         const tokenConditions = tokens.map((token) => {
           const contains = `%${token}%`;
@@ -287,41 +330,90 @@ export class ProductsService {
             OR COALESCE(p."allCodes", '') ILIKE ${contains}
           )`;
         });
+        // Si parece código y no hubo exacto, igual buscamos parciales; si es texto, también fuzzy.
         const { match: fuzzy } = fuzzyCodeClause(
-          query.q?.trim() ?? '', tokens, 'p',
+          rawQ, tokens, 'p',
           ['barcode', 'eanBox', 'supplierSku', 'supplierRef', 'externalId', 'allCodes'],
         );
-        const matches = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          SELECT p."id"
+        const firstToken = tokens[0];
+        const firstContains = `%${firstToken}%`;
+        const firstStarts = `${firstToken}%`;
+        const matches = await this.prisma.$queryRaw<Array<{ id: string; score: number }>>(Prisma.sql`
+          SELECT p."id",
+            CASE
+              WHEN p."barcode" = ${rawQ} OR p."eanBox" = ${rawQ} OR p."supplierSku" = ${rawQ}
+                OR p."supplierRef" = ${rawQ} OR p."externalId" = ${rawQ} THEN 0
+              WHEN unaccent(lower(p."name")) LIKE unaccent(lower(${firstStarts})) THEN 1
+              WHEN unaccent(lower(p."name")) LIKE unaccent(lower(${firstContains})) THEN 2
+              WHEN COALESCE(p."barcode", '') ILIKE ${firstContains}
+                OR COALESCE(p."eanBox", '') ILIKE ${firstContains}
+                OR COALESCE(p."supplierSku", '') ILIKE ${firstContains}
+                OR COALESCE(p."supplierRef", '') ILIKE ${firstContains}
+                OR COALESCE(p."externalId", '') ILIKE ${firstContains}
+                OR COALESCE(p."allCodes", '') ILIKE ${firstContains} THEN 3
+              WHEN unaccent(lower(COALESCE(p."brand", ''))) LIKE unaccent(lower(${firstContains})) THEN 4
+              ELSE 5
+            END AS score
           FROM "Product" p
           WHERE p."businessId" = ${businessId}
-            AND (${Prisma.join(tokenConditions, ' AND ')} ${fuzzy})
+            AND (${Prisma.join(tokenConditions, ' AND ')} ${codeQuery ? Prisma.empty : fuzzy})
+          ORDER BY score ASC, p."name" ASC
         `);
         where = this.catalogWhere(businessId, { ...query, q: undefined });
         where.id = { in: matches.map((match) => match.id) };
+        rankedIds = matches.map((match) => match.id);
       } catch (error) {
         this.logger.warn(
           `Búsqueda avanzada del catálogo no disponible; se usa fallback Prisma: ${error instanceof Error ? error.message : String(error)}`,
         );
         where = this.catalogWhere(businessId, query);
       }
-    } else {
+    } else if (!rankedIds) {
       where = this.catalogWhere(businessId, query);
     }
+
     const skip = (query.page - 1) * query.pageSize;
+    const preferRelevance = Boolean(rankedIds) && (codeQuery || query.sort === 'name');
+    if (preferRelevance && rankedIds) {
+      const matched = await this.prisma.product.findMany({
+        where: where!,
+        select: { id: true },
+      });
+      const allowed = new Set(matched.map((row) => row.id));
+      const orderedIds = rankedIds.filter((id) => allowed.has(id));
+      const total = orderedIds.length;
+      const pageIds = orderedIds.slice(skip, skip + query.pageSize);
+      if (!pageIds.length) {
+        return { items: [], total, page: query.page, pageSize: query.pageSize, totalPages: Math.ceil(total / query.pageSize) || 0 };
+      }
+      const items = await this.prisma.product.findMany({
+        where: { ...where!, id: { in: pageIds } },
+        include: { category: true },
+      });
+      const order = new Map(pageIds.map((id, index) => [id, index]));
+      items.sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+      return {
+        items: items.map(decorateProductUnits),
+        total,
+        page: query.page,
+        pageSize: query.pageSize,
+        totalPages: Math.ceil(total / query.pageSize),
+      };
+    }
+
     const orderBy =
       query.sort === 'category'
         ? { category: { name: query.dir } }
         : { [query.sort]: query.dir };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
-        where,
+        where: where!,
         include: { category: true },
         orderBy: orderBy as any,
         skip,
         take: query.pageSize,
       }),
-      this.prisma.product.count({ where }),
+      this.prisma.product.count({ where: where! }),
     ]);
     return {
       items: items.map(decorateProductUnits),

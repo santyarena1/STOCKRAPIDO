@@ -95,6 +95,11 @@ export class BusinessPosConfigDto {
   @IsString()
   silentItemLabel?: string;
 
+  /** Fallback cross-device si falta PATCH /business/serper-key */
+  @IsOptional()
+  @IsString()
+  serperKey?: string;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => BusinessAiInvoiceDto)

@@ -3,14 +3,17 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
+import { generateLocalInternalBarcode } from '@/lib/internal-barcode';
+import { isApiRouteMissing } from '@/lib/serper-client';
 
 type Props = {
   barcode: string;
   onBarcode: (barcode: string) => void;
   labelItem: LabelItem;
+  businessId?: string | null;
 };
 
-export function BarcodeField({ barcode, onBarcode, labelItem }: Props) {
+export function BarcodeField({ barcode, onBarcode, labelItem, businessId }: Props) {
   const [busy, setBusy] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
 
@@ -18,8 +21,28 @@ export function BarcodeField({ barcode, onBarcode, labelItem }: Props) {
     if (barcode.trim() && !confirm('Este producto ya tiene código. ¿Reemplazarlo por uno interno nuevo?')) return;
     setBusy(true);
     try {
-      const res = await api<{ barcode: string }>('/products/generate-barcode', { method: 'POST', body: '{}' });
-      onBarcode(res.barcode);
+      try {
+        const res = await api<{ barcode: string }>('/products/generate-barcode', { method: 'POST', body: '{}' });
+        onBarcode(res.barcode);
+        return;
+      } catch (err) {
+        if (!isApiRouteMissing(err) && !(err instanceof Error && /404|not found|cannot post/i.test(err.message))) {
+          // Si la API responde error real (ej. sin auth), no fingimos éxito local.
+          const msg = err instanceof Error ? err.message : '';
+          if (msg && !/generate-barcode/i.test(msg) && !/^Cannot POST/i.test(msg)) throw err;
+        }
+      }
+      // Fallback local: mismo algoritmo; al guardar el producto queda en la DB.
+      let bizId = businessId?.trim() || '';
+      if (!bizId) {
+        try {
+          const me = await api<{ id: string }>('/business/me');
+          bizId = me.id;
+        } catch {
+          bizId = 'local';
+        }
+      }
+      onBarcode(generateLocalInternalBarcode(bizId));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'No se pudo generar el código');
     } finally {
@@ -57,7 +80,7 @@ export function BarcodeField({ barcode, onBarcode, labelItem }: Props) {
         </button>
       </div>
       <p className="mt-1 text-xs text-fg-faint">
-        Si el producto no trae EAN, generamos un código interno (EAN-13 de uso interno) para pistolearlo desde una hoja.
+        Si el producto no trae EAN, generamos un código interno (EAN-13 de uso interno) para pistolearlo desde una hoja. Recordá guardar el producto.
       </p>
       {printOpen ? <LabelPrintDialog items={[current]} onClose={() => setPrintOpen(false)} /> : null}
     </div>

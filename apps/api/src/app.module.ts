@@ -23,6 +23,7 @@ import { VendedoresModule } from './vendedores/vendedores.module';
 import { DataAdminModule } from './data-admin/data-admin.module';
 import { SupportModule } from './support/support.module';
 import { PlatformModule } from './platform/platform.module';
+import { PreciosClarosModule } from './precios-claros/precios-claros.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { PlatformModule } from './platform/platform.module';
     DataAdminModule,
     SupportModule,
     PlatformModule,
+    PreciosClarosModule,
   ],
 })
 export class AppModule {}

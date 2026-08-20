@@ -71,6 +71,31 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Etiquetas A4 completas',
         desc: 'Al imprimir ya no se cortan páginas. El código de barras ocupa todo el ancho de la etiqueta.',
       },
+      {
+        tag: 'MEJORA',
+        title: 'Búsqueda por código en Productos',
+        desc: 'Si buscás un código exacto, ese producto sale primero y solo. Ya no queda perdido en el medio de la lista.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Ficha de producto más ágil',
+        desc: 'Campos frecuentes arriba, vacíos en desplegables y botón Guardar flotante siempre visible.',
+      },
+      {
+        tag: 'FIX',
+        title: 'Serper y códigos en cualquier PC',
+        desc: 'La key de Serper se guarda en el negocio (no solo en un navegador). Generar código interno también funciona si la API vieja no tiene el endpoint.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Silencioso desde el POS',
+        desc: 'En la búsqueda o el carrito podés marcar PS: solo este carrito, o guardarlo fijo en el producto.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Precios Claros (base)',
+        desc: 'Quedó el módulo y el plan para consultar la API/dataset del gobierno por EAN o nombre. La búsqueda live se completa en el próximo paso.',
+      },
     ],
   },
   {

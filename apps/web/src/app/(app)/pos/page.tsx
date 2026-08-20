@@ -22,6 +22,10 @@ type CartItem = {
   subtotal: number;
   discount: number;
   imageUrl?: string | null;
+  /** Producto marcado PS en ficha */
+  productSilent?: boolean;
+  /** Solo este carrito: ticket usa label silencioso */
+  silentTicket?: boolean;
 };
 type Vendedor = { id: string; name: string; active: boolean };
 
@@ -89,6 +93,7 @@ function CartItemRow({
   onQtyChange,
   onPriceChange,
   onRemove,
+  onSilent,
 }: {
   item: CartItem;
   onMinus: () => void;
@@ -96,6 +101,7 @@ function CartItemRow({
   onQtyChange: (qty: number) => void;
   onPriceChange: (price: number) => void;
   onRemove: () => void;
+  onSilent?: () => void;
 }) {
   const handleMinus = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -115,7 +121,14 @@ function CartItemRow({
       ) : (
         <div className="w-8 h-8 rounded bg-raised2 shrink-0" />
       )}
-      <span className="text-fg-muted truncate flex-1 min-w-0 basis-full sm:basis-0">{item.name}</span>
+      <span className="text-fg-muted truncate flex-1 min-w-0 basis-full sm:basis-0">
+        {item.name}
+        {(item.silentTicket || item.productSilent) ? (
+          <span className="ml-1 rounded border border-[color:var(--brand-accent)] bg-brand-highlight px-1 text-[9px] font-bold uppercase text-brand">
+            {item.silentTicket && !item.productSilent ? 'PS carrito' : 'PS'}
+          </span>
+        ) : null}
+      </span>
       <div className="flex items-center gap-1 shrink-0">
         <button type="button" onClick={handleMinus} className="w-7 h-7 rounded bg-raised2 text-fg hover:bg-raised2" aria-label="Menos">
           −
@@ -164,6 +177,16 @@ function CartItemRow({
         <span className="text-fg-faint text-[10px] shrink-0">c/u</span>
       </div>
       <span className="text-brand font-medium w-16 text-right shrink-0">${(item.subtotal - (item.discount || 0)).toFixed(0)}</span>
+      {onSilent && !item.productId.startsWith('manual-') ? (
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSilent(); }}
+          className="shrink-0 rounded border border-hair px-1.5 py-0.5 text-[10px] font-bold uppercase text-fg-muted hover:border-[color:var(--brand-accent)] hover:text-brand"
+          title="Producto silencioso"
+        >
+          PS
+        </button>
+      ) : null}
       <button type="button" onClick={onRemove} className="text-fg-faint hover:text-red-400 shrink-0" title="Quitar">×</button>
     </li>
   );
@@ -189,6 +212,7 @@ export default function POSPage() {
       unitsPerBox?: string | null;
       unitsPerBoxNum?: number | null;
       cost?: unknown;
+      silent?: boolean;
     }[]
   >([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -231,6 +255,8 @@ export default function POSPage() {
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const [assocMsg, setAssocMsg] = useState('');
   const [assocCode, setAssocCode] = useState(''); // código fijado para asociar buscando el producto por nombre
+  const [silentPrompt, setSilentPrompt] = useState<{ productId: string; name: string; from: 'search' | 'cart' } | null>(null);
+
   const searchRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const lastEnterForCobrarRef = useRef<number>(0);
@@ -393,8 +419,9 @@ export default function POSPage() {
 
   const addToCart = useCallback(
     (
-      product: { id: string; name: string; price: string; stock?: number; stockControl?: boolean; imageUrl?: string | null },
+      product: { id: string; name: string; price: string; stock?: number; stockControl?: boolean; imageUrl?: string | null; silent?: boolean },
       qty = 1,
+      opts?: { silentTicket?: boolean },
     ) => {
     const price = parseFloat(product.price) || 0;
     const trackStock = product.stockControl !== false;
@@ -426,7 +453,17 @@ export default function POSPage() {
         return next;
       }
       const subt = price * qty;
-      return [...prev, { productId: product.id, name: product.name, qty, unitPrice: price, subtotal: subt, discount: 0, imageUrl: product.imageUrl ?? null }];
+      return [...prev, {
+        productId: product.id,
+        name: product.name,
+        qty,
+        unitPrice: price,
+        subtotal: subt,
+        discount: 0,
+        imageUrl: product.imageUrl ?? null,
+        productSilent: Boolean(product.silent),
+        silentTicket: Boolean(opts?.silentTicket),
+      }];
     });
     setSearch('');
     setResults([]);
@@ -447,6 +484,61 @@ export default function POSPage() {
       window.setTimeout(() => setAssocMsg(''), 4000);
     }
   }, [addToCart]);
+
+  const applySilentPermanent = useCallback(async (productId: string, addIfMissing = false) => {
+    try {
+      await api(`/products/${productId}`, { method: 'PATCH', body: JSON.stringify({ silent: true }) });
+      setCart((prev) => {
+        const next = prev.map((item) =>
+          item.productId === productId ? { ...item, productSilent: true, silentTicket: false } : item,
+        );
+        return next;
+      });
+      setResults((prev) => prev.map((row) => (row.id === productId ? { ...row, silent: true } : row)));
+      if (addIfMissing) {
+        setCart((prev) => {
+          if (prev.some((item) => item.productId === productId)) return prev;
+          const row = results.find((r) => r.id === productId);
+          if (!row) return prev;
+          const price = parseFloat(row.price) || 0;
+          return [
+            ...prev,
+            {
+              productId: row.id,
+              name: row.name,
+              qty: 1,
+              unitPrice: price,
+              subtotal: price,
+              discount: 0,
+              imageUrl: row.imageUrl ?? null,
+              productSilent: true,
+              silentTicket: false,
+            },
+          ];
+        });
+      }
+      setAssocMsg('Producto marcado como silencioso (fijo).');
+      window.setTimeout(() => setAssocMsg(''), 3500);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo marcar como silencioso');
+    } finally {
+      setSilentPrompt(null);
+    }
+  }, [results]);
+
+  const applySilentCartOnly = useCallback((productId: string, from: 'search' | 'cart') => {
+    if (from === 'search') {
+      const row = results.find((r) => r.id === productId);
+      if (row) addToCart({ ...row, silent: row.silent }, 1, { silentTicket: true });
+    } else {
+      setCart((prev) =>
+        prev.map((item) => (item.productId === productId ? { ...item, silentTicket: true } : item)),
+      );
+    }
+    setSilentPrompt(null);
+    setAssocMsg('Silencioso solo para este carrito.');
+    window.setTimeout(() => setAssocMsg(''), 3500);
+  }, [addToCart, results]);
 
   const loadCustomers = useCallback(() => {
     if (!getToken()) return;
@@ -545,7 +637,7 @@ export default function POSPage() {
     };
   }, [search, addToCart, hiddenCategoryIds]);
 
-  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'+(silentMode?'':'?reveal=1')),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,silentMode,activeSeller?.id]);
+  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice,silentTicket:Boolean(i.silentTicket)}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'+(silentMode?'':'?reveal=1')),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,silentMode,activeSeller?.id]);
   const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;if(id==='fiado'&&!selectedCustomer){setCustomerSearch('');setShowCustomer(true);return}if(id==='efectivo'){setCashPaid(null);setPaymentMethodPending('efectivo');return}paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar,selectedCustomer]);
   const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
   useEffect(() => {
@@ -557,8 +649,9 @@ export default function POSPage() {
       // No aplicar atajos si el foco está en el carrito (evitar acoplamiento con inputs de cantidad/precio)
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest?.('[data-pos-cart]')) return;
-      if (showShortcuts || showDiscount || showManual || showQuickProduct || showSeller || showPaused || showPayment || showCustomer || showOpenCaja || showMobileCart) {
+      if (showShortcuts || showDiscount || showManual || showQuickProduct || showSeller || showPaused || showPayment || showCustomer || showOpenCaja || showMobileCart || silentPrompt) {
         if (e.key === 'Escape') {
+          setSilentPrompt(null);
           setShowShortcuts(false);
           setShowDiscount(false);
           setShowManual(false);
@@ -678,6 +771,7 @@ export default function POSPage() {
     showCustomer,
     showOpenCaja,
     showMobileCart,
+    silentPrompt,
     results,
     selectedResultIndex,
     cart.length,
@@ -978,6 +1072,18 @@ export default function POSPage() {
                         ＋ Asociar<br />{codeToAssoc.length > 10 ? `${codeToAssoc.slice(0, 8)}…` : codeToAssoc}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSilentPrompt({ productId: p.id, name: p.name, from: 'search' });
+                      }}
+                      title="Producto silencioso"
+                      className="shrink-0 border-l border-hair-soft px-2.5 text-center text-[10px] font-bold uppercase text-fg-muted hover:bg-brand-highlight hover:text-brand"
+                    >
+                      PS
+                    </button>
                   </li>
                   );
                 })}
@@ -1043,6 +1149,7 @@ export default function POSPage() {
                     onQtyChange={(qty) => setItemQty(i.productId, qty)}
                     onPriceChange={(price) => setItemPrice(i.productId, price)}
                     onRemove={() => removeItem(i.productId)}
+                    onSilent={() => setSilentPrompt({ productId: i.productId, name: i.name, from: 'cart' })}
                   />
                 ))}
               </ul>
@@ -1102,7 +1209,7 @@ export default function POSPage() {
         <button type="button" onClick={openPayment} disabled={cart.length === 0} className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-50">Cobrar</button>
       </div>
 
-      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div><button type="button" onClick={() => { setCustomerSearch(''); setShowCustomer(true); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised2 text-fg'}`}><span className="truncate">👤 {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}</span><span className="shrink-0 text-xs">{selectedCustomer ? (selectedCustomer.balance != null && selectedCustomer.balance > 0 ? `Debe $${Number(selectedCustomer.balance).toFixed(0)}` : 'Cambiar') : 'Elegir'}</span></button><div className="grid grid-cols-2 gap-2"><button type="button" disabled={cart.length === 0} onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { setShowMobileCart(false); void handleCobrar('fiado'); } }} className="rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn disabled:opacity-50">A cuenta corriente</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
+      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} onSilent={() => setSilentPrompt({ productId: item.productId, name: item.name, from: 'cart' })} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div><button type="button" onClick={() => { setCustomerSearch(''); setShowCustomer(true); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised2 text-fg'}`}><span className="truncate">👤 {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}</span><span className="shrink-0 text-xs">{selectedCustomer ? (selectedCustomer.balance != null && selectedCustomer.balance > 0 ? `Debe $${Number(selectedCustomer.balance).toFixed(0)}` : 'Cambiar') : 'Elegir'}</span></button><div className="grid grid-cols-2 gap-2"><button type="button" disabled={cart.length === 0} onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { setShowMobileCart(false); void handleCobrar('fiado'); } }} className="rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn disabled:opacity-50">A cuenta corriente</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
 
       {showOpenCaja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
@@ -1369,6 +1476,31 @@ export default function POSPage() {
         </div>
       )}
 
+      {silentPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSilentPrompt(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-hair bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg">Producto silencioso</h2>
+            <p className="mt-1 text-sm text-fg-muted">“{silentPrompt.name}” — en el ticket puede salir con el texto configurado (ej. Item kiosco).</p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => applySilentCartOnly(silentPrompt.productId, silentPrompt.from)}
+                className="w-full rounded-lg border border-hair bg-raised px-4 py-3 text-left text-sm text-fg hover:bg-raised2"
+              >
+                Solo este carrito
+              </button>
+              <button
+                type="button"
+                onClick={() => void applySilentPermanent(silentPrompt.productId, silentPrompt.from === 'search')}
+                className="w-full rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-4 py-3 text-left text-sm font-semibold text-brand"
+              >
+                Guardar fijo para próximos usos
+              </button>
+              <button type="button" onClick={() => setSilentPrompt(null)} className="w-full rounded-lg px-4 py-2 text-sm text-fg-muted">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showSeller && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !sellerBusy && setShowSeller(false)}><div className="w-full max-w-sm rounded-xl border border-hair bg-surface p-5 shadow-xl" onClick={(event) => event.stopPropagation()}><h2 className="text-lg font-bold text-fg">Cambiar vendedor</h2><p className="mb-4 mt-1 text-sm text-fg-muted">Elegí quién operará las próximas ventas.</p><div className="space-y-2">{sellers.filter((seller) => seller.active).map((seller) => <button key={seller.id} type="button" disabled={sellerBusy || seller.id === activeSeller?.id} onClick={() => void changeSeller(seller)} className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left ${seller.id === activeSeller?.id ? 'border-[color:var(--brand-accent)] bg-brand-highlight text-brand' : 'border-hair bg-raised text-fg hover:bg-raised2'} disabled:opacity-60`}><span className="font-medium">{seller.name}</span>{seller.id === activeSeller?.id && <span className="text-xs">Activo</span>}</button>)}</div><label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-hair-soft bg-raised px-4 py-3"><span className="min-w-0"><span className="block text-sm font-medium text-fg">Ocultar productos silenciosos en el ticket</span><span className="block text-xs text-fg-faint">{silentMode ? 'Se imprimen con el texto configurado.' : 'Se imprimen con su nombre real.'}</span></span><input type="checkbox" checked={silentMode} onChange={(e) => setSilentMode(e.target.checked)} className="h-5 w-5 shrink-0 accent-[color:var(--brand-accent)]" /></label><button type="button" disabled={sellerBusy} onClick={() => setShowSeller(false)} className="mt-3 w-full rounded-lg border border-hair py-2 text-fg-muted hover:bg-raised">Cerrar</button></div></div>}
 
       {showPaused && (

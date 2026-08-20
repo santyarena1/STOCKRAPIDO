@@ -10,11 +10,27 @@ export class BusinessService {
 
   private sanitize<T extends Record<string, any>>(business: T) {
     const { openaiKeyEncrypted, serperKeyEncrypted, ...safe } = business;
+    const pos =
+      business.posConfig && typeof business.posConfig === 'object'
+        ? (business.posConfig as Record<string, unknown>)
+        : null;
+    const hasSerperInPos = Boolean(pos && typeof pos.serperKeyEncrypted === 'string' && pos.serperKeyEncrypted);
+    const sanitizedPos = sanitizePosConfigForApi(business.posConfig);
+    if (sanitizedPos && typeof sanitizedPos === 'object') {
+      const copy = { ...(sanitizedPos as Record<string, unknown>) };
+      delete copy.serperKeyEncrypted;
+      return {
+        ...safe,
+        posConfig: copy,
+        hasOpenaiKey: !!openaiKeyEncrypted,
+        hasSerperKey: !!serperKeyEncrypted || hasSerperInPos,
+      };
+    }
     return {
       ...safe,
-      posConfig: sanitizePosConfigForApi(business.posConfig),
+      posConfig: sanitizedPos,
       hasOpenaiKey: !!openaiKeyEncrypted,
-      hasSerperKey: !!serperKeyEncrypted,
+      hasSerperKey: !!serperKeyEncrypted || hasSerperInPos,
     };
   }
 
@@ -46,15 +62,27 @@ export class BusinessService {
 
   async setSerperKey(businessId: string, key: string) {
     const normalized = typeof key === 'string' ? key.trim() : '';
+    const encrypted = normalized ? encryptSecret(normalized) : null;
     try {
       const business = await this.prisma.business.update({
         where: { id: businessId },
-        data: { serperKeyEncrypted: normalized ? encryptSecret(normalized) : null },
+        data: { serperKeyEncrypted: encrypted },
       });
       return this.sanitize(business);
     } catch {
-      const business = await this.prisma.business.findUnique({ where: { id: businessId } });
-      if (!business) throw new NotFoundException('Negocio no encontrado');
+      // Si la columna todavía no existe en prod, guardamos en posConfig (cross-device).
+      const existing = await this.prisma.business.findUnique({ where: { id: businessId } });
+      if (!existing) throw new NotFoundException('Negocio no encontrado');
+      const prev =
+        existing.posConfig && typeof existing.posConfig === 'object'
+          ? { ...(existing.posConfig as Record<string, unknown>) }
+          : {};
+      if (encrypted) prev.serperKeyEncrypted = encrypted;
+      else delete prev.serperKeyEncrypted;
+      const business = await this.prisma.business.update({
+        where: { id: businessId },
+        data: { posConfig: prev as any },
+      });
       return { ...this.sanitize(business), hasSerperKey: Boolean(normalized) };
     }
   }
@@ -62,10 +90,17 @@ export class BusinessService {
   async getSerperKey(businessId: string): Promise<string | null> {
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
-      select: { serperKeyEncrypted: true },
+      select: { serperKeyEncrypted: true, posConfig: true },
     });
-    if (!business?.serperKeyEncrypted) return null;
-    return decryptSecret(business.serperKeyEncrypted);
+    if (!business) return null;
+    if (business.serperKeyEncrypted) return decryptSecret(business.serperKeyEncrypted);
+    const pos =
+      business.posConfig && typeof business.posConfig === 'object'
+        ? (business.posConfig as Record<string, unknown>)
+        : null;
+    const fromPos = pos && typeof pos.serperKeyEncrypted === 'string' ? pos.serperKeyEncrypted : null;
+    if (!fromPos) return null;
+    return decryptSecret(fromPos);
   }
 
   async update(businessId: string, data: UpdateBusinessDto) {
@@ -80,6 +115,15 @@ export class BusinessService {
         posConfig: data.posConfig,
         clearAiInvoiceWebhookSecret: data.clearAiInvoiceWebhookSecret,
       });
+      if (mergedPos && '__serperKeyPlain' in mergedPos) {
+        const plain = mergedPos.__serperKeyPlain;
+        delete mergedPos.__serperKeyPlain;
+        if (typeof plain === 'string' && plain.trim()) {
+          mergedPos.serperKeyEncrypted = encryptSecret(plain.trim());
+        } else {
+          delete mergedPos.serperKeyEncrypted;
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Configuración inválida';
       throw new BadRequestException(msg);

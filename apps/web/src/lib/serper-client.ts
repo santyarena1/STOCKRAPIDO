@@ -39,7 +39,15 @@ export async function fetchLocalSerperStatus() {
   return { hasSerperKey: hasStoredSerperKey() };
 }
 
-export async function saveSerperKey(key: string) {
+export type SaveSerperResult = {
+  hasSerperKey: boolean;
+  /** true si quedó en el negocio (cualquier PC). */
+  savedOnBusiness: boolean;
+  /** true si solo quedó en este navegador. */
+  savedLocalOnly: boolean;
+};
+
+export async function saveSerperKey(key: string): Promise<SaveSerperResult> {
   const normalized = key.trim();
   try {
     writeStoredSerperKey(normalized);
@@ -48,6 +56,21 @@ export async function saveSerperKey(key: string) {
   }
 
   const token = getToken();
+  // Cookie del proxy Next (mismo dispositivo / dominio).
+  try {
+    await fetch('/api/serper/key', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ key: normalized }),
+    });
+  } catch {
+    // no bloquea
+  }
+
+  // 1) Ruta dedicada
   try {
     const url = new URL('/business/serper-key', getApiBaseUrl());
     const res = await fetch(url.toString(), {
@@ -60,12 +83,36 @@ export async function saveSerperKey(key: string) {
     });
     if (res.ok) {
       const updated = (await res.json().catch(() => ({}))) as { hasSerperKey?: boolean };
-      return { ...updated, hasSerperKey: Boolean(normalized) };
+      return {
+        hasSerperKey: Boolean(updated.hasSerperKey ?? normalized),
+        savedOnBusiness: true,
+        savedLocalOnly: false,
+      };
     }
   } catch {
-    // La API de Vercel todavía no tiene esta ruta: la key queda en este dispositivo.
+    // seguir con fallback
   }
-  return { hasSerperKey: Boolean(normalized) };
+
+  // 2) Fallback: posConfig vía /business/me (funciona en otra PC)
+  try {
+    const updated = await api<{ hasSerperKey?: boolean }>('/business/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ posConfig: { serperKey: normalized } }),
+    });
+    return {
+      hasSerperKey: Boolean(updated.hasSerperKey ?? normalized),
+      savedOnBusiness: true,
+      savedLocalOnly: false,
+    };
+  } catch {
+    // Solo localStorage: no va a andar en otra PC.
+  }
+
+  return {
+    hasSerperKey: Boolean(normalized),
+    savedOnBusiness: false,
+    savedLocalOnly: Boolean(normalized),
+  };
 }
 
 async function searchViaWeb(q: string, num: number, key: string) {
@@ -92,7 +139,9 @@ export async function searchSerperImages(q: string, num = 8) {
     });
   } catch (err) {
     if (!key) {
-      throw err instanceof Error ? err : new Error('Cargá la API key de Serper en Configuración → Imágenes Serper.');
+      throw err instanceof Error
+        ? err
+        : new Error('Cargá la API key de Serper en Configuración → Imágenes Serper (tiene que guardarse en el negocio para usarla en otra PC).');
     }
     try {
       return await searchViaWeb(q, num, key);
@@ -148,7 +197,7 @@ export async function autoAssignSerperPhotos(
         body: JSON.stringify({ ids: unique.map((p) => p.id), onlyMissing }),
       });
     } catch {
-      // La API no tiene Serper: seguimos en el navegador.
+      // La API no tiene Serper: seguimos en el navegador si hay key local.
     }
   }
   return localAutoAssign(unique, onlyMissing, onProgress);

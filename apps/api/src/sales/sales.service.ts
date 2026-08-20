@@ -5,8 +5,8 @@ import { ProductsService } from '../products/products.service';
 import { FiscalService } from '../fiscal/fiscal.service';
 
 export type SaleItemInput =
-  | { productId: string; qty: number; unitPrice: number }
-  | { productId?: string; name?: string; qty: number; unitPrice: number };
+  | { productId: string; qty: number; unitPrice: number; silentTicket?: boolean }
+  | { productId?: string; name?: string; qty: number; unitPrice: number; silentTicket?: boolean };
 
 @Injectable()
 export class SalesService {
@@ -46,13 +46,30 @@ export class SalesService {
 
     const discount = options?.discount ?? 0;
     let total = 0;
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { posConfig: true },
+    });
+    const posConfig =
+      business?.posConfig && typeof business.posConfig === 'object'
+        ? (business.posConfig as Record<string, unknown>)
+        : {};
+    const silentLabel =
+      (typeof posConfig.silentItemLabel === 'string' && posConfig.silentItemLabel.trim()) || 'Item kiosco';
+
     const saleItems = items.map((i) => {
       const subtotal = i.qty * i.unitPrice;
       total += subtotal;
       const isManual = !i.productId || String(i.productId).startsWith('manual-');
+      const silentTicket = Boolean((i as { silentTicket?: boolean }).silentTicket);
       return {
         productId: isManual ? null : (i as { productId: string }).productId,
-        productName: isManual ? ((i as { name?: string }).name || 'Producto manual') : null,
+        // Cart-only silent: guardamos el label en productName (con productId) para el ticket.
+        productName: isManual
+          ? ((i as { name?: string }).name || 'Producto manual')
+          : silentTicket
+            ? silentLabel
+            : null,
         qty: i.qty,
         unitPrice: new Decimal(i.unitPrice),
         subtotal: new Decimal(subtotal),

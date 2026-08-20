@@ -53,9 +53,12 @@ export function readAiInvoiceFromPosConfig(posConfig: unknown): AiInvoicePosConf
 /** No enviar el secreto al cliente; indica si hay uno guardado. */
 export function sanitizePosConfigForApi(posConfig: unknown): unknown {
   if (!posConfig || typeof posConfig !== 'object') return posConfig;
-  const p = posConfig as Record<string, unknown>;
+  const p = { ...(posConfig as Record<string, unknown>) };
+  delete p.serperKeyEncrypted;
+  delete p.__serperKeyPlain;
+  delete p.serperKey;
   const ai = p.aiInvoice;
-  if (!ai || typeof ai !== 'object') return posConfig;
+  if (!ai || typeof ai !== 'object') return p;
   const a = ai as Record<string, unknown>;
   const hasWebhookSecret = typeof a.webhookSecret === 'string' && a.webhookSecret.length > 0;
   const { webhookSecret: _removed, ...restAi } = a;
@@ -82,6 +85,8 @@ type PosConfigPatchBody = {
     customerDisplay?: Partial<CustomerDisplayPosConfig>;
     hiddenCategoryIds?: string[] | null;
     silentItemLabel?: string;
+    /** Plaintext: el service la encripta en posConfig.serperKeyEncrypted */
+    serperKey?: string | null;
   };
   clearAiInvoiceWebhookSecret?: boolean;
 };
@@ -130,6 +135,7 @@ export function mergePosConfigUpdate(
     patch.posConfig !== undefined && 'hiddenCategoryIds' in patch.posConfig;
   const hasSilentItemLabel =
     patch.posConfig !== undefined && 'silentItemLabel' in patch.posConfig;
+  const hasSerperKey = patch.posConfig !== undefined && 'serperKey' in patch.posConfig;
   const hasAi =
     incomingAi !== undefined &&
     typeof incomingAi === 'object' &&
@@ -143,9 +149,20 @@ export function mergePosConfigUpdate(
     typeof incomingCd === 'object' &&
     Object.keys(incomingCd as object).length > 0;
 
-  if (!hasAi && !hasBrand && !hasCd && !hasHiddenCategoryIds && !hasSilentItemLabel) return undefined;
+  if (!hasAi && !hasBrand && !hasCd && !hasHiddenCategoryIds && !hasSilentItemLabel && !hasSerperKey) return undefined;
 
   const base = existing && typeof existing === 'object' ? { ...(existing as Record<string, unknown>) } : {};
+
+  if (hasSerperKey) {
+    const v = patch.posConfig?.serperKey;
+    if (typeof v === 'string' && v.trim()) {
+      // Placeholder: BusinessService.replaceSerperKeyInPosConfig encripta después.
+      base.__serperKeyPlain = v.trim();
+    } else {
+      delete base.serperKeyEncrypted;
+      delete base.__serperKeyPlain;
+    }
+  }
 
   if (hasSilentItemLabel) {
     const v = patch.posConfig?.silentItemLabel;
