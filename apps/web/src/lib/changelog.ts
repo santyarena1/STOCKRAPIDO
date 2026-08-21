@@ -41,6 +41,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Progreso y facturación en lote',
         desc: 'En Facturas ves barra de progreso, total facturado y lo que queda por facturar. En Pendientes seleccionás varias ventas y las emitís de una.',
       },
+      {
+        tag: 'FIX',
+        title: 'Total facturado correcto',
+        desc: 'El total facturado ahora suma las Factura C del filtro de fechas (fecha de la venta), sin mezclarlo con el período del tope.',
+      },
     ],
   },
   {
