@@ -32,6 +32,16 @@ type PreviewRow = {
   aiUsed?: boolean;
 };
 
+type SyncChunkResult = {
+  done: boolean;
+  upserted: number;
+  nextCursor: string | null;
+  total: number;
+  lastSyncedAt?: string | null;
+  category?: { name?: string | null };
+  progress?: { catIndex: number; totalCats: number };
+};
+
 function money(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
 }
@@ -89,15 +99,7 @@ export default function PreciosClarosPage() {
       let lastTotal = stats.total;
       while (loops > 0) {
         loops -= 1;
-        const data = await api<{
-          done: boolean;
-          upserted: number;
-          nextCursor: string | null;
-          total: number;
-          lastSyncedAt?: string | null;
-          category?: { name?: string | null };
-          progress?: { catIndex: number; totalCats: number };
-        }>('/precios-claros/catalog/sync-chunk', {
+        const data: SyncChunkResult = await api<SyncChunkResult>('/precios-claros/catalog/sync-chunk', {
           method: 'POST',
           body: JSON.stringify({ cursor }),
         });
