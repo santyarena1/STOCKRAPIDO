@@ -192,15 +192,52 @@ export async function autoAssignSerperPhotos(
   }
   if (!hasStoredSerperKey()) {
     try {
-      return await api<{ updated: number; skipped: { reason: string }[] }>('/products/serper/auto', {
+      const result = await api<{ updated: number; skipped: { reason: string }[] }>('/products/serper/auto', {
         method: 'POST',
         body: JSON.stringify({ ids: unique.map((p) => p.id), onlyMissing }),
       });
-    } catch {
-      // La API no tiene Serper: seguimos en el navegador si hay key local.
+      const reasons = (result.skipped || []).map((s) => s.reason);
+      const keyMissing = reasons.some((r) => /api key de Serper|Cargá la API key/i.test(r));
+      if (result.updated === 0 && keyMissing) {
+        throw new Error(
+          'Falta la API key de Serper en el negocio. Andá a Configuración → Imágenes Serper, cargala y guardala (tiene que quedar en el negocio, no solo en este navegador).',
+        );
+      }
+      return result;
+    } catch (err) {
+      if (err instanceof Error && /Falta la API key|Cargá la API key|Cannot POST/i.test(err.message)) {
+        throw err;
+      }
+      if (isApiRouteMissing(err)) {
+        // API vieja sin Serper: seguimos en el navegador si hay key local.
+      } else if (err instanceof Error && /Serper|API key/i.test(err.message)) {
+        throw err;
+      }
+      // Si no hay key local tampoco, el error de abajo es claro.
     }
   }
   return localAutoAssign(unique, onlyMissing, onProgress);
+}
+
+function summarizeSkipReasons(skipped: { reason: string }[]) {
+  const counts = new Map<string, number>();
+  for (const item of skipped) {
+    const reason = item.reason?.trim() || 'Omitido';
+    counts.set(reason, (counts.get(reason) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([reason, n]) => (n > 1 ? `${reason} (${n})` : reason))
+    .slice(0, 4)
+    .join(' · ');
+}
+
+export function formatSerperAutoResult(result: { updated: number; skipped: { reason: string }[] }) {
+  const parts = [`${result.updated} imágenes aplicadas`];
+  if (result.skipped.length) {
+    const detail = summarizeSkipReasons(result.skipped);
+    parts.push(`${result.skipped.length} omitidos${detail ? `: ${detail}` : ''}`);
+  }
+  return parts.join(' · ');
 }
 
 async function localAutoAssign(
@@ -212,6 +249,9 @@ async function localAutoAssign(
   const queue = onlyMissing ? products.filter((p) => !hasPhoto(p)) : products;
   if (onlyMissing) {
     skipped.push(...products.filter(hasPhoto).map(() => ({ reason: 'Ya tiene imagen.' })));
+  }
+  if (!queue.length) {
+    return { updated: 0, skipped };
   }
   let updated = 0;
   for (let i = 0; i < queue.length; i += 1) {
@@ -226,13 +266,19 @@ async function localAutoAssign(
       const { images } = await searchSerperImages(query, 4);
       const first = images[0];
       if (!first) {
-        skipped.push({ reason: 'Serper no encontró fotos.' });
+        skipped.push({ reason: `Sin fotos para “${product.name}”.` });
         continue;
       }
       await assignProductImage(product.id, first.imageUrl);
       updated += 1;
     } catch (err) {
-      skipped.push({ reason: err instanceof Error ? err.message : 'Error al buscar.' });
+      const reason = err instanceof Error ? err.message : 'Error al buscar.';
+      if (i === 0 && /api key de Serper|Cargá la API key/i.test(reason)) {
+        throw new Error(
+          'Falta la API key de Serper. Andá a Configuración → Imágenes Serper y guardala en el negocio.',
+        );
+      }
+      skipped.push({ reason });
     }
     await sleep(220);
   }

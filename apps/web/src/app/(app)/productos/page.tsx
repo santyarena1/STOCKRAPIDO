@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
-import { autoAssignSerperPhotos, type PhotoProduct } from '@/lib/serper-client';
+import { autoAssignSerperPhotos, formatSerperAutoResult, type PhotoProduct } from '@/lib/serper-client';
 import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, ImageIcon, List, Printer, Search, SlidersHorizontal } from 'lucide-react';
 
 type Product = {
@@ -484,7 +484,7 @@ export default function ProductosPage() {
       const result = await autoAssignSerperPhotos(candidates, true, (done, total, name) => {
         setPhotoProgress(`Foto ${done}/${total}: ${name}`);
       });
-      setBulkMessage(`${result.updated} imágenes aplicadas${result.skipped.length ? ` · ${result.skipped.length} omitidos` : ''}.`);
+      setBulkMessage(formatSerperAutoResult(result));
       setPhotoProgress(null);
       await fetchProducts();
     } catch (error) {
