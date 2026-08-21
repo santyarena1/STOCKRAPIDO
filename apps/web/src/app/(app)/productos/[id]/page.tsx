@@ -529,7 +529,7 @@ export default function EditarProductoPage() {
               <div>
                 <h3 className="text-sm font-semibold text-fg">Precios Claros</h3>
                 <p className="mt-1 text-xs text-fg-muted">
-                  Busca por nombre aproximado (y EAN si hay). Al aplicar, el código de barras de Precios Claros se suma sin reemplazar el actual.
+                  Busca por nombre aproximado (y EAN si hay). Al aplicar, el EAN oficial queda como código principal y el interno/importado se conserva en códigos alternativos.
                 </p>
               </div>
               <button
