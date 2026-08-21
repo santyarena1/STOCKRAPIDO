@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { INVOICE_ALERT_PERIOD_LABELS, type InvoiceAlertPeriod } from '@/lib/invoice-alert';
 
 type FiscalConfig = {
   enabled: boolean;
@@ -18,7 +17,9 @@ type FiscalConfig = {
   invoiceAlertEnabled?: boolean;
   invoiceAlertLimit?: number | null;
   invoiceAlertPercent?: number;
-  invoiceAlertPeriod?: InvoiceAlertPeriod;
+  invoiceYearAlertEnabled?: boolean;
+  invoiceYearAlertLimit?: number | null;
+  invoiceYearAlertPercent?: number;
 };
 type FiscalForm = {
   enabled: boolean;
@@ -34,7 +35,9 @@ type FiscalForm = {
   invoiceAlertEnabled: boolean;
   invoiceAlertLimit: string;
   invoiceAlertPercent: number;
-  invoiceAlertPeriod: InvoiceAlertPeriod;
+  invoiceYearAlertEnabled: boolean;
+  invoiceYearAlertLimit: string;
+  invoiceYearAlertPercent: number;
 };
 const empty: FiscalForm = {
   enabled: false,
@@ -50,7 +53,9 @@ const empty: FiscalForm = {
   invoiceAlertEnabled: false,
   invoiceAlertLimit: '',
   invoiceAlertPercent: 80,
-  invoiceAlertPeriod: 'calendar_month',
+  invoiceYearAlertEnabled: false,
+  invoiceYearAlertLimit: '',
+  invoiceYearAlertPercent: 80,
 };
 export default function FiscalSettings() {
   const [form, setForm] = useState(empty);
@@ -76,7 +81,9 @@ export default function FiscalSettings() {
           invoiceAlertEnabled: !!c.invoiceAlertEnabled,
           invoiceAlertLimit: c.invoiceAlertLimit != null ? String(c.invoiceAlertLimit) : '',
           invoiceAlertPercent: c.invoiceAlertPercent ?? 80,
-          invoiceAlertPeriod: c.invoiceAlertPeriod || 'calendar_month',
+          invoiceYearAlertEnabled: !!c.invoiceYearAlertEnabled,
+          invoiceYearAlertLimit: c.invoiceYearAlertLimit != null ? String(c.invoiceYearAlertLimit) : '',
+          invoiceYearAlertPercent: c.invoiceYearAlertPercent ?? 80,
         }));
       })
       .catch(() => {});
@@ -106,7 +113,10 @@ export default function FiscalSettings() {
         invoiceAlertEnabled: form.invoiceAlertEnabled,
         invoiceAlertLimit: form.invoiceAlertLimit.trim() === '' ? null : Number(form.invoiceAlertLimit.replace(',', '.')),
         invoiceAlertPercent: form.invoiceAlertPercent,
-        invoiceAlertPeriod: form.invoiceAlertPeriod,
+        invoiceYearAlertEnabled: form.invoiceYearAlertEnabled,
+        invoiceYearAlertLimit:
+          form.invoiceYearAlertLimit.trim() === '' ? null : Number(form.invoiceYearAlertLimit.replace(',', '.')),
+        invoiceYearAlertPercent: form.invoiceYearAlertPercent,
       };
       const c = await api<FiscalConfig>('/fiscal/config', { method: 'PUT', body: JSON.stringify(body) });
       setMeta(c);
@@ -199,58 +209,85 @@ export default function FiscalSettings() {
       </div>
       <p className="text-xs text-slate-500">Los archivos se cifran en la API y nunca vuelven a mostrarse ni se guardan en GitHub.</p>
 
-      <div className="rounded-lg border border-amber-800/40 bg-amber-950/20 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-medium text-amber-200">Aviso de tope facturado</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Antes de emitir la próxima Factura C, avisamos si el acumulado del período se acerca al monto que definas.
-            </p>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-slate-300 shrink-0">
-            <input
-              type="checkbox"
-              checked={form.invoiceAlertEnabled}
-              onChange={(e) => setForm((f) => ({ ...f, invoiceAlertEnabled: e.target.checked }))}
-            />
-            Activado
-          </label>
+      <div className="rounded-lg border border-amber-800/40 bg-amber-950/20 p-4 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-amber-200">Topes y avisos de facturación</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Podés configurar un tope mensual y otro anual a la vez. Antes de emitir Factura C avisamos si te acercás a cualquiera.
+          </p>
         </div>
-        <div className="grid sm:grid-cols-3 gap-3">
-          <div>
-            <label className="text-sm text-slate-400">Monto límite</label>
-            <input
-              className={input}
-              inputMode="decimal"
-              placeholder="Ej. 5000000"
-              value={form.invoiceAlertLimit}
-              onChange={(e) => setForm((f) => ({ ...f, invoiceAlertLimit: e.target.value }))}
-            />
+
+        <div className="space-y-3 rounded-md border border-slate-700/60 bg-slate-900/40 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-slate-200 font-medium">Tope mensual</p>
+            <label className="flex items-center gap-2 text-sm text-slate-300 shrink-0">
+              <input
+                type="checkbox"
+                checked={form.invoiceAlertEnabled}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceAlertEnabled: e.target.checked }))}
+              />
+              Activado
+            </label>
           </div>
-          <div>
-            <label className="text-sm text-slate-400">Avisar desde (%)</label>
-            <input
-              className={input}
-              type="number"
-              min={1}
-              max={100}
-              value={form.invoiceAlertPercent}
-              onChange={(e) => setForm((f) => ({ ...f, invoiceAlertPercent: Number(e.target.value) || 80 }))}
-            />
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-slate-400">Monto límite del mes</label>
+              <input
+                className={input}
+                inputMode="decimal"
+                placeholder="Ej. 5000000"
+                value={form.invoiceAlertLimit}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceAlertLimit: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-400">Avisar desde (%)</label>
+              <input
+                className={input}
+                type="number"
+                min={1}
+                max={100}
+                value={form.invoiceAlertPercent}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceAlertPercent: Number(e.target.value) || 80 }))}
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-sm text-slate-400">Período</label>
-            <select
-              className={input}
-              value={form.invoiceAlertPeriod}
-              onChange={(e) => setForm((f) => ({ ...f, invoiceAlertPeriod: e.target.value as InvoiceAlertPeriod }))}
-            >
-              {(Object.keys(INVOICE_ALERT_PERIOD_LABELS) as InvoiceAlertPeriod[]).map((id) => (
-                <option key={id} value={id}>
-                  {INVOICE_ALERT_PERIOD_LABELS[id]}
-                </option>
-              ))}
-            </select>
+        </div>
+
+        <div className="space-y-3 rounded-md border border-slate-700/60 bg-slate-900/40 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-slate-200 font-medium">Tope anual</p>
+            <label className="flex items-center gap-2 text-sm text-slate-300 shrink-0">
+              <input
+                type="checkbox"
+                checked={form.invoiceYearAlertEnabled}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceYearAlertEnabled: e.target.checked }))}
+              />
+              Activado
+            </label>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-slate-400">Monto límite del año</label>
+              <input
+                className={input}
+                inputMode="decimal"
+                placeholder="Ej. 50000000"
+                value={form.invoiceYearAlertLimit}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceYearAlertLimit: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-400">Avisar desde (%)</label>
+              <input
+                className={input}
+                type="number"
+                min={1}
+                max={100}
+                value={form.invoiceYearAlertPercent}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceYearAlertPercent: Number(e.target.value) || 80 }))}
+              />
+            </div>
           </div>
         </div>
       </div>

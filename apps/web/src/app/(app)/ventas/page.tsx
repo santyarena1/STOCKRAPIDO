@@ -11,8 +11,7 @@ import { usePersistedState } from '@/lib/use-persisted-state';
 import {
   confirmInvoiceAlertIfNeeded,
   fetchInvoiceAlert,
-  INVOICE_ALERT_PERIOD_LABELS,
-  type InvoiceAlertPeriod,
+  type InvoiceAlertBucket,
   type InvoiceAlertStatus,
 } from '@/lib/invoice-alert';
 import { formatMoneyArs as formatMoneyArsShared } from '@/lib/units';
@@ -197,10 +196,12 @@ export default function VentasPage() {
   } | null>(null);
   const [invoiceAlert, setInvoiceAlert] = useState<InvoiceAlertStatus | null>(null);
   const [alertForm, setAlertForm] = useState({
-    enabled: false,
-    limit: '',
-    percent: 80,
-    period: 'calendar_month' as InvoiceAlertPeriod,
+    monthEnabled: false,
+    monthLimit: '',
+    monthPercent: 80,
+    yearEnabled: false,
+    yearLimit: '',
+    yearPercent: 80,
   });
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
@@ -329,12 +330,17 @@ export default function VentasPage() {
         }
 
         if (alertRes.status === 'fulfilled') {
-          setInvoiceAlert(alertRes.value);
+          const a = alertRes.value;
+          setInvoiceAlert(a);
+          const month = a.monthly ?? a;
+          const year = a.yearly;
           setAlertForm({
-            enabled: alertRes.value.alertEnabled ?? alertRes.value.enabled,
-            limit: alertRes.value.limit != null ? String(alertRes.value.limit) : '',
-            percent: alertRes.value.percent ?? 80,
-            period: alertRes.value.period || 'calendar_month',
+            monthEnabled: month.alertEnabled ?? month.enabled,
+            monthLimit: month.limit != null ? String(month.limit) : '',
+            monthPercent: month.percent ?? 80,
+            yearEnabled: year?.alertEnabled ?? year?.enabled ?? false,
+            yearLimit: year?.limit != null ? String(year.limit) : '',
+            yearPercent: year?.percent ?? 80,
           });
         } else {
           setInvoiceAlert(null);
@@ -460,20 +466,28 @@ export default function VentasPage() {
       const updated = await api<InvoiceAlertStatus>('/fiscal/invoice-alert', {
         method: 'PUT',
         body: JSON.stringify({
-          invoiceAlertEnabled: alertForm.enabled,
-          invoiceAlertLimit: alertForm.limit.trim() === '' ? null : Number(alertForm.limit.replace(',', '.')),
-          invoiceAlertPercent: alertForm.percent,
-          invoiceAlertPeriod: alertForm.period,
+          invoiceAlertEnabled: alertForm.monthEnabled,
+          invoiceAlertLimit:
+            alertForm.monthLimit.trim() === '' ? null : Number(alertForm.monthLimit.replace(',', '.')),
+          invoiceAlertPercent: alertForm.monthPercent,
+          invoiceYearAlertEnabled: alertForm.yearEnabled,
+          invoiceYearAlertLimit:
+            alertForm.yearLimit.trim() === '' ? null : Number(alertForm.yearLimit.replace(',', '.')),
+          invoiceYearAlertPercent: alertForm.yearPercent,
         }),
       });
       setInvoiceAlert(updated);
+      const month = updated.monthly ?? updated;
+      const year = updated.yearly;
       setAlertForm({
-        enabled: updated.alertEnabled ?? updated.enabled,
-        limit: updated.limit != null ? String(updated.limit) : '',
-        percent: updated.percent ?? 80,
-        period: updated.period || 'calendar_month',
+        monthEnabled: month.alertEnabled ?? month.enabled,
+        monthLimit: month.limit != null ? String(month.limit) : '',
+        monthPercent: month.percent ?? 80,
+        yearEnabled: year?.alertEnabled ?? year?.enabled ?? false,
+        yearLimit: year?.limit != null ? String(year.limit) : '',
+        yearPercent: year?.percent ?? 80,
       });
-      setAlertMessage('Aviso de tope guardado.');
+      setAlertMessage('Topes mensual y anual guardados.');
     } catch (e) {
       setAlertMessage(e instanceof Error ? e.message : 'No se pudo guardar el aviso');
     } finally {
@@ -721,36 +735,68 @@ export default function VentasPage() {
             const pendingCount = invoiceSummary?.pendingCount ?? 0;
             const activeCount = invoiceSummary?.activeCount ?? 0;
             const creditNotes = invoiceSummary?.creditNotes ?? 0;
-            // Barra siempre contra el límite configurado (período del aviso).
-            const limit =
-              invoiceAlert?.limit != null && invoiceAlert.limit > 0 ? invoiceAlert.limit : null;
-            const warnFrom = invoiceAlert?.percent ?? 80;
-            const topeFacturado = invoiceAlert?.invoicedNet ?? 0;
-            const barPct =
-              limit != null ? Math.min(100, Math.max(0, (topeFacturado / limit) * 100)) : 0;
-            const barWarn = limit != null && barPct >= warnFrom && barPct < 100;
-            const barOver = limit != null && barPct >= 100;
-            const barColor = barOver
-              ? 'bg-crit'
-              : barWarn
-                ? 'bg-amber-500'
-                : 'bg-emerald-600';
+            const monthly = invoiceAlert?.monthly ?? invoiceAlert;
+            const yearly = invoiceAlert?.yearly ?? null;
+            const anyWarn =
+              Boolean(monthly && monthly.limit != null && monthly.percentUsed >= monthly.percent && monthly.percentUsed < 100) ||
+              Boolean(yearly && yearly.limit != null && yearly.percentUsed >= yearly.percent && yearly.percentUsed < 100);
+            const anyOver =
+              Boolean(monthly && monthly.limit != null && monthly.percentUsed >= 100) ||
+              Boolean(yearly && yearly.limit != null && yearly.percentUsed >= 100);
             const filterLabel =
               filters.from || filters.to
                 ? `Filtro de lista: ${filters.from || '…'} → ${filters.to || '…'}`
                 : 'Sin filtro de fechas en la lista';
-            const topeLabel = invoiceAlert
-              ? `Tope: ${INVOICE_ALERT_PERIOD_LABELS[invoiceAlert.period]}${
-                  invoiceAlert.periodFrom ? ` · ${invoiceAlert.periodFrom}` : ''
-                }${invoiceAlert.periodTo ? ` → ${invoiceAlert.periodTo}` : ''} · aviso desde ${warnFrom}%`
-              : 'Configurá un monto límite para ver el avance';
+
+            const renderLimitBar = (bucket: InvoiceAlertBucket | null | undefined, title: string) => {
+              if (!bucket || bucket.limit == null || bucket.limit <= 0) return null;
+              const limit = bucket.limit;
+              const warnFrom = bucket.percent ?? 80;
+              const topeFacturado = bucket.invoicedNet ?? 0;
+              const barPct = Math.min(100, Math.max(0, (topeFacturado / limit) * 100));
+              const barWarn = barPct >= warnFrom && barPct < 100;
+              const barOver = barPct >= 100;
+              const barColor = barOver ? 'bg-crit' : barWarn ? 'bg-amber-500' : 'bg-emerald-600';
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs text-fg-faint">
+                    <span>
+                      {title}
+                      {bucket.periodFrom ? ` · ${bucket.periodFrom}` : ''}
+                      {bucket.periodTo ? ` → ${bucket.periodTo}` : ''}
+                      {barWarn || barOver
+                        ? ` · ${barOver ? 'límite alcanzado' : `aviso ≥${warnFrom}%`}`
+                        : ` · aviso desde ${warnFrom}%`}
+                    </span>
+                    <span
+                      className={`font-mono tabular-nums ${
+                        barOver ? 'text-crit' : barWarn ? 'text-amber-300' : ''
+                      }`}
+                    >
+                      {formatMoneyArs(topeFacturado)} / {formatMoneyArs(limit)} ({barPct.toFixed(0)}%)
+                    </span>
+                  </div>
+                  <div className="relative h-3 rounded-full bg-raised overflow-hidden border border-hair-soft">
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-amber-400/80 z-10"
+                      style={{ left: `${Math.min(100, Math.max(0, warnFrom))}%` }}
+                      title={`Aviso desde ${warnFrom}%`}
+                    />
+                    <div
+                      className={`h-full rounded-full transition-[width] ${barColor}`}
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            };
 
             return (
               <div
                 className={`rounded-xl border px-4 py-4 ${
-                  barOver
+                  anyOver
                     ? 'border-crit/40 bg-[var(--crit-soft)]'
-                    : barWarn
+                    : anyWarn
                       ? 'border-amber-600/40 bg-amber-950/25'
                       : 'border-hair-soft bg-surface'
                 }`}
@@ -759,17 +805,7 @@ export default function VentasPage() {
                   <div>
                     <h2 className="text-lg font-semibold text-fg">Progreso de facturación</h2>
                     <p className="text-sm text-fg-faint mt-0.5">{filterLabel}</p>
-                    <p className="text-xs text-fg-faint mt-0.5">{topeLabel}</p>
                   </div>
-                  {limit != null && (
-                    <p
-                      className={`font-mono text-sm tabular-nums ${
-                        barOver ? 'text-crit' : barWarn ? 'text-amber-300' : 'text-fg-muted'
-                      }`}
-                    >
-                      {barPct.toFixed(0)}% del límite
-                    </p>
-                  )}
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -788,45 +824,16 @@ export default function VentasPage() {
                     <p className="font-mono text-2xl font-bold tabular-nums text-warn">
                       {formatMoneyArs(quedaPorFacturar)}
                     </p>
-                    <p className="text-xs text-fg-faint mt-1">
-                      {pendingCount} venta(s) pendiente(s)
-                      {limit != null
-                        ? ` · margen del tope ${formatMoneyArs(Math.max(0, limit - topeFacturado))}`
-                        : ''}
-                    </p>
+                    <p className="text-xs text-fg-faint mt-1">{pendingCount} venta(s) pendiente(s)</p>
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  {limit != null ? (
-                    <>
-                      <div className="mb-1.5 flex justify-between text-xs text-fg-faint">
-                        <span>
-                          Contra el límite
-                          {barWarn || barOver
-                            ? ` · ${barOver ? 'límite alcanzado' : `umbral de aviso (≥${warnFrom}%)`}`
-                            : ''}
-                        </span>
-                        <span className="font-mono tabular-nums">
-                          {formatMoneyArs(topeFacturado)} / {formatMoneyArs(limit)}
-                        </span>
-                      </div>
-                      <div className="relative h-3 rounded-full bg-raised overflow-hidden border border-hair-soft">
-                        {/* Marca del umbral de aviso */}
-                        <div
-                          className="absolute top-0 bottom-0 w-px bg-amber-400/80 z-10"
-                          style={{ left: `${Math.min(100, Math.max(0, warnFrom))}%` }}
-                          title={`Aviso desde ${warnFrom}%`}
-                        />
-                        <div
-                          className={`h-full rounded-full transition-[width] ${barColor}`}
-                          style={{ width: `${barPct}%` }}
-                        />
-                      </div>
-                    </>
-                  ) : (
+                <div className="mt-4 space-y-4">
+                  {renderLimitBar(monthly, 'Tope mensual')}
+                  {renderLimitBar(yearly, 'Tope anual')}
+                  {!monthly?.limit && !yearly?.limit && (
                     <p className="text-sm text-fg-faint">
-                      Definí un monto límite abajo (o en Config → Fiscal) para ver la barra de progreso.
+                      Definí un tope mensual y/o anual abajo (o en Config → Fiscal) para ver las barras.
                     </p>
                   )}
                 </div>
@@ -888,70 +895,106 @@ export default function VentasPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-hair-soft bg-surface px-4 py-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="font-medium text-fg">Configurar aviso</h3>
-                <p className="text-xs text-fg-faint">
-                  Se muestra en el POS y al facturar (individual o en lote), antes de emitir.
-                </p>
+          <div className="rounded-xl border border-hair-soft bg-surface px-4 py-4 space-y-4">
+            <div>
+              <h3 className="font-medium text-fg">Configurar topes y avisos</h3>
+              <p className="text-xs text-fg-faint">
+                Mensual y anual pueden estar activos a la vez. Se avisa en el POS y al facturar antes de emitir.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-hair-soft bg-raised p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-fg">Tope mensual</p>
+                  <label className="flex items-center gap-2 text-sm text-fg-muted">
+                    <input
+                      type="checkbox"
+                      checked={alertForm.monthEnabled}
+                      onChange={(e) => setAlertForm((f) => ({ ...f, monthEnabled: e.target.checked }))}
+                    />
+                    Activado
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <label className="text-sm text-fg-muted">
+                    Monto límite
+                    <input
+                      className="mt-1 block w-40 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg"
+                      inputMode="decimal"
+                      value={alertForm.monthLimit}
+                      onChange={(e) => setAlertForm((f) => ({ ...f, monthLimit: e.target.value }))}
+                      placeholder="5000000"
+                    />
+                  </label>
+                  <label className="text-sm text-fg-muted">
+                    Avisar desde (%)
+                    <input
+                      className="mt-1 block w-24 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg"
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={alertForm.monthPercent}
+                      onChange={(e) =>
+                        setAlertForm((f) => ({ ...f, monthPercent: Number(e.target.value) || 80 }))
+                      }
+                    />
+                  </label>
+                </div>
               </div>
-              <label className="flex items-center gap-2 text-sm text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={alertForm.enabled}
-                  onChange={(e) => setAlertForm((f) => ({ ...f, enabled: e.target.checked }))}
-                />
-                Activado
-              </label>
+
+              <div className="rounded-lg border border-hair-soft bg-raised p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-fg">Tope anual</p>
+                  <label className="flex items-center gap-2 text-sm text-fg-muted">
+                    <input
+                      type="checkbox"
+                      checked={alertForm.yearEnabled}
+                      onChange={(e) => setAlertForm((f) => ({ ...f, yearEnabled: e.target.checked }))}
+                    />
+                    Activado
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <label className="text-sm text-fg-muted">
+                    Monto límite
+                    <input
+                      className="mt-1 block w-40 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg"
+                      inputMode="decimal"
+                      value={alertForm.yearLimit}
+                      onChange={(e) => setAlertForm((f) => ({ ...f, yearLimit: e.target.value }))}
+                      placeholder="50000000"
+                    />
+                  </label>
+                  <label className="text-sm text-fg-muted">
+                    Avisar desde (%)
+                    <input
+                      className="mt-1 block w-24 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg"
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={alertForm.yearPercent}
+                      onChange={(e) =>
+                        setAlertForm((f) => ({ ...f, yearPercent: Number(e.target.value) || 80 }))
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3 items-end">
-              <label className="text-sm text-fg-muted">
-                Monto límite
-                <input
-                  className="mt-1 block w-40 rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm text-fg"
-                  inputMode="decimal"
-                  value={alertForm.limit}
-                  onChange={(e) => setAlertForm((f) => ({ ...f, limit: e.target.value }))}
-                  placeholder="5000000"
-                />
-              </label>
-              <label className="text-sm text-fg-muted">
-                Avisar desde (%)
-                <input
-                  className="mt-1 block w-24 rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm text-fg"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={alertForm.percent}
-                  onChange={(e) => setAlertForm((f) => ({ ...f, percent: Number(e.target.value) || 80 }))}
-                />
-              </label>
-              <label className="text-sm text-fg-muted">
-                Período
-                <select
-                  className="mt-1 block rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
-                  value={alertForm.period}
-                  onChange={(e) => setAlertForm((f) => ({ ...f, period: e.target.value as InvoiceAlertPeriod }))}
-                >
-                  {(Object.keys(INVOICE_ALERT_PERIOD_LABELS) as InvoiceAlertPeriod[]).map((id) => (
-                    <option key={id} value={id}>
-                      {INVOICE_ALERT_PERIOD_LABELS[id]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                disabled={alertSaving}
-                onClick={() => void handleSaveInvoiceAlert()}
-                className="px-4 py-2 rounded-lg btn-brand text-sm disabled:opacity-50"
-              >
-                {alertSaving ? 'Guardando…' : 'Guardar aviso'}
-              </button>
-            </div>
+
+            <button
+              type="button"
+              disabled={alertSaving}
+              onClick={() => void handleSaveInvoiceAlert()}
+              className="px-4 py-2 rounded-lg btn-brand text-sm disabled:opacity-50"
+            >
+              {alertSaving ? 'Guardando…' : 'Guardar topes'}
+            </button>
             {alertMessage && (
-              <p className={`text-sm ${alertMessage.includes('guardado') ? 'text-ok' : 'text-warn'}`}>{alertMessage}</p>
+              <p className={`text-sm ${alertMessage.includes('guardado') ? 'text-ok' : 'text-warn'}`}>
+                {alertMessage}
+              </p>
             )}
           </div>
         </div>

@@ -11,17 +11,21 @@ const FACTURA_C = 11;
 const NOTA_CREDITO_C = 13;
 const WSFE_SERVICE = 'wsfe';
 type Environment = 'homologation' | 'production';
-type InvoiceAlertPeriod = 'calendar_month' | 'rolling_30' | 'all_time';
+type InvoiceAlertPeriod = 'calendar_month' | 'calendar_year' | 'rolling_30' | 'all_time';
 type SaveConfig = {
   enabled?: boolean; environment: Environment; cuit: string; pointOfSale: number; legalName?: string;
   grossIncomeNumber?: string; activityStartDate?: string; address?: string; certificate?: string; privateKey?: string;
   invoiceAlertEnabled?: boolean; invoiceAlertLimit?: number | null; invoiceAlertPercent?: number; invoiceAlertPeriod?: InvoiceAlertPeriod;
+  invoiceYearAlertEnabled?: boolean; invoiceYearAlertLimit?: number | null; invoiceYearAlertPercent?: number;
 };
 type SaveInvoiceAlert = {
   invoiceAlertEnabled?: boolean;
   invoiceAlertLimit?: number | null;
   invoiceAlertPercent?: number;
   invoiceAlertPeriod?: InvoiceAlertPeriod;
+  invoiceYearAlertEnabled?: boolean;
+  invoiceYearAlertLimit?: number | null;
+  invoiceYearAlertPercent?: number;
 };
 
 @Injectable()
@@ -39,33 +43,82 @@ export class FiscalService {
       invoiceAlertEnabled: c.invoiceAlertEnabled,
       invoiceAlertLimit: c.invoiceAlertLimit != null ? Number(c.invoiceAlertLimit) : null,
       invoiceAlertPercent: c.invoiceAlertPercent,
-      invoiceAlertPeriod: c.invoiceAlertPeriod as InvoiceAlertPeriod,
+      invoiceAlertPeriod: 'calendar_month' as InvoiceAlertPeriod,
+      invoiceYearAlertEnabled: c.invoiceYearAlertEnabled,
+      invoiceYearAlertLimit: c.invoiceYearAlertLimit != null ? Number(c.invoiceYearAlertLimit) : null,
+      invoiceYearAlertPercent: c.invoiceYearAlertPercent,
     };
   }
 
-  private normalizeAlertFields(dto: SaveInvoiceAlert, previous?: { invoiceAlertEnabled: boolean; invoiceAlertLimit: unknown; invoiceAlertPercent: number; invoiceAlertPeriod: string } | null) {
-    const period = dto.invoiceAlertPeriod ?? (previous?.invoiceAlertPeriod as InvoiceAlertPeriod | undefined) ?? 'calendar_month';
-    if (!['calendar_month', 'rolling_30', 'all_time'].includes(period)) {
-      throw new BadRequestException('Período de aviso inválido.');
+  private parseLimit(value: number | null | undefined | '', previous: number | null, label: string): number | null {
+    if (value === undefined) return previous;
+    if (value === null || value === ('' as unknown)) return null;
+    const limit = Number(value);
+    if (!Number.isFinite(limit) || limit < 0) {
+      throw new BadRequestException(`El monto límite ${label} es inválido.`);
     }
-    const percent = dto.invoiceAlertPercent ?? previous?.invoiceAlertPercent ?? 80;
+    return limit;
+  }
+
+  private parsePercent(value: number | undefined, previous: number, label: string): number {
+    const percent = value ?? previous;
     if (!Number.isInteger(percent) || percent < 1 || percent > 100) {
-      throw new BadRequestException('El porcentaje de aviso debe ser un entero entre 1 y 100.');
+      throw new BadRequestException(`El porcentaje de aviso ${label} debe ser un entero entre 1 y 100.`);
     }
-    let limit: number | null;
-    if (dto.invoiceAlertLimit === undefined) {
-      limit = previous?.invoiceAlertLimit != null ? Number(previous.invoiceAlertLimit) : null;
-    } else if (dto.invoiceAlertLimit === null || dto.invoiceAlertLimit === ('' as unknown)) {
-      limit = null;
-    } else {
-      limit = Number(dto.invoiceAlertLimit);
-      if (!Number.isFinite(limit) || limit < 0) throw new BadRequestException('El monto límite de facturación es inválido.');
+    return percent;
+  }
+
+  private normalizeAlertFields(
+    dto: SaveInvoiceAlert,
+    previous?: {
+      invoiceAlertEnabled: boolean;
+      invoiceAlertLimit: unknown;
+      invoiceAlertPercent: number;
+      invoiceAlertPeriod: string;
+      invoiceYearAlertEnabled?: boolean;
+      invoiceYearAlertLimit?: unknown;
+      invoiceYearAlertPercent?: number;
+    } | null,
+  ) {
+    const monthLimit = this.parseLimit(
+      dto.invoiceAlertLimit,
+      previous?.invoiceAlertLimit != null ? Number(previous.invoiceAlertLimit) : null,
+      'mensual',
+    );
+    const monthPercent = this.parsePercent(dto.invoiceAlertPercent, previous?.invoiceAlertPercent ?? 80, 'mensual');
+    const monthEnabled =
+      dto.invoiceAlertEnabled !== undefined ? !!dto.invoiceAlertEnabled : !!previous?.invoiceAlertEnabled;
+    if (monthEnabled && (monthLimit == null || monthLimit <= 0)) {
+      throw new BadRequestException('Para activar el tope mensual, definí un monto límite mayor a 0.');
     }
-    const enabled = dto.invoiceAlertEnabled !== undefined ? !!dto.invoiceAlertEnabled : !!previous?.invoiceAlertEnabled;
-    if (enabled && (limit == null || limit <= 0)) {
-      throw new BadRequestException('Para activar el aviso, definí un monto límite mayor a 0.');
+
+    const yearLimit = this.parseLimit(
+      dto.invoiceYearAlertLimit,
+      previous?.invoiceYearAlertLimit != null ? Number(previous.invoiceYearAlertLimit) : null,
+      'anual',
+    );
+    const yearPercent = this.parsePercent(
+      dto.invoiceYearAlertPercent,
+      previous?.invoiceYearAlertPercent ?? 80,
+      'anual',
+    );
+    const yearEnabled =
+      dto.invoiceYearAlertEnabled !== undefined
+        ? !!dto.invoiceYearAlertEnabled
+        : !!previous?.invoiceYearAlertEnabled;
+    if (yearEnabled && (yearLimit == null || yearLimit <= 0)) {
+      throw new BadRequestException('Para activar el tope anual, definí un monto límite mayor a 0.');
     }
-    return { invoiceAlertEnabled: enabled, invoiceAlertLimit: limit, invoiceAlertPercent: percent, invoiceAlertPeriod: period };
+
+    return {
+      invoiceAlertEnabled: monthEnabled,
+      invoiceAlertLimit: monthLimit,
+      invoiceAlertPercent: monthPercent,
+      invoiceAlertPeriod: 'calendar_month',
+      invoiceYearAlertEnabled: yearEnabled,
+      invoiceYearAlertLimit: yearLimit,
+      invoiceYearAlertPercent: yearPercent,
+    };
   }
 
   async saveConfig(businessId: string, dto: SaveConfig) {
@@ -135,6 +188,15 @@ export class FiscalService {
       const fromYmd = `${startParts.year}-${startParts.month}-${startParts.day}`;
       return { from: parseArgentinaDayStart(fromYmd)!, to: end, periodFrom: fromYmd, periodTo: todayYmd };
     }
+    if (period === 'calendar_year') {
+      const fromYmd = `${year}-01-01`;
+      return {
+        from: parseArgentinaDayStart(fromYmd)!,
+        to: parseArgentinaDayEnd(todayYmd)!,
+        periodFrom: fromYmd,
+        periodTo: todayYmd,
+      };
+    }
     // calendar_month
     const fromYmd = `${year}-${month}-01`;
     return {
@@ -142,6 +204,95 @@ export class FiscalService {
       to: parseArgentinaDayEnd(todayYmd)!,
       periodFrom: fromYmd,
       periodTo: todayYmd,
+    };
+  }
+
+  private buildBucketAlert(opts: {
+    label: string;
+    alertEnabled: boolean;
+    limit: number | null;
+    percent: number;
+    period: InvoiceAlertPeriod;
+    range: { from?: Date; to?: Date; periodFrom: string | null; periodTo: string | null };
+    totals: { invoicedNet: number; invoiceCount: number; voidedCount: number; activeCount: number; invoicedGross: number; creditNotes: number };
+    next: number;
+  }) {
+    const { label, alertEnabled, limit, percent, period, range, totals, next } = opts;
+    const enabled = alertEnabled && limit != null && limit > 0;
+    const projected = totals.invoicedNet + next;
+    const percentUsed = limit && limit > 0 ? (totals.invoicedNet / limit) * 100 : 0;
+    const projectedPercent = limit && limit > 0 ? (projected / limit) * 100 : 0;
+    const shouldAlert = enabled && projectedPercent >= percent;
+    const remaining = limit != null ? Math.max(0, limit - totals.invoicedNet) : null;
+    let message: string | null = null;
+    if (shouldAlert && limit != null) {
+      const fmt = (n: number) =>
+        new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
+      message =
+        next > 0
+          ? `Tope ${label}: ${fmt(totals.invoicedNet)} de ${fmt(limit)} (${percentUsed.toFixed(0)}%). Esta factura suma ${fmt(next)} → ${fmt(projected)} (${projectedPercent.toFixed(0)}%).`
+          : `Tope ${label}: ${fmt(totals.invoicedNet)} de ${fmt(limit)} (${percentUsed.toFixed(0)}%).`;
+    }
+    return {
+      enabled,
+      alertEnabled,
+      limit,
+      percent,
+      period,
+      periodFrom: range.periodFrom,
+      periodTo: range.periodTo,
+      ...totals,
+      nextAmount: next,
+      projected,
+      percentUsed,
+      projectedPercent,
+      remaining,
+      shouldAlert,
+      message,
+    };
+  }
+
+  async getInvoiceAlert(businessId: string, nextAmount = 0) {
+    const config = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
+    const next = Number.isFinite(nextAmount) && nextAmount > 0 ? nextAmount : 0;
+    const monthRange = this.alertPeriodRange('calendar_month');
+    const yearRange = this.alertPeriodRange('calendar_year');
+    const [monthTotals, yearTotals] = await Promise.all([
+      this.getInvoicedNet(businessId, monthRange.from, monthRange.to),
+      this.getInvoicedNet(businessId, yearRange.from, yearRange.to),
+    ]);
+
+    const monthly = this.buildBucketAlert({
+      label: 'mensual',
+      alertEnabled: !!config?.invoiceAlertEnabled,
+      limit: config?.invoiceAlertLimit != null ? Number(config.invoiceAlertLimit) : null,
+      percent: config?.invoiceAlertPercent ?? 80,
+      period: 'calendar_month',
+      range: monthRange,
+      totals: monthTotals,
+      next,
+    });
+    const yearly = this.buildBucketAlert({
+      label: 'anual',
+      alertEnabled: !!config?.invoiceYearAlertEnabled,
+      limit: config?.invoiceYearAlertLimit != null ? Number(config.invoiceYearAlertLimit) : null,
+      percent: config?.invoiceYearAlertPercent ?? 80,
+      period: 'calendar_year',
+      range: yearRange,
+      totals: yearTotals,
+      next,
+    });
+
+    const shouldAlert = monthly.shouldAlert || yearly.shouldAlert;
+    const message = [monthly.message, yearly.message].filter(Boolean).join(' ') || null;
+
+    // Compat con clientes que leen el shape plano (mensual).
+    return {
+      ...monthly,
+      monthly,
+      yearly,
+      shouldAlert,
+      message,
     };
   }
 
@@ -252,49 +403,6 @@ export class FiscalService {
       totalFacturado,
       pendingCount,
       pendingTotal,
-    };
-  }
-
-  async getInvoiceAlert(businessId: string, nextAmount = 0) {
-    const config = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
-    const period = (config?.invoiceAlertPeriod as InvoiceAlertPeriod) || 'calendar_month';
-    const range = this.alertPeriodRange(period);
-    const totals = await this.getInvoicedNet(businessId, range.from, range.to);
-    const limit = config?.invoiceAlertLimit != null ? Number(config.invoiceAlertLimit) : null;
-    const percent = config?.invoiceAlertPercent ?? 80;
-    const alertEnabled = !!config?.invoiceAlertEnabled;
-    const enabled = alertEnabled && limit != null && limit > 0;
-    const next = Number.isFinite(nextAmount) && nextAmount > 0 ? nextAmount : 0;
-    const projected = totals.invoicedNet + next;
-    const percentUsed = limit && limit > 0 ? (totals.invoicedNet / limit) * 100 : 0;
-    const projectedPercent = limit && limit > 0 ? (projected / limit) * 100 : 0;
-    const shouldAlert = enabled && projectedPercent >= percent;
-    const remaining = limit != null ? Math.max(0, limit - totals.invoicedNet) : null;
-    let message: string | null = null;
-    if (shouldAlert && limit != null) {
-      const fmt = (n: number) =>
-        new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
-      message =
-        next > 0
-          ? `Vas a superar o acercarte al tope facturado: ${fmt(totals.invoicedNet)} de ${fmt(limit)} (${percentUsed.toFixed(0)}%). Esta factura suma ${fmt(next)} → quedarías en ${fmt(projected)} (${projectedPercent.toFixed(0)}%).`
-          : `Estás en ${fmt(totals.invoicedNet)} de ${fmt(limit)} facturado (${percentUsed.toFixed(0)}% del tope).`;
-    }
-    return {
-      enabled,
-      alertEnabled,
-      limit,
-      percent,
-      period,
-      periodFrom: range.periodFrom,
-      periodTo: range.periodTo,
-      ...totals,
-      nextAmount: next,
-      projected,
-      percentUsed,
-      projectedPercent,
-      remaining,
-      shouldAlert,
-      message,
     };
   }
 

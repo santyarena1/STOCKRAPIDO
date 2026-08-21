@@ -1,9 +1,9 @@
 import { api } from '@/lib/api';
 import { formatMoneyArs } from '@/lib/units';
 
-export type InvoiceAlertPeriod = 'calendar_month' | 'rolling_30' | 'all_time';
+export type InvoiceAlertPeriod = 'calendar_month' | 'calendar_year' | 'rolling_30' | 'all_time';
 
-export type InvoiceAlertStatus = {
+export type InvoiceAlertBucket = {
   enabled: boolean;
   alertEnabled?: boolean;
   limit: number | null;
@@ -26,8 +26,14 @@ export type InvoiceAlertStatus = {
   message: string | null;
 };
 
+export type InvoiceAlertStatus = InvoiceAlertBucket & {
+  monthly?: InvoiceAlertBucket;
+  yearly?: InvoiceAlertBucket;
+};
+
 export const INVOICE_ALERT_PERIOD_LABELS: Record<InvoiceAlertPeriod, string> = {
   calendar_month: 'Mes calendario',
+  calendar_year: 'Año calendario',
   rolling_30: 'Últimos 30 días',
   all_time: 'Acumulado total',
 };

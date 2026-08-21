@@ -46,6 +46,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Total facturado correcto',
         desc: 'El total facturado ahora suma las Factura C del filtro de fechas (fecha de la venta), sin mezclarlo con el período del tope.',
       },
+      {
+        tag: 'NUEVO',
+        title: 'Topes mensual y anual',
+        desc: 'Configurás límite y % de aviso por mes y por año a la vez. Dos barras de progreso y aviso antes de facturar si te acercás a cualquiera.',
+      },
     ],
   },
   {
