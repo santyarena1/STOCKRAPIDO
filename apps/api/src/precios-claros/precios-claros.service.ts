@@ -581,6 +581,8 @@ export class PreciosClarosService {
       /** Si false, no llama a CloudFront live (solo catálogo local). Más rápido. */
       useLive?: boolean;
       offset?: number;
+      /** Texto de búsqueda custom por producto (re-buscar). */
+      queryByProductId?: Record<string, string>;
     },
   ) {
     // Lotes chicos: cada producto puede pegarle a CloudFront + OpenAI.
@@ -634,20 +636,28 @@ export class PreciosClarosService {
         presentation: string | null;
         imageUrl: string | null;
       };
-      status: 'matched' | 'weak' | 'unmatched';
+      status: 'matched' | 'weak' | 'closest' | 'unmatched';
       best: PreciosClarosHit | null;
       candidates: PreciosClarosHit[];
       aiUsed: boolean;
+      queryUsed: string;
     }> = [];
     let aiUsedCount = 0;
+    const forceLiveFallback = products.length <= 5; // pocos ítems: si el catálogo no alcanza, probamos online
     for (const product of products) {
-      const query = [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim() || product.name;
+      const override = opts.queryByProductId?.[product.id]?.trim();
+      const query =
+        override ||
+        [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim() ||
+        product.name;
       // 1) Catálogo local (rápido)
-      let fromCatalog = await this.searchCatalog(query, 20);
+      let fromCatalog = await this.searchCatalog(query, 24);
       let fromLive: PreciosClarosHit[] = [];
-      // 2) Live solo si el catálogo no da un match decente
       const catalogBest = fromCatalog[0]?.score ?? 0;
-      if (useLive && catalogBest < 0.72) {
+      // 2) Live si lo pidieron, o fallback automático cuando no hay nada decente
+      const needLive =
+        useLive || (forceLiveFallback && catalogBest < 0.55);
+      if (needLive) {
         fromLive = await this.searchByName(businessId, query, 12);
       }
       const merged = new Map<string, PreciosClarosHit>();
@@ -658,10 +668,14 @@ export class PreciosClarosService {
       }
       let candidates = [...merged.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 10);
       let aiUsed = false;
-      let status: 'matched' | 'weak' | 'unmatched' = 'unmatched';
+      let status: 'matched' | 'weak' | 'closest' | 'unmatched' = 'unmatched';
 
-      if (candidates.length && (candidates[0].score ?? 0) >= minScore) {
-        status = (candidates[0].score ?? 0) >= 0.72 ? 'matched' : 'weak';
+      const topScore = candidates[0]?.score ?? 0;
+      if (candidates.length) {
+        if (topScore >= 0.72) status = 'matched';
+        else if (topScore >= minScore) status = 'weak';
+        else if (topScore >= 0.18) status = 'closest'; // igual mostramos lo más parecido
+        else status = 'unmatched';
       }
 
       // IA solo si no hay match fuerte (ahorra tiempo y tokens)
@@ -676,9 +690,10 @@ export class PreciosClarosService {
             candidates = reranked;
             aiUsed = true;
             aiUsedCount += 1;
-            if ((candidates[0]?.score ?? 0) >= minScore) {
-              status = (candidates[0].score ?? 0) >= 0.72 ? 'matched' : 'weak';
-            }
+            const s = candidates[0]?.score ?? 0;
+            if (s >= 0.72) status = 'matched';
+            else if (s >= minScore) status = 'weak';
+            else if (s >= 0.18) status = 'closest';
           }
         }
         if (status === 'unmatched' || (candidates[0]?.score ?? 0) < minScore) {
@@ -686,7 +701,7 @@ export class PreciosClarosService {
           if (alt?.length) {
             for (const q of alt.slice(0, 2)) {
               const extraLocal = await this.searchCatalog(q, 12);
-              const extraLive = useLive ? await this.searchByName(businessId, q, 10) : [];
+              const extraLive = needLive || useLive ? await this.searchByName(businessId, q, 10) : [];
               for (const h of [...extraLocal, ...extraLive]) {
                 const scored = { ...h, score: Math.max(h.score ?? 0, nameSimilarity(product.name, h.name)) };
                 const prev = merged.get(h.ean);
@@ -699,9 +714,11 @@ export class PreciosClarosService {
               candidates = reranked;
               aiUsed = true;
             }
-            if ((candidates[0]?.score ?? 0) >= minScore) {
-              status = (candidates[0].score ?? 0) >= 0.72 ? 'matched' : 'weak';
-            }
+            const s = candidates[0]?.score ?? 0;
+            if (s >= 0.72) status = 'matched';
+            else if (s >= minScore) status = 'weak';
+            else if (candidates.length && s >= 0.18) status = 'closest';
+            else if (!candidates.length) status = 'unmatched';
           }
         }
       }
@@ -720,6 +737,7 @@ export class PreciosClarosService {
         best,
         candidates,
         aiUsed,
+        queryUsed: query,
       });
     }
 

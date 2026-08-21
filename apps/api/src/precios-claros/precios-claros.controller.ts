@@ -87,6 +87,7 @@ export class PreciosClarosController {
       productIds?: string[];
       useLive?: boolean;
       offset?: number;
+      queryByProductId?: Record<string, string>;
     },
   ) {
     return this.preciosClaros.bulkPreview(user.businessId, body || {});
