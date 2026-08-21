@@ -36,6 +36,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Precios Claros: match y EAN',
         desc: 'En la ficha del producto buscás coincidencias por nombre (y IA si hay key). Al aplicar, se completa lo vacío y el EAN de Precios Claros se suma junto al código actual, sin reemplazarlo.',
       },
+      {
+        tag: 'FIX',
+        title: 'Primera foto: motivo de omitidos',
+        desc: 'Si no aplica ninguna imagen, ahora explica por qué (falta key de Serper, sin resultados, etc.) en vez de solo decir “0 aplicadas · N omitidos”.',
+      },
     ],
   },
   {

@@ -94,7 +94,7 @@ export default function ProductImagesEditorPage() {
       const result = await autoAssignSerperPhotos(items, true, (done, total, name) => {
         setMsg(`Foto ${done}/${total}: ${name}`);
       });
-      setMsg(`${result.updated} imágenes aplicadas${result.skipped.length ? ` · ${result.skipped.length} omitidos` : ''}.`);
+      setMsg(formatSerperAutoResult(result));
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo aplicar en lote.');
