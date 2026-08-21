@@ -60,7 +60,7 @@ function readPreciosClarosConfig(posConfig: unknown): PreciosClarosConfig {
 }
 
 function stripDiacritics(s: string) {
-  return s.normalize('NFD').replace(/\p{M}/gu, '');
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 function normalizeName(s: string) {
