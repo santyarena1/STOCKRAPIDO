@@ -226,6 +226,13 @@ export class PreciosClarosService {
     const cfg = await this.configFor(businessId);
     if (!cfg.enabled) return [];
 
+    // Día primero: rápido y estable (VTEX público). PC es más lento/inestable.
+    const fromDia = await this.lookupDiaByEan(code);
+    if (fromDia) {
+      await this.upsertCatalog([fromDia]);
+      return [fromDia];
+    }
+
     const params = this.geoQuery(cfg);
     params.set('id_producto', code);
     const url = `${PRECIOS_CLAROS_BASE}/producto?${params.toString()}`;
@@ -235,7 +242,7 @@ export class PreciosClarosService {
       if (hit) await this.upsertCatalog([hit]);
       return hit ? [hit] : [];
     } catch (err) {
-      this.logger.warn(`searchByEan falló: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(`searchByEan PC falló: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
   }
@@ -287,39 +294,39 @@ export class PreciosClarosService {
     const cfg = await this.configFor(businessId);
     if (!cfg.enabled) return [];
 
-    const branchIds = await this.resolveBranchIds(businessId, cfg);
-    const queries = this.buildSearchQueries(term);
-    const mergedPc = new Map<string, PcProducto>();
-
-    for (const query of queries) {
-      try {
-        const list = await this.fetchPcProductos(query, branchIds, cfg, limit);
-        for (const p of list) {
-          const ean = String(p.id ?? '').replace(/\D/g, '');
-          if (ean.length >= 8 && !mergedPc.has(ean)) mergedPc.set(ean, p);
-        }
-        // Si con una query corta ya trajimos bastante, no hace falta seguir.
-        if (mergedPc.size >= limit && query.split(/\s+/).length === 1) break;
-      } catch (err) {
-        this.logger.warn(`PC query "${query}" falló: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    const hits: PreciosClarosHit[] = [];
-    for (const p of mergedPc.values()) {
-      const hit = this.mapProducto(p);
-      if (!hit) continue;
-      hits.push({ ...hit, score: bestNameScore(term, hit), source: 'precios-claros' });
-    }
+    // Día (VTEX) primero: suele responder en <1s con EAN real.
+    // Precios Claros queda como complemento (más cobertura, pero lento/inestable).
+    const hits: PreciosClarosHit[] = await this.searchDia(term, limit);
     hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
-    // Fallback Día online si PC no dio nada útil.
-    if (hits.length < 3 || (hits[0]?.score ?? 0) < 0.35) {
-      const fromDia = await this.searchDia(term, limit);
-      for (const hit of fromDia) {
-        const prev = hits.find((h) => h.ean === hit.ean);
-        if (!prev) hits.push(hit);
-        else if ((hit.score ?? 0) > (prev.score ?? 0)) Object.assign(prev, hit);
+    const diaGoodEnough =
+      hits.length >= 3 && (hits[0]?.score ?? 0) >= 0.35;
+
+    if (!diaGoodEnough) {
+      const branchIds = await this.resolveBranchIds(businessId, cfg);
+      const queries = this.buildSearchQueries(term);
+      const mergedPc = new Map<string, PcProducto>();
+
+      for (const query of queries) {
+        try {
+          const list = await this.fetchPcProductos(query, branchIds, cfg, limit);
+          for (const p of list) {
+            const ean = String(p.id ?? '').replace(/\D/g, '');
+            if (ean.length >= 8 && !mergedPc.has(ean)) mergedPc.set(ean, p);
+          }
+          if (mergedPc.size >= limit && query.split(/\s+/).length === 1) break;
+        } catch (err) {
+          this.logger.warn(`PC query "${query}" falló: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      for (const p of mergedPc.values()) {
+        const hit = this.mapProducto(p);
+        if (!hit) continue;
+        const scored = { ...hit, score: bestNameScore(term, hit), source: 'precios-claros' as const };
+        const prev = hits.find((h) => h.ean === scored.ean);
+        if (!prev) hits.push(scored);
+        else if ((scored.score ?? 0) > (prev.score ?? 0)) Object.assign(prev, scored);
       }
       hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
     }
@@ -327,6 +334,48 @@ export class PreciosClarosService {
     const top = hits.slice(0, limit);
     await this.upsertCatalog(top);
     return top;
+  }
+
+  /** Lookup por EAN en el catálogo público VTEX de Día Online. */
+  private async lookupDiaByEan(ean: string): Promise<PreciosClarosHit | null> {
+    try {
+      const url = `https://diaonline.supermercadosdia.com.ar/api/catalog_system/pub/products/search?fq=alternateIds_Ean:${encodeURIComponent(ean)}`;
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; StockRapido/1.0)',
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return null;
+      const list = (await res.json()) as Array<{
+        productName?: string;
+        brand?: string;
+        productReference?: string;
+        items?: Array<{ ean?: string; name?: string; sellers?: Array<{ commertialOffer?: { Price?: number } }> }>;
+      }>;
+      const p = Array.isArray(list) ? list[0] : null;
+      if (!p) return null;
+      const item = p.items?.[0];
+      const code = String(item?.ean || p.productReference || ean).replace(/\D/g, '');
+      if (code.length < 8) return null;
+      const name = String(p.productName || item?.name || '').trim();
+      if (!name) return null;
+      const price = item?.sellers?.[0]?.commertialOffer?.Price;
+      return {
+        ean: code,
+        name,
+        brand: p.brand ? String(p.brand).trim() : null,
+        presentation: null,
+        priceMin: typeof price === 'number' ? price : null,
+        priceMax: typeof price === 'number' ? price : null,
+        score: 1,
+        source: 'dia',
+      };
+    } catch (err) {
+      this.logger.warn(`Día EAN lookup falló: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   /** Catálogo público VTEX de Dia Online (EAN en productReference / items[].ean). */
