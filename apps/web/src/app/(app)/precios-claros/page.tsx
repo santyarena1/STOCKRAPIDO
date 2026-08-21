@@ -32,6 +32,17 @@ type PreviewRow = {
   aiUsed?: boolean;
 };
 
+type PreviewBatch = {
+  rows: PreviewRow[];
+  aiUsedCount: number;
+  catalog: CatalogStats;
+  totalMatching: number;
+  offset: number;
+  limit: number;
+  nextOffset: number | null;
+  tip?: string;
+};
+
 type SyncChunkResult = {
   done: boolean;
   upserted: number;
@@ -42,19 +53,33 @@ type SyncChunkResult = {
   progress?: { catIndex: number; totalCats: number };
 };
 
+/** Tamaño de cada request al API (tope server = 15). */
+const BATCH_SIZE = 12;
+
 function money(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
+}
+
+function previewErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : 'No se pudo buscar coincidencias.';
+  if (/failed to fetch|networkerror|load failed|aborted|timeout/i.test(raw)) {
+    return 'Se cortó la conexión (timeout). El servidor no puede analizar muchos productos de una sola vez. Bajá el total o desactivá “Consultar online” / IA, y volvé a intentar: ahora se procesa de a lotes chicos.';
+  }
+  return raw;
 }
 
 export default function PreciosClarosPage() {
   const [stats, setStats] = useState<CatalogStats>({ total: 0 });
   const [useAi, setUseAi] = useState(true);
+  const [useLive, setUseLive] = useState(true);
   const [onlyWithoutBarcode, setOnlyWithoutBarcode] = useState(true);
-  const [limit, setLimit] = useState(25);
+  /** Cuántos productos querés analizar en total (se parte en lotes de BATCH_SIZE). */
+  const [totalWanted, setTotalWanted] = useState(50);
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
+  const [progress, setProgress] = useState('');
   const [syncCursor, setSyncCursor] = useState<string | null>(null);
   const [manualQ, setManualQ] = useState('');
   const [manualHits, setManualHits] = useState<Hit[]>([]);
@@ -125,30 +150,68 @@ export default function PreciosClarosPage() {
   const runPreview = async () => {
     setBusy('preview');
     setMsg('');
+    setProgress('');
     setRows([]);
     setSelected({});
+    const target = Math.min(200, Math.max(1, totalWanted));
+    const allRows: PreviewRow[] = [];
+    let aiUsedCount = 0;
+    let offset = 0;
+    let totalMatching = 0;
+
     try {
-      const data = await api<{ rows: PreviewRow[]; aiUsedCount: number; catalog: CatalogStats; tip?: string }>(
-        '/precios-claros/bulk/preview',
-        {
+      while (allRows.length < target) {
+        const take = Math.min(BATCH_SIZE, target - allRows.length);
+        setProgress(`Analizando ${allRows.length + 1}–${allRows.length + take}…`);
+        const data = await api<PreviewBatch>('/precios-claros/bulk/preview', {
           method: 'POST',
-          body: JSON.stringify({ onlyWithoutBarcode, limit, useAi, minScore: 0.45 }),
-        },
-      );
-      setRows(data.rows);
-      setStats(data.catalog);
+          body: JSON.stringify({
+            onlyWithoutBarcode,
+            limit: take,
+            offset,
+            useAi,
+            useLive,
+            minScore: 0.45,
+          }),
+        });
+        totalMatching = data.totalMatching;
+        setStats(data.catalog);
+        aiUsedCount += data.aiUsedCount || 0;
+        if (!data.rows.length) break;
+        allRows.push(...data.rows);
+        setRows([...allRows]);
+        if (data.nextOffset == null) break;
+        offset = data.nextOffset;
+      }
+
       const next: Record<string, string> = {};
-      for (const row of data.rows) {
+      for (const row of allRows) {
         if (row.best && (row.status === 'matched' || row.status === 'weak')) {
           next[row.product.id] = row.best.ean;
         }
       }
       setSelected(next);
+      setProgress('');
       setMsg(
-        `${data.rows.length} productos · ${data.rows.filter((r) => r.status === 'matched').length} fuertes · ${data.rows.filter((r) => r.status === 'weak').length} dudosos · ${data.rows.filter((r) => r.status === 'unmatched').length} sin match${data.aiUsedCount ? ` · IA en ${data.aiUsedCount}` : ''}.`,
+        `${allRows.length} de ${totalMatching} candidatos · ${allRows.filter((r) => r.status === 'matched').length} fuertes · ${allRows.filter((r) => r.status === 'weak').length} dudosos · ${allRows.filter((r) => r.status === 'unmatched').length} sin match${aiUsedCount ? ` · IA en ${aiUsedCount}` : ''}. Se procesó de a ${BATCH_SIZE} por request.`,
       );
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'No se pudo buscar coincidencias.');
+      setProgress('');
+      if (allRows.length) {
+        setRows(allRows);
+        const next: Record<string, string> = {};
+        for (const row of allRows) {
+          if (row.best && (row.status === 'matched' || row.status === 'weak')) {
+            next[row.product.id] = row.best.ean;
+          }
+        }
+        setSelected(next);
+        setMsg(
+          `${previewErrorMessage(err)} Se guardaron ${allRows.length} resultados parciales.`,
+        );
+      } else {
+        setMsg(previewErrorMessage(err));
+      }
     } finally {
       setBusy('');
     }
@@ -188,7 +251,11 @@ export default function PreciosClarosPage() {
         body: JSON.stringify({ items }),
       });
       setMsg(`Aplicados ${data.applied}${data.failed ? ` · fallaron ${data.failed}` : ''}.`);
-      await runPreview();
+      setRows((current) =>
+        current.filter((row) => !items.some((item) => item.productId === row.product.id && selected[row.product.id])),
+      );
+      setSelected({});
+      await refreshStats();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'No se pudo aplicar');
     } finally {
@@ -253,23 +320,32 @@ export default function PreciosClarosPage() {
 
       <section className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5 space-y-4">
         <h2 className="text-base font-semibold text-fg">Buscar coincidencias masivas</h2>
+        <p className="text-sm text-fg-muted">
+          Por cada producto: busca en el catálogo local; si no hay match bueno, consulta Precios Claros online;
+          si sigue flojo y hay IA, reordena o sugiere otras búsquedas. Después vos revisás y aplicás el EAN
+          (se agrega a códigos alternativos; no pisa el barcode si ya tenés uno).
+        </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex items-center gap-2 text-sm text-fg-muted">
             <input type="checkbox" checked={onlyWithoutBarcode} onChange={(e) => setOnlyWithoutBarcode(e.target.checked)} />
             Solo sin código de barras
           </label>
           <label className="flex items-center gap-2 text-sm text-fg-muted">
+            <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
+            Consultar online si el catálogo no alcanza
+          </label>
+          <label className="flex items-center gap-2 text-sm text-fg-muted">
             <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
-            Ayuda con IA (reordena + sugiere búsquedas)
+            Ayuda con IA (solo si no hay match fuerte)
           </label>
           <label className="text-sm text-fg-muted">
-            Lote
+            Total a analizar
             <input
               type="number"
-              min={5}
-              max={60}
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value) || 25)}
+              min={1}
+              max={200}
+              value={totalWanted}
+              onChange={(e) => setTotalWanted(Number(e.target.value) || 50)}
               className="ml-2 w-20 rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-fg"
             />
           </label>
@@ -280,8 +356,12 @@ export default function PreciosClarosPage() {
             {busy === 'apply' ? 'Aplicando…' : `Aplicar seleccionados (${Object.keys(selected).length})`}
           </button>
         </div>
+        <p className="text-[11px] text-fg-faint">
+          Se parte automáticamente en lotes de {BATCH_SIZE} (límite del servidor). Con catálogo lleno y sin online/IA va más rápido.
+        </p>
+        {progress ? <p className="text-sm font-medium text-fg">{progress}</p> : null}
         {msg ? <p className="text-sm text-fg-muted">{msg}</p> : null}
-        {busy === 'preview' ? <Loader label="Match Precios Claros" /> : null}
+        {busy === 'preview' ? <Loader label={progress || 'Match Precios Claros'} /> : null}
 
         {rows.length > 0 ? (
           <ul className="divide-y divide-hair-soft overflow-hidden rounded-xl border border-hair-soft">

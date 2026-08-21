@@ -84,6 +84,8 @@ export class PreciosClarosController {
       useAi?: boolean;
       minScore?: number;
       productIds?: string[];
+      useLive?: boolean;
+      offset?: number;
     },
   ) {
     return this.preciosClaros.bulkPreview(user.businessId, body || {});

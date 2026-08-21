@@ -566,19 +566,27 @@ export class PreciosClarosService {
       useAi?: boolean;
       minScore?: number;
       productIds?: string[];
+      /** Si false, no llama a CloudFront live (solo catálogo local). Más rápido. */
+      useLive?: boolean;
+      offset?: number;
     },
   ) {
-    const limit = Math.min(60, Math.max(1, opts.limit ?? 25));
+    // Lotes chicos: cada producto puede pegarle a CloudFront + OpenAI.
+    const limit = Math.min(15, Math.max(1, opts.limit ?? 10));
+    const offset = Math.max(0, opts.offset ?? 0);
     const minScore = opts.minScore ?? 0.45;
+    const useLive = opts.useLive !== false;
     const where: Record<string, unknown> = { businessId, isActive: true };
     if (opts.productIds?.length) where.id = { in: opts.productIds.slice(0, 80) };
     else if (opts.onlyWithoutBarcode !== false) {
       where.OR = [{ barcode: null }, { barcode: '' }];
     }
+    const totalMatching = await this.prisma.product.count({ where });
     const products = await this.prisma.product.findMany({
       where,
       select: { id: true, name: true, brand: true, barcode: true, presentation: true, allCodes: true, imageUrl: true },
       orderBy: { name: 'asc' },
+      skip: offset,
       take: limit,
     });
 
@@ -599,10 +607,14 @@ export class PreciosClarosService {
     let aiUsedCount = 0;
     for (const product of products) {
       const query = [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim() || product.name;
-      const [fromCatalog, fromLive] = await Promise.all([
-        this.searchCatalog(query, 20),
-        this.searchByName(businessId, query, 15),
-      ]);
+      // 1) Catálogo local (rápido)
+      let fromCatalog = await this.searchCatalog(query, 20);
+      let fromLive: PreciosClarosHit[] = [];
+      // 2) Live solo si el catálogo no da un match decente
+      const catalogBest = fromCatalog[0]?.score ?? 0;
+      if (useLive && catalogBest < 0.72) {
+        fromLive = await this.searchByName(businessId, query, 12);
+      }
       const merged = new Map<string, PreciosClarosHit>();
       for (const h of [...fromCatalog, ...fromLive]) {
         const scored = { ...h, score: h.score ?? nameSimilarity(product.name, h.name) };
@@ -617,8 +629,8 @@ export class PreciosClarosService {
         status = (candidates[0].score ?? 0) >= 0.72 ? 'matched' : 'weak';
       }
 
-      // IA: reordena o sugiere búsqueda alternativa si no hay buen match
-      if (opts.useAi && (status !== 'matched' || candidates.length > 1)) {
+      // IA solo si no hay match fuerte (ahorra tiempo y tokens)
+      if (opts.useAi && status !== 'matched') {
         if (candidates.length > 1) {
           const reranked = await this.rerankWithAi(
             businessId,
@@ -637,9 +649,10 @@ export class PreciosClarosService {
         if (status === 'unmatched' || (candidates[0]?.score ?? 0) < minScore) {
           const alt = await this.aiSuggestSearchQueries(businessId, product.name, product.brand);
           if (alt?.length) {
-            for (const q of alt.slice(0, 3)) {
-              const extra = await this.searchByName(businessId, q, 12);
-              for (const h of extra) {
+            for (const q of alt.slice(0, 2)) {
+              const extraLocal = await this.searchCatalog(q, 12);
+              const extraLive = useLive ? await this.searchByName(businessId, q, 10) : [];
+              for (const h of [...extraLocal, ...extraLive]) {
                 const scored = { ...h, score: Math.max(h.score ?? 0, nameSimilarity(product.name, h.name)) };
                 const prev = merged.get(h.ean);
                 if (!prev || (scored.score ?? 0) > (prev.score ?? 0)) merged.set(h.ean, scored);
@@ -675,12 +688,17 @@ export class PreciosClarosService {
       });
     }
 
+    const nextOffset = offset + products.length;
     return {
       rows,
       aiUsedCount,
       catalog: await this.catalogStats(),
+      totalMatching,
+      offset,
+      limit,
+      nextOffset: nextOffset < totalMatching ? nextOffset : null,
       tip:
-        'Si no encuentra, expandí el catálogo local (barrido por categorías) o usá la búsqueda manual. La base oficial SEPA tiene ~70k productos en datos.gob.ar.',
+        'Procesá de a lotes chicos (10–15). Primero sembrá/barré el catálogo; con catálogo lleno va mucho más rápido y no se corta por timeout.',
     };
   }
 
