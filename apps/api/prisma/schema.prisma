@@ -336,6 +336,13 @@ model FiscalConfig {
   certificateEncrypted   String?
   privateKeyEncrypted    String?
   certificateExpiresAt  DateTime?
+  /// Aviso de tope facturado: avisa antes de emitir la próxima Factura C.
+  invoiceAlertEnabled    Boolean  @default(false)
+  invoiceAlertLimit      Decimal?
+  /// Porcentaje del límite a partir del cual se muestra el aviso (ej. 80).
+  invoiceAlertPercent    Int      @default(80)
+  /// calendar_month | rolling_30 | all_time
+  invoiceAlertPeriod     String   @default("calendar_month")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

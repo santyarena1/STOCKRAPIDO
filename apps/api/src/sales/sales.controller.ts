@@ -43,9 +43,12 @@ export class SalesController {
     @Query('customerId') customerId?: string,
     @Query('productId') productId?: string,
     @Query('limit') limit?: string,
+    @Query('fiscalKind') fiscalKind?: string,
   ) {
     const lim = limit ? parseInt(limit, 10) : 50;
     const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
+    const kind =
+      fiscalKind === 'FACTURA_C' || fiscalKind === 'INTERNAL' ? fiscalKind : undefined;
     return this.sales.list(
       user.businessId,
       fromD,
@@ -53,6 +56,7 @@ export class SalesController {
       customerId || undefined,
       Number.isFinite(lim) && lim > 0 ? lim : 50,
       productId?.trim() || undefined,
+      kind,
     );
   }
 

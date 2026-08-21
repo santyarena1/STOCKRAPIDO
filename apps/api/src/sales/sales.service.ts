@@ -130,7 +130,15 @@ export class SalesService {
     return { ...sale, fiscalDocument };
   }
 
-  async list(businessId: string, from?: Date, to?: Date, customerId?: string, limit = 50, productId?: string) {
+  async list(
+    businessId: string,
+    from?: Date,
+    to?: Date,
+    customerId?: string,
+    limit = 50,
+    productId?: string,
+    fiscalKind?: 'FACTURA_C' | 'INTERNAL',
+  ) {
     const where: Record<string, unknown> = { businessId };
     if (from || to) {
       where.createdAt = {};
@@ -140,6 +148,14 @@ export class SalesService {
     if (customerId) where.customerId = customerId;
     const pid = productId?.trim();
     if (pid) where.items = { some: { productId: pid } };
+    if (fiscalKind === 'FACTURA_C') {
+      where.fiscalDocument = { kind: 'FACTURA_C', status: 'AUTHORIZED' };
+    } else if (fiscalKind === 'INTERNAL') {
+      where.OR = [
+        { fiscalDocument: null },
+        { fiscalDocument: { kind: 'INTERNAL' } },
+      ];
+    }
     return this.prisma.sale.findMany({
       where,
       take: limit,

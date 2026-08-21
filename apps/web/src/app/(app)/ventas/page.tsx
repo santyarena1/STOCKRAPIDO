@@ -8,6 +8,14 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { usePersistedState } from '@/lib/use-persisted-state';
+import {
+  confirmInvoiceAlertIfNeeded,
+  fetchInvoiceAlert,
+  INVOICE_ALERT_PERIOD_LABELS,
+  type InvoiceAlertPeriod,
+  type InvoiceAlertStatus,
+} from '@/lib/invoice-alert';
+import { formatMoneyArs as formatMoneyArsShared } from '@/lib/units';
 
 type SaleItem = {
   id: string;
@@ -69,11 +77,7 @@ type SalesHistoryStats = {
 };
 
 function formatMoneyArs(n: number) {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    maximumFractionDigits: 0,
-  }).format(n);
+  return formatMoneyArsShared(n, 0);
 }
 
 /** Fecha local YYYY-MM-DD (inputs type="date"). */
@@ -175,6 +179,17 @@ export default function VentasPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [stats, setStats] = useState<SalesHistoryStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listTab, setListTab] = usePersistedState<'todas' | 'facturas'>('sr-filters:ventas:tab', 'todas');
+  const [invoiceAlert, setInvoiceAlert] = useState<InvoiceAlertStatus | null>(null);
+  const [alertForm, setAlertForm] = useState({
+    enabled: false,
+    limit: '',
+    percent: 80,
+    period: 'calendar_month' as InvoiceAlertPeriod,
+  });
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [includeVoidedInvoices, setIncludeVoidedInvoices] = useState(false);
   const [filters, setFilters] = usePersistedState('sr-filters:ventas:list', {
     from: '',
     to: '',
@@ -254,6 +269,32 @@ export default function VentasPage() {
       if (filters.to) params.to = filters.to;
       if (filters.customerId) params.customerId = filters.customerId;
       if (selectedProduct) params.productId = selectedProduct.id;
+
+      if (listTab === 'facturas') {
+        const invParams: Record<string, string> = { limit: filters.limit };
+        if (filters.from) invParams.from = filters.from;
+        if (filters.to) invParams.to = filters.to;
+        if (includeVoidedInvoices) invParams.includeVoided = '1';
+        const [salesRes, alertRes] = await Promise.allSettled([
+          api<Sale[]>('/fiscal/invoices', { params: invParams }),
+          fetchInvoiceAlert(0),
+        ]);
+        setSales(salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : []);
+        setStats(null);
+        if (alertRes.status === 'fulfilled') {
+          setInvoiceAlert(alertRes.value);
+          setAlertForm({
+            enabled: alertRes.value.alertEnabled ?? alertRes.value.enabled,
+            limit: alertRes.value.limit != null ? String(alertRes.value.limit) : '',
+            percent: alertRes.value.percent ?? 80,
+            period: alertRes.value.period || 'calendar_month',
+          });
+        } else {
+          setInvoiceAlert(null);
+        }
+        return;
+      }
+
       const statsParams: Record<string, string> = {};
       if (filters.from) statsParams.from = filters.from;
       if (filters.to) statsParams.to = filters.to;
@@ -278,7 +319,43 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.from, filters.to, filters.customerId, filters.limit, selectedProduct?.id]);
+  }, [
+    filters.from,
+    filters.to,
+    filters.customerId,
+    filters.limit,
+    selectedProduct?.id,
+    listTab,
+    includeVoidedInvoices,
+  ]);
+
+  const handleSaveInvoiceAlert = async () => {
+    setAlertSaving(true);
+    setAlertMessage('');
+    try {
+      const updated = await api<InvoiceAlertStatus>('/fiscal/invoice-alert', {
+        method: 'PUT',
+        body: JSON.stringify({
+          invoiceAlertEnabled: alertForm.enabled,
+          invoiceAlertLimit: alertForm.limit.trim() === '' ? null : Number(alertForm.limit.replace(',', '.')),
+          invoiceAlertPercent: alertForm.percent,
+          invoiceAlertPeriod: alertForm.period,
+        }),
+      });
+      setInvoiceAlert(updated);
+      setAlertForm({
+        enabled: updated.alertEnabled ?? updated.enabled,
+        limit: updated.limit != null ? String(updated.limit) : '',
+        percent: updated.percent ?? 80,
+        period: updated.period || 'calendar_month',
+      });
+      setAlertMessage('Aviso de tope guardado.');
+    } catch (e) {
+      setAlertMessage(e instanceof Error ? e.message : 'No se pudo guardar el aviso');
+    } finally {
+      setAlertSaving(false);
+    }
+  };
 
   useEffect(() => {
     fetchSales();
@@ -381,6 +458,10 @@ export default function VentasPage() {
 
   const handleFacturar = async (saleId: string, event?: React.MouseEvent) => {
     event?.stopPropagation();
+    const sale = sales.find((s) => s.id === saleId) ?? (viewSale?.id === saleId ? viewSale : null);
+    const amount = sale ? Number(sale.totalFinal) : 0;
+    const ok = await confirmInvoiceAlertIfNeeded(amount);
+    if (!ok) return;
     try {
       const fiscalDocument = await api<NonNullable<Sale['fiscalDocument']>>(
         `/fiscal/sales/${saleId}/factura`,
@@ -487,7 +568,159 @@ export default function VentasPage() {
     <Container className="max-w-[1400px] space-y-6">
       <PageHeader title="Historial de ventas" subtitle="Consultá operaciones, comprobantes y detalle de cada venta." />
 
-      {!loading && stats && (
+      <div className="inline-flex rounded-lg border border-hair overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setListTab('todas')}
+          className={`px-4 py-2 text-sm font-semibold ${
+            listTab === 'todas' ? 'bg-brand-hi text-fg' : 'bg-raised text-fg-muted hover:text-fg'
+          }`}
+        >
+          Todas
+        </button>
+        <button
+          type="button"
+          onClick={() => setListTab('facturas')}
+          className={`px-4 py-2 text-sm font-semibold ${
+            listTab === 'facturas' ? 'bg-[var(--ok-soft)] text-ok' : 'bg-raised text-fg-muted hover:text-fg'
+          }`}
+        >
+          Facturas
+        </button>
+      </div>
+
+      {listTab === 'facturas' && (
+        <div className="space-y-4">
+          {invoiceAlert && (
+            <div
+              className={`rounded-xl border px-4 py-4 ${
+                invoiceAlert.shouldAlert
+                  ? 'border-amber-600/40 bg-amber-950/25'
+                  : 'border-hair-soft bg-surface'
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-fg">Tope facturado</h2>
+                  <p className="text-sm text-fg-faint mt-0.5">
+                    Período: {INVOICE_ALERT_PERIOD_LABELS[invoiceAlert.period]}
+                    {invoiceAlert.periodFrom ? ` · ${invoiceAlert.periodFrom}` : ''}
+                    {invoiceAlert.periodTo ? ` → ${invoiceAlert.periodTo}` : ''}
+                  </p>
+                </div>
+                {invoiceAlert.enabled && invoiceAlert.limit != null && (
+                  <p className="font-mono text-sm tabular-nums text-fg-muted">
+                    {formatMoneyArs(invoiceAlert.invoicedNet)} / {formatMoneyArs(invoiceAlert.limit)}
+                    <span className="ml-2 text-fg-faint">({invoiceAlert.percentUsed.toFixed(0)}%)</span>
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-hair-soft bg-raised p-3">
+                  <p className="text-xs text-fg-muted">Facturas activas</p>
+                  <p className="font-mono text-2xl font-bold tabular-nums text-fg">{invoiceAlert.activeCount}</p>
+                </div>
+                <div className="rounded-lg border border-hair-soft bg-raised p-3">
+                  <p className="text-xs text-fg-muted">Neto facturado</p>
+                  <p className="font-mono text-xl font-bold tabular-nums text-ok">{formatMoneyArs(invoiceAlert.invoicedNet)}</p>
+                </div>
+                <div className="rounded-lg border border-hair-soft bg-raised p-3">
+                  <p className="text-xs text-fg-muted">Notas de crédito</p>
+                  <p className="font-mono text-xl font-bold tabular-nums text-warn">-{formatMoneyArs(invoiceAlert.creditNotes)}</p>
+                </div>
+                <div className="rounded-lg border border-hair-soft bg-raised p-3">
+                  <p className="text-xs text-fg-muted">Restante</p>
+                  <p className="font-mono text-xl font-bold tabular-nums text-fg">
+                    {invoiceAlert.remaining == null ? '—' : formatMoneyArs(invoiceAlert.remaining)}
+                  </p>
+                </div>
+              </div>
+              {invoiceAlert.shouldAlert && invoiceAlert.message && (
+                <p className="mt-3 text-sm text-amber-200">{invoiceAlert.message}</p>
+              )}
+              {invoiceAlert.enabled && invoiceAlert.limit != null && invoiceAlert.limit > 0 && (
+                <div className="mt-3 h-2 rounded-full bg-raised overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${
+                      invoiceAlert.percentUsed >= invoiceAlert.percent ? 'bg-amber-500' : 'bg-emerald-600'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(0, invoiceAlert.percentUsed))}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-hair-soft bg-surface px-4 py-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-medium text-fg">Configurar aviso</h3>
+                <p className="text-xs text-fg-faint">
+                  Se muestra en el POS y al facturar desde el historial, antes de emitir la próxima Factura C.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-fg-muted">
+                <input
+                  type="checkbox"
+                  checked={alertForm.enabled}
+                  onChange={(e) => setAlertForm((f) => ({ ...f, enabled: e.target.checked }))}
+                />
+                Activado
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-3 items-end">
+              <label className="text-sm text-fg-muted">
+                Monto límite
+                <input
+                  className="mt-1 block w-40 rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm text-fg"
+                  inputMode="decimal"
+                  value={alertForm.limit}
+                  onChange={(e) => setAlertForm((f) => ({ ...f, limit: e.target.value }))}
+                  placeholder="5000000"
+                />
+              </label>
+              <label className="text-sm text-fg-muted">
+                Avisar desde (%)
+                <input
+                  className="mt-1 block w-24 rounded-lg border border-hair bg-raised px-2 py-1.5 font-mono text-sm text-fg"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={alertForm.percent}
+                  onChange={(e) => setAlertForm((f) => ({ ...f, percent: Number(e.target.value) || 80 }))}
+                />
+              </label>
+              <label className="text-sm text-fg-muted">
+                Período
+                <select
+                  className="mt-1 block rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg"
+                  value={alertForm.period}
+                  onChange={(e) => setAlertForm((f) => ({ ...f, period: e.target.value as InvoiceAlertPeriod }))}
+                >
+                  {(Object.keys(INVOICE_ALERT_PERIOD_LABELS) as InvoiceAlertPeriod[]).map((id) => (
+                    <option key={id} value={id}>
+                      {INVOICE_ALERT_PERIOD_LABELS[id]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={alertSaving}
+                onClick={() => void handleSaveInvoiceAlert()}
+                className="px-4 py-2 rounded-lg btn-brand text-sm disabled:opacity-50"
+              >
+                {alertSaving ? 'Guardando…' : 'Guardar aviso'}
+              </button>
+            </div>
+            {alertMessage && (
+              <p className={`text-sm ${alertMessage.includes('guardado') ? 'text-ok' : 'text-warn'}`}>{alertMessage}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!loading && listTab === 'todas' && stats && (
         <div data-tour="ventas-stats" className="mb-6 space-y-4">
           <div>
             <h2 className="mb-1 text-lg font-semibold text-fg">Estadísticas del período</h2>
@@ -550,7 +783,7 @@ export default function VentasPage() {
         </div>
       )}
 
-      {!loading && duplicateIds.size > 0 && (
+      {!loading && listTab === 'todas' && duplicateIds.size > 0 && (
         <div className="mb-4 rounded-xl border border-amber-600/40 bg-amber-950/25 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-amber-200 font-medium text-sm">
@@ -622,13 +855,24 @@ export default function VentasPage() {
               onChange={(e) => setFilters((f) => ({ ...f, customerId: e.target.value }))}
               className="w-full rounded-lg border border-hair bg-raised px-2 py-1.5 text-sm text-fg sm:w-auto sm:min-w-[180px]"
               title="Filtrar por cliente (ventas al fiado)"
+              disabled={listTab === 'facturas'}
             >
               <option value="">Todos los clientes</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            <div className="flex w-full flex-col gap-1 sm:w-auto sm:min-w-[220px]">
+            {listTab === 'facturas' && (
+              <label className="flex items-center gap-2 text-sm text-fg-muted">
+                <input
+                  type="checkbox"
+                  checked={includeVoidedInvoices}
+                  onChange={(e) => setIncludeVoidedInvoices(e.target.checked)}
+                />
+                Incluir anuladas (NC)
+              </label>
+            )}
+            <div className={`flex w-full flex-col gap-1 sm:w-auto sm:min-w-[220px] ${listTab === 'facturas' ? 'opacity-40 pointer-events-none' : ''}`}>
               <span className="text-xs text-fg-faint">Producto</span>
               {selectedProduct ? (
                 <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-raised border border-emerald-700/50 text-sm">
