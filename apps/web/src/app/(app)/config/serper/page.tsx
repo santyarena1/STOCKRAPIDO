@@ -73,6 +73,10 @@ export default function SerperConfigPage() {
           </a>
           {' '}y pegala acá. Tiene que guardarse en el negocio para usarla en otra PC.
         </p>
+        <p className="text-sm text-fg-muted">
+          Al elegir una foto la copiamos a nuestro almacenamiento: las URLs que tira Google/Serper
+          a menudo se rompen después (hotlink o vencen). Las que ya quedaron rotas hay que volver a asignarlas.
+        </p>
         <p className={`text-sm ${businessHasKey ? 'text-ok' : localHasKey ? 'text-warn' : 'text-warn'}`}>
           {businessHasKey
             ? 'Key cargada en el negocio (cualquier PC).'
