@@ -260,6 +260,88 @@ export class FiscalService {
     });
   }
 
+  async listPendingInvoices(
+    businessId: string,
+    opts?: { from?: Date; to?: Date; limit?: number },
+  ) {
+    const limit = opts?.limit && opts.limit > 0 ? Math.min(opts.limit, 500) : 100;
+    const where: Record<string, unknown> = {
+      businessId,
+      status: { not: 'voided' },
+      OR: [
+        { fiscalDocument: null },
+        { fiscalDocument: { kind: 'INTERNAL' } },
+        { fiscalDocument: { kind: 'FACTURA_C', status: { in: ['ERROR', 'PENDING'] } } },
+      ],
+    };
+    if (opts?.from || opts?.to) {
+      where.createdAt = {};
+      if (opts.from) (where.createdAt as Record<string, Date>).gte = opts.from;
+      if (opts.to) (where.createdAt as Record<string, Date>).lte = opts.to;
+    }
+    return this.prisma.sale.findMany({
+      where,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true } },
+        customer: true,
+        fiscalDocument: true,
+      },
+    });
+  }
+
+  async issueFacturaCBatch(businessId: string, saleIds: string[]) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
+    if (!Array.isArray(saleIds) || saleIds.length === 0) {
+      throw new BadRequestException('Seleccioná al menos una venta para facturar.');
+    }
+    const uniqueIds = [...new Set(saleIds.map((id) => String(id).trim()).filter(Boolean))];
+    if (uniqueIds.length > 50) {
+      throw new BadRequestException('Máximo 50 ventas por lote.');
+    }
+    const results: {
+      saleId: string;
+      status: string;
+      errorMessage: string | null;
+      receiptNumber: number | null;
+      totalFinal: number;
+    }[] = [];
+    for (const saleId of uniqueIds) {
+      const sale = await this.prisma.sale.findFirst({
+        where: { id: saleId, businessId },
+        select: { totalFinal: true, status: true },
+      });
+      if (!sale || sale.status === 'voided') {
+        results.push({
+          saleId,
+          status: 'SKIPPED',
+          errorMessage: 'Venta no encontrada o anulada.',
+          receiptNumber: null,
+          totalFinal: 0,
+        });
+        continue;
+      }
+      const doc = await this.issueFacturaC(businessId, saleId);
+      results.push({
+        saleId,
+        status: doc.status,
+        errorMessage: doc.errorMessage,
+        receiptNumber: doc.receiptNumber,
+        totalFinal: Number(sale.totalFinal),
+      });
+    }
+    return {
+      results,
+      authorized: results.filter((r) => r.status === 'AUTHORIZED').length,
+      errors: results.filter((r) => r.status === 'ERROR' || r.status === 'SKIPPED').length,
+      totalAuthorized: results
+        .filter((r) => r.status === 'AUTHORIZED')
+        .reduce((sum, r) => sum + r.totalFinal, 0),
+    };
+  }
+
   private validatePair(certPem: string, keyPem: string) {
     try {
       const cert = forge.pki.certificateFromPem(certPem);

@@ -180,6 +180,14 @@ export default function VentasPage() {
   const [stats, setStats] = useState<SalesHistoryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [listTab, setListTab] = usePersistedState<'todas' | 'facturas'>('sr-filters:ventas:tab', 'todas');
+  const [facturasView, setFacturasView] = usePersistedState<'emitidas' | 'pendientes'>(
+    'sr-filters:ventas:facturas-view',
+    'emitidas',
+  );
+  const [selectedSaleIds, setSelectedSaleIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
   const [invoiceAlert, setInvoiceAlert] = useState<InvoiceAlertStatus | null>(null);
   const [alertForm, setAlertForm] = useState({
     enabled: false,
@@ -274,13 +282,40 @@ export default function VentasPage() {
         const invParams: Record<string, string> = { limit: filters.limit };
         if (filters.from) invParams.from = filters.from;
         if (filters.to) invParams.to = filters.to;
-        if (includeVoidedInvoices) invParams.includeVoided = '1';
-        const [salesRes, alertRes] = await Promise.allSettled([
-          api<Sale[]>('/fiscal/invoices', { params: invParams }),
+        if (facturasView === 'emitidas' && includeVoidedInvoices) invParams.includeVoided = '1';
+
+        const pendingParams: Record<string, string> = { limit: filters.limit };
+        if (filters.from) pendingParams.from = filters.from;
+        if (filters.to) pendingParams.to = filters.to;
+
+        const listUrl =
+          facturasView === 'pendientes' ? '/fiscal/invoices/pending' : '/fiscal/invoices';
+        const listParams = facturasView === 'pendientes' ? pendingParams : invParams;
+
+        const [salesRes, alertRes, pendingRes] = await Promise.allSettled([
+          api<Sale[]>(listUrl, { params: listParams }),
           fetchInvoiceAlert(0),
+          facturasView === 'emitidas'
+            ? api<Sale[]>('/fiscal/invoices/pending', { params: pendingParams })
+            : Promise.resolve(null),
         ]);
-        setSales(salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : []);
+        const listed =
+          salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : [];
+        setSales(listed);
+        setSelectedSaleIds(new Set());
         setStats(null);
+
+        if (facturasView === 'pendientes') {
+          setPendingCount(listed.length);
+          setPendingTotal(listed.reduce((sum, s) => sum + Number(s.totalFinal || 0), 0));
+        } else if (pendingRes.status === 'fulfilled' && Array.isArray(pendingRes.value)) {
+          setPendingCount(pendingRes.value.length);
+          setPendingTotal(pendingRes.value.reduce((sum, s) => sum + Number(s.totalFinal || 0), 0));
+        } else {
+          setPendingCount(0);
+          setPendingTotal(0);
+        }
+
         if (alertRes.status === 'fulfilled') {
           setInvoiceAlert(alertRes.value);
           setAlertForm({
@@ -327,7 +362,84 @@ export default function VentasPage() {
     selectedProduct?.id,
     listTab,
     includeVoidedInvoices,
+    facturasView,
   ]);
+
+  const selectedBatchTotal = useMemo(() => {
+    if (selectedSaleIds.size === 0) return 0;
+    return sales
+      .filter((s) => selectedSaleIds.has(s.id))
+      .reduce((sum, s) => sum + Number(s.totalFinal || 0), 0);
+  }, [sales, selectedSaleIds]);
+
+  const toggleSaleSelected = (saleId: string) => {
+    setSelectedSaleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(saleId)) next.delete(saleId);
+      else next.add(saleId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPending = () => {
+    const selectable = sales.filter(
+      (s) =>
+        s.status !== 'voided' &&
+        (!s.fiscalDocument ||
+          s.fiscalDocument.kind === 'INTERNAL' ||
+          (s.fiscalDocument.kind === 'FACTURA_C' &&
+            (s.fiscalDocument.status === 'ERROR' || s.fiscalDocument.status === 'PENDING'))),
+    );
+    if (selectedSaleIds.size === selectable.length) {
+      setSelectedSaleIds(new Set());
+      return;
+    }
+    setSelectedSaleIds(new Set(selectable.map((s) => s.id)));
+  };
+
+  const handleFacturarLote = async () => {
+    const ids = [...selectedSaleIds];
+    if (ids.length === 0) {
+      alert('Seleccioná al menos una venta.');
+      return;
+    }
+    const okAlert = await confirmInvoiceAlertIfNeeded(selectedBatchTotal);
+    if (!okAlert) return;
+    if (
+      !confirm(
+        `¿Facturar ${ids.length} venta(s) por ${formatMoneyArs(selectedBatchTotal)}? Se emiten de a una en ARCA.`,
+      )
+    ) {
+      return;
+    }
+    setBatchBusy(true);
+    try {
+      const result = await api<{
+        authorized: number;
+        errors: number;
+        totalAuthorized: number;
+        results: { saleId: string; status: string; errorMessage: string | null }[];
+      }>('/fiscal/invoices/batch', {
+        method: 'POST',
+        body: JSON.stringify({ saleIds: ids }),
+      });
+      const errorSamples = result.results
+        .filter((r) => r.status !== 'AUTHORIZED')
+        .slice(0, 3)
+        .map((r) => r.errorMessage || r.status)
+        .join(' · ');
+      alert(
+        `Lote listo: ${result.authorized} autorizada(s)${
+          result.errors ? `, ${result.errors} con error` : ''
+        }.${errorSamples ? `\n${errorSamples}` : ''}`,
+      );
+      await fetchSales();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo facturar el lote.');
+    } finally {
+      setBatchBusy(false);
+    }
+  };
 
   const handleSaveInvoiceAlert = async () => {
     setAlertSaving(true);
@@ -591,72 +703,153 @@ export default function VentasPage() {
 
       {listTab === 'facturas' && (
         <div className="space-y-4">
-          {invoiceAlert && (
-            <div
-              className={`rounded-xl border px-4 py-4 ${
-                invoiceAlert.shouldAlert
-                  ? 'border-amber-600/40 bg-amber-950/25'
-                  : 'border-hair-soft bg-surface'
-              }`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-fg">Tope facturado</h2>
-                  <p className="text-sm text-fg-faint mt-0.5">
-                    Período: {INVOICE_ALERT_PERIOD_LABELS[invoiceAlert.period]}
-                    {invoiceAlert.periodFrom ? ` · ${invoiceAlert.periodFrom}` : ''}
-                    {invoiceAlert.periodTo ? ` → ${invoiceAlert.periodTo}` : ''}
+          {(() => {
+            const totalFacturado = invoiceAlert?.invoicedNet ?? 0;
+            const limit = invoiceAlert?.limit != null && invoiceAlert.limit > 0 ? invoiceAlert.limit : null;
+            const quedaPorFacturar = pendingTotal;
+            const towardLimitPct =
+              limit != null ? Math.min(100, Math.max(0, (totalFacturado / limit) * 100)) : null;
+            const coverageBase = totalFacturado + quedaPorFacturar;
+            const coveragePct =
+              coverageBase > 0 ? Math.min(100, Math.max(0, (totalFacturado / coverageBase) * 100)) : 0;
+            const barPct = towardLimitPct ?? coveragePct;
+            const barWarn =
+              towardLimitPct != null &&
+              invoiceAlert != null &&
+              towardLimitPct >= (invoiceAlert.percent ?? 80);
+
+            return (
+              <div
+                className={`rounded-xl border px-4 py-4 ${
+                  barWarn ? 'border-amber-600/40 bg-amber-950/25' : 'border-hair-soft bg-surface'
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-fg">Progreso de facturación</h2>
+                    <p className="text-sm text-fg-faint mt-0.5">
+                      {invoiceAlert
+                        ? `Período del tope: ${INVOICE_ALERT_PERIOD_LABELS[invoiceAlert.period]}${
+                            invoiceAlert.periodFrom ? ` · ${invoiceAlert.periodFrom}` : ''
+                          }${invoiceAlert.periodTo ? ` → ${invoiceAlert.periodTo}` : ''}`
+                        : 'Totales según el filtro de fechas de la lista'}
+                    </p>
+                  </div>
+                  <p className="font-mono text-sm tabular-nums text-fg-muted">
+                    {barPct.toFixed(0)}%
+                    {limit != null ? ' del tope' : ' facturado vs pendiente'}
                   </p>
                 </div>
-                {invoiceAlert.enabled && invoiceAlert.limit != null && (
-                  <p className="font-mono text-sm tabular-nums text-fg-muted">
-                    {formatMoneyArs(invoiceAlert.invoicedNet)} / {formatMoneyArs(invoiceAlert.limit)}
-                    <span className="ml-2 text-fg-faint">({invoiceAlert.percentUsed.toFixed(0)}%)</span>
-                  </p>
+
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-hair-soft bg-raised p-4">
+                    <p className="text-xs text-fg-muted">Total facturado</p>
+                    <p className="font-mono text-2xl font-bold tabular-nums text-ok">
+                      {formatMoneyArs(totalFacturado)}
+                    </p>
+                    <p className="text-xs text-fg-faint mt-1">
+                      {invoiceAlert?.activeCount ?? 0} factura(s) activa(s)
+                      {(invoiceAlert?.creditNotes ?? 0) > 0
+                        ? ` · NC −${formatMoneyArs(invoiceAlert!.creditNotes)}`
+                        : ''}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-hair-soft bg-raised p-4">
+                    <p className="text-xs text-fg-muted">Queda por facturar</p>
+                    <p className="font-mono text-2xl font-bold tabular-nums text-warn">
+                      {formatMoneyArs(quedaPorFacturar)}
+                    </p>
+                    <p className="text-xs text-fg-faint mt-1">
+                      {pendingCount} venta(s) pendiente(s)
+                      {limit != null
+                        ? ` · tope restante ${formatMoneyArs(Math.max(0, limit - totalFacturado))}`
+                        : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="mb-1.5 flex justify-between text-xs text-fg-faint">
+                    <span>Avance</span>
+                    <span className="font-mono tabular-nums">
+                      {limit != null
+                        ? `${formatMoneyArs(totalFacturado)} / ${formatMoneyArs(limit)}`
+                        : `${formatMoneyArs(totalFacturado)} / ${formatMoneyArs(coverageBase)}`}
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full bg-raised overflow-hidden border border-hair-soft">
+                    <div
+                      className={`h-full rounded-full transition-[width] ${
+                        barWarn ? 'bg-amber-500' : 'bg-emerald-600'
+                      }`}
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {invoiceAlert?.shouldAlert && invoiceAlert.message && (
+                  <p className="mt-3 text-sm text-amber-200">{invoiceAlert.message}</p>
                 )}
               </div>
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-hair-soft bg-raised p-3">
-                  <p className="text-xs text-fg-muted">Facturas activas</p>
-                  <p className="font-mono text-2xl font-bold tabular-nums text-fg">{invoiceAlert.activeCount}</p>
-                </div>
-                <div className="rounded-lg border border-hair-soft bg-raised p-3">
-                  <p className="text-xs text-fg-muted">Neto facturado</p>
-                  <p className="font-mono text-xl font-bold tabular-nums text-ok">{formatMoneyArs(invoiceAlert.invoicedNet)}</p>
-                </div>
-                <div className="rounded-lg border border-hair-soft bg-raised p-3">
-                  <p className="text-xs text-fg-muted">Notas de crédito</p>
-                  <p className="font-mono text-xl font-bold tabular-nums text-warn">-{formatMoneyArs(invoiceAlert.creditNotes)}</p>
-                </div>
-                <div className="rounded-lg border border-hair-soft bg-raised p-3">
-                  <p className="text-xs text-fg-muted">Restante</p>
-                  <p className="font-mono text-xl font-bold tabular-nums text-fg">
-                    {invoiceAlert.remaining == null ? '—' : formatMoneyArs(invoiceAlert.remaining)}
-                  </p>
-                </div>
-              </div>
-              {invoiceAlert.shouldAlert && invoiceAlert.message && (
-                <p className="mt-3 text-sm text-amber-200">{invoiceAlert.message}</p>
-              )}
-              {invoiceAlert.enabled && invoiceAlert.limit != null && invoiceAlert.limit > 0 && (
-                <div className="mt-3 h-2 rounded-full bg-raised overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      invoiceAlert.percentUsed >= invoiceAlert.percent ? 'bg-amber-500' : 'bg-emerald-600'
-                    }`}
-                    style={{ width: `${Math.min(100, Math.max(0, invoiceAlert.percentUsed))}%` }}
-                  />
-                </div>
-              )}
+            );
+          })()}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-hair overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setFacturasView('emitidas')}
+                className={`px-3 py-1.5 text-sm font-semibold ${
+                  facturasView === 'emitidas' ? 'bg-[var(--ok-soft)] text-ok' : 'bg-raised text-fg-muted'
+                }`}
+              >
+                Emitidas
+              </button>
+              <button
+                type="button"
+                onClick={() => setFacturasView('pendientes')}
+                className={`px-3 py-1.5 text-sm font-semibold ${
+                  facturasView === 'pendientes' ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised text-fg-muted'
+                }`}
+              >
+                Pendientes ({pendingCount})
+              </button>
             </div>
-          )}
+            {facturasView === 'pendientes' && (
+              <div className="flex flex-wrap items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={toggleSelectAllPending}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-hair text-fg-muted hover:bg-raised"
+                >
+                  {selectedSaleIds.size > 0 && selectedSaleIds.size === sales.length
+                    ? 'Quitar selección'
+                    : 'Seleccionar todas'}
+                </button>
+                <button
+                  type="button"
+                  disabled={batchBusy || selectedSaleIds.size === 0}
+                  onClick={() => void handleFacturarLote()}
+                  className="px-4 py-1.5 text-sm rounded-lg btn-brand disabled:opacity-50"
+                >
+                  {batchBusy
+                    ? 'Facturando lote…'
+                    : `Facturar en lote${
+                        selectedSaleIds.size
+                          ? ` (${selectedSaleIds.size} · ${formatMoneyArs(selectedBatchTotal)})`
+                          : ''
+                      }`}
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="rounded-xl border border-hair-soft bg-surface px-4 py-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="font-medium text-fg">Configurar aviso</h3>
                 <p className="text-xs text-fg-faint">
-                  Se muestra en el POS y al facturar desde el historial, antes de emitir la próxima Factura C.
+                  Se muestra en el POS y al facturar (individual o en lote), antes de emitir.
                 </p>
               </div>
               <label className="flex items-center gap-2 text-sm text-fg-muted">
@@ -862,7 +1055,7 @@ export default function VentasPage() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            {listTab === 'facturas' && (
+            {listTab === 'facturas' && facturasView === 'emitidas' && (
               <label className="flex items-center gap-2 text-sm text-fg-muted">
                 <input
                   type="checkbox"
@@ -949,6 +1142,16 @@ export default function VentasPage() {
           <table className="w-full text-sm">
             <thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint">
               <tr>
+                {listTab === 'facturas' && facturasView === 'pendientes' && (
+                  <th className="text-left p-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={sales.length > 0 && selectedSaleIds.size === sales.length}
+                      onChange={toggleSelectAllPending}
+                      title="Seleccionar todas"
+                    />
+                  </th>
+                )}
                 <th className="text-left p-3">Fecha y hora</th>
                 <th className="text-left p-3">Comprobante</th>
                 <th className="text-left p-3">Cliente</th>
@@ -964,13 +1167,16 @@ export default function VentasPage() {
             <tbody className="divide-y divide-hair-soft">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="p-6"><Loader size="sm" label="Ventas" /></td>
+                  <td colSpan={listTab === 'facturas' && facturasView === 'pendientes' ? 11 : 10} className="p-6"><Loader size="sm" label="Ventas" /></td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-6 text-fg-faint text-center">
-                    No hay ventas en el período o con los filtros seleccionados
-                    {selectedProduct ? ` (que incluyan "${selectedProduct.name}")` : ''}.
+                  <td colSpan={listTab === 'facturas' && facturasView === 'pendientes' ? 11 : 10} className="p-6 text-fg-faint text-center">
+                    {listTab === 'facturas' && facturasView === 'pendientes'
+                      ? 'No hay ventas pendientes de facturar con estos filtros.'
+                      : `No hay ventas en el período o con los filtros seleccionados${
+                          selectedProduct ? ` (que incluyan "${selectedProduct.name}")` : ''
+                        }.`}
                   </td>
                 </tr>
               ) : (
@@ -982,8 +1188,26 @@ export default function VentasPage() {
                   const isAuthorizedFactura =
                     s.fiscalDocument?.kind === 'FACTURA_C' &&
                     s.fiscalDocument.status === 'AUTHORIZED';
+                  const canSelectForBatch =
+                    listTab === 'facturas' &&
+                    facturasView === 'pendientes' &&
+                    !isVoided &&
+                    (!s.fiscalDocument ||
+                      s.fiscalDocument.kind === 'INTERNAL' ||
+                      (s.fiscalDocument.kind === 'FACTURA_C' &&
+                        (s.fiscalDocument.status === 'ERROR' || s.fiscalDocument.status === 'PENDING')));
                   return (
                     <tr key={s.id} className={isDuplicate ? 'border-l-2 border-warn/60 bg-[var(--warn-soft)]' : 'hover:bg-raised/70'}>
+                      {listTab === 'facturas' && facturasView === 'pendientes' && (
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedSaleIds.has(s.id)}
+                            disabled={!canSelectForBatch}
+                            onChange={() => toggleSaleSelected(s.id)}
+                          />
+                        </td>
+                      )}
                       <td className="whitespace-nowrap p-3 font-mono text-xs tabular-nums text-fg-muted">
                         {new Date(s.createdAt).toLocaleString('es-AR')}
                       </td>
@@ -1100,13 +1324,38 @@ export default function VentasPage() {
           </table>
         </div>
         <div className="space-y-3 p-3 md:hidden">
-          {loading ? <Loader size="sm" label="Ventas" /> : sales.length === 0 ? <p className="p-6 text-center text-sm text-fg-faint">No hay ventas en el período o con los filtros seleccionados{selectedProduct ? ` (que incluyan "${selectedProduct.name}")` : ''}.</p> : sales.map((sale) => {
+          {loading ? <Loader size="sm" label="Ventas" /> : sales.length === 0 ? <p className="p-6 text-center text-sm text-fg-faint">{listTab === 'facturas' && facturasView === 'pendientes' ? 'No hay ventas pendientes de facturar con estos filtros.' : `No hay ventas en el período o con los filtros seleccionados${selectedProduct ? ` (que incluyan "${selectedProduct.name}")` : ''}.`}</p> : sales.map((sale) => {
             const itemCount = sale.items?.reduce((sum, item) => sum + (item.qty ?? 0), 0) ?? 0;
             const isDuplicate = duplicateIds.has(sale.id);
             const isVoided = sale.status === 'voided';
             const isAuthorizedFactura = sale.fiscalDocument?.kind === 'FACTURA_C' && sale.fiscalDocument.status === 'AUTHORIZED';
+            const canSelectForBatch =
+              listTab === 'facturas' &&
+              facturasView === 'pendientes' &&
+              !isVoided &&
+              (!sale.fiscalDocument ||
+                sale.fiscalDocument.kind === 'INTERNAL' ||
+                (sale.fiscalDocument.kind === 'FACTURA_C' &&
+                  (sale.fiscalDocument.status === 'ERROR' || sale.fiscalDocument.status === 'PENDING')));
             return <article key={sale.id} className={`rounded-xl border bg-surface p-3 ${isDuplicate ? 'border-warn/60 bg-[var(--warn-soft)]' : 'border-hair-soft'}`}>
-              <div className="flex items-start justify-between gap-3"><div><p className="font-mono text-xs tabular-nums text-fg-muted">{new Date(sale.createdAt).toLocaleString('es-AR')}</p><p className="mt-1 font-semibold text-fg">{sale.customer?.name ?? 'Sin cliente'}</p></div><div className="flex flex-col items-end gap-1">{isVoided ? <><span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs font-medium text-crit">Anulada</span>{sale.fiscalDocument?.creditNoteNumber != null && <span className="font-mono text-[10px] text-crit">NC {String(sale.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(sale.fiscalDocument.creditNoteNumber).padStart(8, '0')}</span>}</> : isAuthorizedFactura ? <><span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs font-medium text-ok">Factura C</span>{sale.fiscalDocument?.pointOfSale != null && sale.fiscalDocument.receiptNumber != null && <span className="font-mono text-[10px] text-fg-faint">{String(sale.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(sale.fiscalDocument.receiptNumber).padStart(8, '0')}</span>}</> : sale.fiscalDocument?.kind === 'FACTURA_C' ? <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs text-crit">{sale.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}</span> : sale.fiscalDocument?.kind === 'INTERNAL' ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Comprobante interno</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin comprobante</span>}{isDuplicate && <span className="rounded border border-warn/30 bg-[var(--warn-soft)] px-1 text-[10px] text-warn">dup</span>}</div></div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  {listTab === 'facturas' && facturasView === 'pendientes' && (
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selectedSaleIds.has(sale.id)}
+                      disabled={!canSelectForBatch}
+                      onChange={() => toggleSaleSelected(sale.id)}
+                    />
+                  )}
+                  <div>
+                    <p className="font-mono text-xs tabular-nums text-fg-muted">{new Date(sale.createdAt).toLocaleString('es-AR')}</p>
+                    <p className="mt-1 font-semibold text-fg">{sale.customer?.name ?? 'Sin cliente'}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">{isVoided ? <><span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs font-medium text-crit">Anulada</span>{sale.fiscalDocument?.creditNoteNumber != null && <span className="font-mono text-[10px] text-crit">NC {String(sale.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(sale.fiscalDocument.creditNoteNumber).padStart(8, '0')}</span>}</> : isAuthorizedFactura ? <><span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs font-medium text-ok">Factura C</span>{sale.fiscalDocument?.pointOfSale != null && sale.fiscalDocument.receiptNumber != null && <span className="font-mono text-[10px] text-fg-faint">{String(sale.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(sale.fiscalDocument.receiptNumber).padStart(8, '0')}</span>}</> : sale.fiscalDocument?.kind === 'FACTURA_C' ? <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs text-crit">{sale.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}</span> : sale.fiscalDocument?.kind === 'INTERNAL' ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Comprobante interno</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin comprobante</span>}{isDuplicate && <span className="rounded border border-warn/30 bg-[var(--warn-soft)] px-1 text-[10px] text-warn">dup</span>}</div>
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Forma de pago</span><span className="text-fg-muted">{sale.paymentMethod ? (PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Ítems</span><span className="font-mono text-fg-muted">{itemCount}</span></div><div><span className="block text-xs text-fg-faint">Subtotal</span><span className="font-mono text-fg-muted">${Number(sale.total ?? 0).toFixed(0)}</span></div><div><span className="block text-xs text-fg-faint">Descuento</span><span className="font-mono text-warn">{Number(sale.discount ?? 0) > 0 ? `-$${Number(sale.discount).toFixed(0)}` : '—'}</span></div><div><span className="block text-xs text-fg-faint">Vendedor</span><span className="text-fg-muted">{(sale as Sale & { user?: { name: string } }).user?.name ?? '—'}</span></div><div><span className="block text-xs text-fg-faint">Total</span><span className="font-mono text-lg font-semibold text-brand">${Number(sale.totalFinal ?? 0).toFixed(0)}</span></div></div>
               <div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3">{!isVoided && (!sale.fiscalDocument || sale.fiscalDocument.kind === 'INTERNAL') && <button type="button" onClick={(event) => void handleFacturar(sale.id, event)} className="text-sm text-ok">Facturar</button>}{!isVoided && isAuthorizedFactura && <button type="button" onClick={(event) => void handleAnular(sale.id, event)} className="text-sm text-warn">Anular (NC)</button>}<button type="button" onClick={(event) => void handleReprint(sale.id, event)} className="text-sm text-brand">Reimprimir</button><button type="button" onClick={() => setViewSale(sale)} className="text-sm text-brand">Detalle</button>{!isVoided && <button type="button" onClick={(event) => { event.stopPropagation(); setViewSale(sale); }} className="text-sm text-ok">Editar</button>}{!isVoided && !isAuthorizedFactura && <button type="button" onClick={(event) => void handleDeleteSaleFromRow(sale, event)} className="text-sm text-crit">Eliminar</button>}</div>
             </article>;

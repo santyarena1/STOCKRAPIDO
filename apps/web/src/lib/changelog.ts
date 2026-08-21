@@ -36,6 +36,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Aviso de tope facturado',
         desc: 'Definís un monto límite (mes, 30 días o acumulado). Antes de emitir la próxima Factura C en el POS o desde el historial, avisamos si te estás acercando al tope.',
       },
+      {
+        tag: 'MEJORA',
+        title: 'Progreso y facturación en lote',
+        desc: 'En Facturas ves barra de progreso, total facturado y lo que queda por facturar. En Pendientes seleccionás varias ventas y las emitís de una.',
+      },
     ],
   },
   {

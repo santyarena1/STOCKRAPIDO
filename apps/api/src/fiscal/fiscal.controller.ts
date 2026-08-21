@@ -34,6 +34,25 @@ export class FiscalController {
       includeVoided: includeVoided === '1' || includeVoided === 'true',
     });
   }
+  @Get('invoices/pending')
+  pendingInvoices(
+    @CurrentUser() u: User,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const lim = limit ? parseInt(limit, 10) : 100;
+    const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
+    return this.fiscal.listPendingInvoices(u.businessId, {
+      from: fromD,
+      to: toD,
+      limit: Number.isFinite(lim) && lim > 0 ? lim : 100,
+    });
+  }
+  @Post('invoices/batch')
+  batchFactura(@CurrentUser() u: User, @Body() body: { saleIds?: string[] }) {
+    return this.fiscal.issueFacturaCBatch(u.businessId, body?.saleIds || []);
+  }
   @Post('test') test(@CurrentUser() u: User) { return this.fiscal.testConnection(u.businessId); }
   @Get('sales/:saleId/receipt') receipt(@CurrentUser() u: User, @Param('saleId') saleId: string, @Query('reveal') reveal?: string) { return this.fiscal.receipt(u.businessId, saleId, reveal === '1' || reveal === 'true'); }
   @Post('sales/:saleId/factura') factura(@CurrentUser() u: User, @Param('saleId') saleId: string) { return this.fiscal.issueFacturaC(u.businessId, saleId); }
