@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type SetStateAction } from 'react';
 import Link from 'next/link';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { UnitPriceDisplay } from '@/components/UnitPriceDisplay';
@@ -57,6 +57,33 @@ const DEFAULT_COLUMNS: ColumnSetting[] = [
   { key: 'expiresAt', label: 'Vencimiento', visible: true }, { key: 'stockControl', label: 'Control', visible: true },
   { key: 'actions', label: 'Acciones', visible: true },
 ];
+
+const COLUMNS_STORAGE_KEY = 'sr-prod-columns:v2';
+
+/** Une lo guardado con el default (orden + visibles) sin perder columnas nuevas. */
+function mergeColumns(stored: unknown): ColumnSetting[] {
+  if (!Array.isArray(stored)) return DEFAULT_COLUMNS.map((column) => ({ ...column }));
+  const defByKey = new Map(DEFAULT_COLUMNS.map((column) => [column.key, column]));
+  const result: ColumnSetting[] = [];
+  const seen = new Set<ColumnKey>();
+  for (const raw of stored) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as { key?: unknown; visible?: unknown };
+    if (typeof item.key !== 'string') continue;
+    const def = defByKey.get(item.key as ColumnKey);
+    if (!def || seen.has(def.key)) continue;
+    result.push({
+      key: def.key,
+      label: def.label,
+      visible: typeof item.visible === 'boolean' ? item.visible : def.visible,
+    });
+    seen.add(def.key);
+  }
+  for (const def of DEFAULT_COLUMNS) {
+    if (!seen.has(def.key)) result.push({ ...def });
+  }
+  return result;
+}
 const STOCK_COLUMNS = new Set<ColumnKey>(['stock', 'minStock', 'expiresAt', 'stockControl']);
 const SORTABLE: Partial<Record<ColumnKey, SortKey>> = { name: 'name', price: 'price', cost: 'cost', stock: 'stock', brand: 'brand', category: 'category' };
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
@@ -118,7 +145,9 @@ export default function ProductosPage() {
   const [view, setView] = useState<'cards' | 'list'>('cards');
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [columns, setColumns] = useState<ColumnSetting[]>(DEFAULT_COLUMNS);
+  const [columns, setColumns] = useState<ColumnSetting[]>(() => DEFAULT_COLUMNS.map((column) => ({ ...column })));
+  const [columnsReady, setColumnsReady] = useState(false);
+  const [columnsSavedFlash, setColumnsSavedFlash] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [views, setViews] = useState<SavedView[]>([]);
   const [sort, setSort] = useState<SortKey>('name');
@@ -174,27 +203,52 @@ export default function ProductosPage() {
       if (savedSort && SORT_OPTIONS.some((option) => option.key === savedSort)) setSort(savedSort as SortKey);
       const savedDir = localStorage.getItem('sr-prod-dir');
       if (savedDir === 'asc' || savedDir === 'desc') setDir(savedDir);
-      const savedColumns = JSON.parse(localStorage.getItem('sr-prod-columns') || 'null');
-      if (Array.isArray(savedColumns)) setColumns(savedColumns);
+      // v2 + fallback v1 (antes se podía pisar con el default al hidratar)
+      const rawV2 = localStorage.getItem(COLUMNS_STORAGE_KEY);
+      const rawV1 = localStorage.getItem('sr-prod-columns');
+      const parsed = JSON.parse(rawV2 || rawV1 || 'null');
+      setColumns(mergeColumns(parsed));
       const savedViews = JSON.parse(localStorage.getItem('sr-prod-views') || '[]');
       if (Array.isArray(savedViews)) setViews(savedViews);
       setHideCategories(localStorage.getItem('sr-prod-hide-cats-on') !== 'false');
       const savedHiddenCategories = JSON.parse(localStorage.getItem('sr-prod-hidden-cats') || '[]');
       if (Array.isArray(savedHiddenCategories)) setHiddenCategoryIds(savedHiddenCategories.filter((id): id is string => typeof id === 'string'));
-    } catch {}
+    } catch {
+      setColumns(DEFAULT_COLUMNS.map((column) => ({ ...column })));
+    }
+    setColumnsReady(true);
     setHydrated(true);
   }, []);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-mode', mode); }, [hydrated, mode]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-view', view); }, [hydrated, view]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-sort', sort); }, [hydrated, sort]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-dir', dir); }, [hydrated, dir]);
-  useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-columns', JSON.stringify(columns)); }, [hydrated, columns]);
+  useEffect(() => {
+    // No guardar hasta haber leído lo anterior (evita pisar con el default al montar).
+    if (!hydrated || !columnsReady) return;
+    try {
+      localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(columns));
+      localStorage.setItem('sr-prod-columns', JSON.stringify(columns)); // compat
+    } catch {
+      // ignore
+    }
+  }, [hydrated, columnsReady, columns]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-views', JSON.stringify(views)); }, [hydrated, views]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-hide-cats-on', String(hideCategories)); }, [hydrated, hideCategories]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-hidden-cats', JSON.stringify(hiddenCategoryIds)); }, [hydrated, hiddenCategoryIds]);
   useEffect(() => { if (hydrated && searchInput !== filters.q) setSearchInput(filters.q); }, [hydrated, filters.q]);
   useEffect(() => { const timer = window.setTimeout(() => setFilters((current) => ({ ...current, q: searchInput.trim() })), 300); return () => window.clearTimeout(timer); }, [searchInput]);
 
+  const updateColumns = (updater: SetStateAction<ColumnSetting[]>) => {
+    setColumns(updater);
+    setColumnsSavedFlash(true);
+  };
+
+  useEffect(() => {
+    if (!columnsSavedFlash) return;
+    const timer = window.setTimeout(() => setColumnsSavedFlash(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [columnsSavedFlash]);
   const fetchProducts = useCallback(async () => {
     if (!hydrated) return;
     setLoading(true);
@@ -314,13 +368,29 @@ export default function ProductosPage() {
     }
   };
   const changeSort = (next: SortKey) => { if (sort === next) setDir((current) => current === 'asc' ? 'desc' : 'asc'); else { setSort(next); setDir('asc'); } };
-  const moveColumn = (index: number, direction: -1 | 1) => setColumns((current) => { const target = index + direction; if (target < 0 || target >= current.length) return current; const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; });
+  const moveColumn = (index: number, direction: -1 | 1) =>
+    updateColumns((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
 
   const saveView = () => {
     const name = prompt('Nombre de la vista:')?.trim(); if (!name) return;
     setViews((current) => [...current, { id: `${Date.now()}`, name, filters, columns, mode, sort, dir }]);
   };
-  const applyView = (id: string) => { const view = views.find((item) => item.id === id); if (!view) return; setFilters({ ...EMPTY_FILTERS, ...view.filters }); setSearchInput(view.filters.q); setColumns(view.columns); setMode(view.mode); setSort(view.sort); setDir(view.dir); };
+  const applyView = (id: string) => {
+    const view = views.find((item) => item.id === id);
+    if (!view) return;
+    setFilters({ ...EMPTY_FILTERS, ...view.filters });
+    setSearchInput(view.filters.q);
+    updateColumns(mergeColumns(view.columns));
+    setMode(view.mode);
+    setSort(view.sort);
+    setDir(view.dir);
+  };
 
   const runBulk = async (action: BulkAction, value?: unknown) => {
     if (selected.size === 0) return;
@@ -742,7 +812,39 @@ export default function ProductosPage() {
         <select defaultValue="" onChange={(event) => { applyView(event.target.value); event.target.value = ''; }} className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg"><option value="">Mis vistas</option>{views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}</select><button type="button" onClick={saveView} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Guardar vista</button>{views.length > 0 && <button type="button" onClick={() => { const id = prompt(`ID de vista a borrar:\n${views.map((view) => `${view.id}: ${view.name}`).join('\n')}`); if (id) setViews((current) => current.filter((view) => view.id !== id)); }} className="rounded-lg border border-hair px-3 py-2 text-sm text-crit">Borrar vista</button>}
         <button type="button" onClick={() => setShowColumns((current) => !current)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Columnas</button><button type="button" onClick={openDuplicates} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Duplicados (EAN)</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised disabled:opacity-50">Seleccionar todos los de esta búsqueda</button>
       </div>
-      {showColumns && <div className="grid gap-2 rounded-lg border border-hair bg-raised p-3 sm:grid-cols-2 lg:grid-cols-3">{columns.map((column, index) => <div key={column.key} className="flex items-center gap-2"><input type="checkbox" checked={column.visible} onChange={(event) => setColumns((current) => current.map((item) => item.key === column.key ? { ...item, visible: event.target.checked } : item))} /><span className="min-w-0 flex-1 text-sm text-fg-muted">{column.label}</span><button type="button" onClick={() => moveColumn(index, -1)} className="text-fg-faint">↑</button><button type="button" onClick={() => moveColumn(index, 1)} className="text-fg-faint">↓</button></div>)}</div>}
+      {showColumns && (
+        <div className="space-y-2 rounded-lg border border-hair bg-raised p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-fg-muted">Elegí qué columnas ver y el orden. Se guardan solas en este navegador.</p>
+            {columnsSavedFlash ? <p className="text-xs font-semibold text-ok">Columnas guardadas</p> : null}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {columns.map((column, index) => (
+              <div key={column.key} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={column.visible}
+                  onChange={(event) =>
+                    updateColumns((current) =>
+                      current.map((item) => (item.key === column.key ? { ...item, visible: event.target.checked } : item)),
+                    )
+                  }
+                />
+                <span className="min-w-0 flex-1 text-sm text-fg-muted">{column.label}</span>
+                <button type="button" onClick={() => moveColumn(index, -1)} className="text-fg-faint">↑</button>
+                <button type="button" onClick={() => moveColumn(index, 1)} className="text-fg-faint">↓</button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => updateColumns(DEFAULT_COLUMNS.map((column) => ({ ...column })))}
+            className="text-xs text-fg-faint hover:text-fg"
+          >
+            Restablecer columnas por defecto
+          </button>
+        </div>
+      )}
     </section>
 
     {selected.size > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><div className="flex items-center gap-3"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button type="button" onClick={() => setSelected(new Set())} className="text-sm text-fg-muted hover:text-fg">Limpiar</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="text-sm text-fg-muted hover:text-fg disabled:opacity-50">Seleccionar todos los de esta búsqueda</button><button type="button" disabled={photoBusy} onClick={() => void applyFirstPhotos()} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">{photoBusy ? (photoProgress || 'Buscando…') : 'Primera foto'}</button><button type="button" disabled={labelsBusy} onClick={() => void openLabels([...selected])} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">Imprimir etiquetas</button></div><div ref={bulkMenuRef} className="relative"><button type="button" onClick={() => setBulkMenuOpen((current) => !current)} aria-expanded={bulkMenuOpen} className="btn-brand flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold">Acciones rápidas <ChevronDown className={`h-4 w-4 transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} /></button>{bulkMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-hair bg-surface p-2 shadow-2xl"><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Estado</p><button type="button" onClick={() => void runBulk('setActive', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Habilitar</button><button type="button" onClick={() => void runBulk('setActive', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Deshabilitar</button><button type="button" onClick={() => void runBulk('setSilent', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Marcar como silencioso</button><button type="button" onClick={() => void runBulk('setSilent', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Quitar silencioso</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Catálogo</p><button type="button" onClick={() => openBulkDialog({ action: 'setCategory', title: 'Cambiar categoría', label: 'Nueva categoría', kind: 'category' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar categoría</button><button type="button" onClick={() => openBulkDialog({ action: 'setBrand', title: 'Cambiar marca', label: 'Nueva marca', kind: 'text' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar marca</button><button type="button" onClick={() => openBulkDialog({ action: 'setIva', title: 'Cambiar IVA', label: 'IVA (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar IVA</button><button type="button" onClick={() => void exportSelected()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Exportar seleccionados</button><button type="button" disabled={labelsBusy} onClick={() => { setBulkMenuOpen(false); void openLabels([...selected]); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised disabled:opacity-50">Imprimir etiquetas</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Precio</p><button type="button" onClick={() => openBulkDialog({ action: 'applyMarkup', title: 'Aplicar rentabilidad', label: 'Rentabilidad / markup (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Aplicar rentabilidad %</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustPrice', title: 'Ajustar precio', label: 'Porcentaje (usá negativo para bajar)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar precio ±%</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Inventario</p><button type="button" onClick={() => openBulkDialog({ action: 'setStock', title: 'Fijar stock', label: 'Cantidad final', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Fijar stock</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustStock', title: 'Ajustar stock', label: 'Cantidad a sumar o restar', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar stock ±</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Admin</p><button type="button" onClick={() => confirm('¿Dejar de sincronizar los productos seleccionados?') && void runBulk('stopSync')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Dejar de sincronizar</button><button type="button" onClick={() => confirm('¿Eliminar definitivamente los productos seleccionados?') && void runBulk('delete')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>}</div></div>}
