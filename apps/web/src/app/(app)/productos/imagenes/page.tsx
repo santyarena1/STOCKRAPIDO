@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { assignProductImage, autoAssignSerperPhotos, isApiRouteMissing } from '@/lib/serper-client';
+import { assignProductImage, autoAssignSerperPhotos, formatSerperAutoResult, isApiRouteMissing } from '@/lib/serper-client';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
