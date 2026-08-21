@@ -1,5 +1,6 @@
 import { api, getToken } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
+import { mirrorRemoteImage } from '@/lib/mirror-image';
 
 export type SerperImageHit = {
   title: string;
@@ -163,17 +164,24 @@ function hasPhoto(product: PhotoProduct) {
 }
 
 export async function assignProductImage(productId: string, imageUrl: string) {
+  const raw = String(imageUrl ?? '').trim();
+  // Nunca guardar hotlinks de Serper/Google: se rompen. Espejamos a Blob.
+  let hosted = '';
+  if (raw) {
+    if (/vercel-storage\.com|data:image\//i.test(raw)) hosted = raw;
+    else hosted = await mirrorRemoteImage(raw);
+  }
   try {
     return await api<{ id: string; imageUrl: string | null }>('/products/serper/assign', {
       method: 'POST',
-      body: JSON.stringify({ productId, imageUrl }),
+      body: JSON.stringify({ productId, imageUrl: hosted }),
     });
   } catch {
     const updated = await api<{ id: string; imageUrl?: string | null }>(`/products/${productId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ imageUrl: imageUrl || null }),
+      body: JSON.stringify({ imageUrl: hosted || null }),
     });
-    return { id: updated.id, imageUrl: updated.imageUrl ?? (imageUrl || null) };
+    return { id: updated.id, imageUrl: updated.imageUrl ?? (hosted || null) };
   }
 }
 
@@ -263,13 +271,30 @@ async function localAutoAssign(
         skipped.push({ reason: 'Sin nombre para buscar.' });
         continue;
       }
-      const { images } = await searchSerperImages(query, 4);
-      const first = images[0];
-      if (!first) {
+      const { images } = await searchSerperImages(query, 6);
+      if (!images.length) {
         skipped.push({ reason: `Sin fotos para “${product.name}”.` });
         continue;
       }
-      await assignProductImage(product.id, first.imageUrl);
+      let saved = false;
+      let lastReason = 'Imagen rota / no se pudo guardar.';
+      for (const hit of images.slice(0, 4)) {
+        for (const candidate of [hit.imageUrl, hit.thumbnailUrl]) {
+          if (!candidate) continue;
+          try {
+            await assignProductImage(product.id, candidate);
+            saved = true;
+            break;
+          } catch (err) {
+            lastReason = err instanceof Error ? err.message : lastReason;
+          }
+        }
+        if (saved) break;
+      }
+      if (!saved) {
+        skipped.push({ reason: lastReason });
+        continue;
+      }
       updated += 1;
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'Error al buscar.';

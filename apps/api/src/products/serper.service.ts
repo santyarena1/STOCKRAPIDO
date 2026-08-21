@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessService } from '../business/business.service';
+import { mirrorFirstAvailable, mirrorRemoteImageUrl } from '../common/image-mirror';
 
 export type SerperImage = {
   title: string;
@@ -64,8 +65,8 @@ export class SerperService {
   }
 
   async assignImage(businessId: string, productId: string, imageUrl: string) {
-    const url = String(imageUrl ?? '').trim();
-    if (url && (!/^https?:\/\//i.test(url) || url.length > 2000)) {
+    const raw = String(imageUrl ?? '').trim();
+    if (raw && (!/^https?:\/\//i.test(raw) || raw.length > 2000) && !raw.startsWith('data:image/')) {
       throw new BadRequestException('URL de imagen inválida.');
     }
     const product = await this.prisma.product.findFirst({
@@ -73,6 +74,8 @@ export class SerperService {
       select: { id: true },
     });
     if (!product) throw new NotFoundException('Producto no encontrado.');
+    // Espejar a Blob: las URLs crudas de Serper/Google se rompen (hotlink / vencen).
+    const url = raw ? await mirrorRemoteImageUrl(raw) : '';
     return this.prisma.product.update({
       where: { id: product.id },
       data: { imageUrl: url || null },
@@ -133,18 +136,33 @@ export class SerperService {
       }
       try {
         const { images } = await this.searchImages(businessId, this.buildQuery(product.name, product.brand), 6);
-        const first = images[0];
-        if (!first) {
+        if (!images.length) {
           skipped.push({ id: product.id, reason: 'Serper no encontró fotos.' });
           items.push({ id: product.id, name: product.name, imageUrl: product.imageUrl, ok: false, reason: 'Sin resultados.' });
           continue;
         }
+        // Probá full + thumb de las primeras coincidencias hasta que una se pueda guardar.
+        const candidates = images.flatMap((img) => [img.imageUrl, img.thumbnailUrl]).filter(Boolean);
+        let hosted: string;
+        try {
+          hosted = await mirrorFirstAvailable(candidates);
+        } catch {
+          skipped.push({ id: product.id, reason: 'Fotos de Serper inaccesibles (rotas).' });
+          items.push({
+            id: product.id,
+            name: product.name,
+            imageUrl: product.imageUrl,
+            ok: false,
+            reason: 'Imagen rota / no se pudo guardar.',
+          });
+          continue;
+        }
         await this.prisma.product.update({
           where: { id: product.id },
-          data: { imageUrl: first.imageUrl },
+          data: { imageUrl: hosted },
         });
         updated += 1;
-        items.push({ id: product.id, name: product.name, imageUrl: first.imageUrl, ok: true });
+        items.push({ id: product.id, name: product.name, imageUrl: hosted, ok: true });
       } catch (err) {
         const reason = err instanceof Error ? err.message : 'Error al buscar.';
         skipped.push({ id: product.id, reason });
