@@ -13,6 +13,7 @@ import { FiscalReceiptModal, printFiscalReceipt } from '@/components/FiscalCheck
 import { Search, ShoppingCart } from 'lucide-react';
 import { Loader } from '@/components/ui/Loader';
 import { SerperImagePicker } from '@/components/SerperImagePicker';
+import { confirmInvoiceAlertIfNeeded, fetchInvoiceAlert } from '@/lib/invoice-alert';
 
 type CartItem = {
   productId: string;
@@ -230,6 +231,7 @@ export default function POSPage() {
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
   const [cashPaid, setCashPaid] = useState<number | null>(null); // con cuánto pagó en efectivo (para el vuelto)
   const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'>('internal');
+  const [invoiceAlertBanner,setInvoiceAlertBanner]=useState<string|null>(null);
   const [printEnabled,setPrintEnabled]=useState(true);
   /** Modo silencioso: los productos marcados como "silenciosos" se imprimen con el texto configurado. ON por defecto. */
   const [silentMode,setSilentMode]=useState(true);
@@ -269,6 +271,15 @@ export default function POSPage() {
   const [cobrandoBusy, setCobrandoBusy] = useState(false);
   useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('stockrapido:pos-preferences')||'{}');if(v.fiscalMode==='internal'||v.fiscalMode==='factura_c')setFiscalMode(v.fiscalMode);if(typeof v.printEnabled==='boolean')setPrintEnabled(v.printEnabled);if(typeof v.silentMode==='boolean')setSilentMode(v.silentMode)}catch{}setPreferencesLoaded(true)},[]);
   useEffect(()=>{if(preferencesLoaded)localStorage.setItem('stockrapido:pos-preferences',JSON.stringify({fiscalMode,printEnabled,silentMode}))},[fiscalMode,printEnabled,silentMode,preferencesLoaded]);
+  useEffect(()=>{
+    if(fiscalMode!=='factura_c'){setInvoiceAlertBanner(null);return}
+    let cancelled=false;
+    fetchInvoiceAlert(0).then(a=>{
+      if(cancelled)return;
+      setInvoiceAlertBanner(a.shouldAlert&&a.message?a.message:null);
+    }).catch(()=>{if(!cancelled)setInvoiceAlertBanner(null)});
+    return()=>{cancelled=true};
+  },[fiscalMode]);
   useEffect(() => {
     api<{ posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')
       .then((business) => {
@@ -637,7 +648,7 @@ export default function POSPage() {
     };
   }, [search, addToCart, hiddenCategoryIds]);
 
-  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice,silentTicket:Boolean(i.silentTicket)}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'+(silentMode?'':'?reveal=1')),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal),paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,silentMode,activeSeller?.id]);
+  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal);if(fiscalMode==='factura_c'){const ok=await confirmInvoiceAlertIfNeeded(total);if(!ok)return}const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice,silentTicket:Boolean(i.silentTicket)}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'+(silentMode?'':'?reveal=1')),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,silentMode,activeSeller?.id]);
   const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;if(id==='fiado'&&!selectedCustomer){setCustomerSearch('');setShowCustomer(true);return}if(id==='efectivo'){setCashPaid(null);setPaymentMethodPending('efectivo');return}paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar,selectedCustomer]);
   const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
   useEffect(() => {
@@ -900,6 +911,11 @@ export default function POSPage() {
   return (
     <div className="flex h-full flex-col bg-app">
       <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-2 sm:gap-3"><span className="w-full text-xs font-semibold text-fg-muted uppercase sm:w-auto">Próximas ventas</span><div className="inline-flex max-w-full rounded-lg border border-hair overflow-x-auto"><button type="button" onClick={()=>setFiscalMode('internal')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
+      {invoiceAlertBanner && (
+        <div className="shrink-0 border-b border-amber-700/40 bg-amber-950/30 px-3 py-2 sm:px-4">
+          <p className="text-xs text-amber-200">{invoiceAlertBanner}</p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hair-soft bg-surface px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold leading-tight text-fg">POS</h1>

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { decryptFiscalSecret, encryptFiscalSecret } from './fiscal-crypto';
 import { assertPlanFeature } from '../billing/plan-guard';
+import { parseArgentinaDayEnd, parseArgentinaDayStart } from '../common/argentina-date-range';
 import { XMLParser } from 'fast-xml-parser';
 import * as forge from 'node-forge';
 import { request as httpsRequest } from 'node:https';
@@ -10,9 +11,17 @@ const FACTURA_C = 11;
 const NOTA_CREDITO_C = 13;
 const WSFE_SERVICE = 'wsfe';
 type Environment = 'homologation' | 'production';
+type InvoiceAlertPeriod = 'calendar_month' | 'rolling_30' | 'all_time';
 type SaveConfig = {
   enabled?: boolean; environment: Environment; cuit: string; pointOfSale: number; legalName?: string;
   grossIncomeNumber?: string; activityStartDate?: string; address?: string; certificate?: string; privateKey?: string;
+  invoiceAlertEnabled?: boolean; invoiceAlertLimit?: number | null; invoiceAlertPercent?: number; invoiceAlertPeriod?: InvoiceAlertPeriod;
+};
+type SaveInvoiceAlert = {
+  invoiceAlertEnabled?: boolean;
+  invoiceAlertLimit?: number | null;
+  invoiceAlertPercent?: number;
+  invoiceAlertPeriod?: InvoiceAlertPeriod;
 };
 
 @Injectable()
@@ -26,7 +35,37 @@ export class FiscalService {
     return { id: c.id, enabled: c.enabled, environment: c.environment, cuit: c.cuit, pointOfSale: c.pointOfSale,
       legalName: c.legalName, grossIncomeNumber: c.grossIncomeNumber, activityStartDate: c.activityStartDate,
       address: c.address, hasCertificate: !!c.certificateEncrypted, hasPrivateKey: !!c.privateKeyEncrypted,
-      certificateExpiresAt: c.certificateExpiresAt };
+      certificateExpiresAt: c.certificateExpiresAt,
+      invoiceAlertEnabled: c.invoiceAlertEnabled,
+      invoiceAlertLimit: c.invoiceAlertLimit != null ? Number(c.invoiceAlertLimit) : null,
+      invoiceAlertPercent: c.invoiceAlertPercent,
+      invoiceAlertPeriod: c.invoiceAlertPeriod as InvoiceAlertPeriod,
+    };
+  }
+
+  private normalizeAlertFields(dto: SaveInvoiceAlert, previous?: { invoiceAlertEnabled: boolean; invoiceAlertLimit: unknown; invoiceAlertPercent: number; invoiceAlertPeriod: string } | null) {
+    const period = dto.invoiceAlertPeriod ?? (previous?.invoiceAlertPeriod as InvoiceAlertPeriod | undefined) ?? 'calendar_month';
+    if (!['calendar_month', 'rolling_30', 'all_time'].includes(period)) {
+      throw new BadRequestException('Período de aviso inválido.');
+    }
+    const percent = dto.invoiceAlertPercent ?? previous?.invoiceAlertPercent ?? 80;
+    if (!Number.isInteger(percent) || percent < 1 || percent > 100) {
+      throw new BadRequestException('El porcentaje de aviso debe ser un entero entre 1 y 100.');
+    }
+    let limit: number | null;
+    if (dto.invoiceAlertLimit === undefined) {
+      limit = previous?.invoiceAlertLimit != null ? Number(previous.invoiceAlertLimit) : null;
+    } else if (dto.invoiceAlertLimit === null || dto.invoiceAlertLimit === ('' as unknown)) {
+      limit = null;
+    } else {
+      limit = Number(dto.invoiceAlertLimit);
+      if (!Number.isFinite(limit) || limit < 0) throw new BadRequestException('El monto límite de facturación es inválido.');
+    }
+    const enabled = dto.invoiceAlertEnabled !== undefined ? !!dto.invoiceAlertEnabled : !!previous?.invoiceAlertEnabled;
+    if (enabled && (limit == null || limit <= 0)) {
+      throw new BadRequestException('Para activar el aviso, definí un monto límite mayor a 0.');
+    }
+    return { invoiceAlertEnabled: enabled, invoiceAlertLimit: limit, invoiceAlertPercent: percent, invoiceAlertPeriod: period };
   }
 
   async saveConfig(businessId: string, dto: SaveConfig) {
@@ -51,14 +90,174 @@ export class FiscalService {
       catch { throw new BadRequestException('La clave privada no es un PEM válido.'); }
     }
     if (dto.certificate?.trim() && dto.privateKey?.trim()) this.validatePair(dto.certificate.trim(), dto.privateKey.trim());
+    const alert = this.normalizeAlertFields(dto, previous);
     await this.prisma.fiscalConfig.upsert({ where: { businessId }, create: { businessId, enabled: !!dto.enabled,
       environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,
-      address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt }, update: {
+      address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
+      ...alert }, update: {
       enabled: !!dto.enabled, environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,
-      address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt } });
+      address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
+      ...alert } });
     return this.getPublicConfig(businessId);
+  }
+
+  async saveInvoiceAlert(businessId: string, dto: SaveInvoiceAlert) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
+    const previous = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
+    if (!previous) throw new BadRequestException('Configurá ARCA antes de definir el aviso de facturación.');
+    const alert = this.normalizeAlertFields(dto, previous);
+    await this.prisma.fiscalConfig.update({ where: { businessId }, data: alert });
+    return this.getInvoiceAlert(businessId);
+  }
+
+  private argentinaYmdParts(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value || '01';
+    return { year: get('year'), month: get('month'), day: get('day') };
+  }
+
+  private alertPeriodRange(period: InvoiceAlertPeriod): { from?: Date; to?: Date; periodFrom: string | null; periodTo: string | null } {
+    const { year, month, day } = this.argentinaYmdParts();
+    const todayYmd = `${year}-${month}-${day}`;
+    if (period === 'all_time') return { periodFrom: null, periodTo: todayYmd };
+    if (period === 'rolling_30') {
+      const end = parseArgentinaDayEnd(todayYmd)!;
+      const startDate = new Date(`${year}-${month}-${day}T12:00:00.000-03:00`);
+      startDate.setDate(startDate.getDate() - 29);
+      const startParts = this.argentinaYmdParts(startDate);
+      const fromYmd = `${startParts.year}-${startParts.month}-${startParts.day}`;
+      return { from: parseArgentinaDayStart(fromYmd)!, to: end, periodFrom: fromYmd, periodTo: todayYmd };
+    }
+    // calendar_month
+    const fromYmd = `${year}-${month}-01`;
+    return {
+      from: parseArgentinaDayStart(fromYmd)!,
+      to: parseArgentinaDayEnd(todayYmd)!,
+      periodFrom: fromYmd,
+      periodTo: todayYmd,
+    };
+  }
+
+  async getInvoicedNet(businessId: string, from?: Date, to?: Date) {
+    const where: Record<string, unknown> = {
+      businessId,
+      kind: 'FACTURA_C',
+      status: 'AUTHORIZED',
+    };
+    if (from || to) {
+      where.createdAt = {};
+      if (from) (where.createdAt as Record<string, Date>).gte = from;
+      if (to) (where.createdAt as Record<string, Date>).lte = to;
+    }
+    const docs = await this.prisma.fiscalDocument.findMany({
+      where,
+      select: {
+        creditNoteNumber: true,
+        sale: { select: { totalFinal: true } },
+      },
+    });
+    let invoicedGross = 0;
+    let creditNotes = 0;
+    let invoiceCount = 0;
+    let voidedCount = 0;
+    for (const doc of docs) {
+      const amount = Number(doc.sale.totalFinal);
+      invoiceCount += 1;
+      invoicedGross += amount;
+      if (doc.creditNoteNumber != null) {
+        creditNotes += amount;
+        voidedCount += 1;
+      }
+    }
+    return {
+      invoiceCount,
+      voidedCount,
+      activeCount: invoiceCount - voidedCount,
+      invoicedGross,
+      creditNotes,
+      invoicedNet: invoicedGross - creditNotes,
+    };
+  }
+
+  async getInvoiceAlert(businessId: string, nextAmount = 0) {
+    const config = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
+    const period = (config?.invoiceAlertPeriod as InvoiceAlertPeriod) || 'calendar_month';
+    const range = this.alertPeriodRange(period);
+    const totals = await this.getInvoicedNet(businessId, range.from, range.to);
+    const limit = config?.invoiceAlertLimit != null ? Number(config.invoiceAlertLimit) : null;
+    const percent = config?.invoiceAlertPercent ?? 80;
+    const alertEnabled = !!config?.invoiceAlertEnabled;
+    const enabled = alertEnabled && limit != null && limit > 0;
+    const next = Number.isFinite(nextAmount) && nextAmount > 0 ? nextAmount : 0;
+    const projected = totals.invoicedNet + next;
+    const percentUsed = limit && limit > 0 ? (totals.invoicedNet / limit) * 100 : 0;
+    const projectedPercent = limit && limit > 0 ? (projected / limit) * 100 : 0;
+    const shouldAlert = enabled && projectedPercent >= percent;
+    const remaining = limit != null ? Math.max(0, limit - totals.invoicedNet) : null;
+    let message: string | null = null;
+    if (shouldAlert && limit != null) {
+      const fmt = (n: number) =>
+        new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
+      message =
+        next > 0
+          ? `Vas a superar o acercarte al tope facturado: ${fmt(totals.invoicedNet)} de ${fmt(limit)} (${percentUsed.toFixed(0)}%). Esta factura suma ${fmt(next)} → quedarías en ${fmt(projected)} (${projectedPercent.toFixed(0)}%).`
+          : `Estás en ${fmt(totals.invoicedNet)} de ${fmt(limit)} facturado (${percentUsed.toFixed(0)}% del tope).`;
+    }
+    return {
+      enabled,
+      alertEnabled,
+      limit,
+      percent,
+      period,
+      periodFrom: range.periodFrom,
+      periodTo: range.periodTo,
+      ...totals,
+      nextAmount: next,
+      projected,
+      percentUsed,
+      projectedPercent,
+      remaining,
+      shouldAlert,
+      message,
+    };
+  }
+
+  async listInvoices(
+    businessId: string,
+    opts?: { from?: Date; to?: Date; limit?: number; includeVoided?: boolean },
+  ) {
+    const limit = opts?.limit && opts.limit > 0 ? Math.min(opts.limit, 500) : 100;
+    const where: Record<string, unknown> = {
+      businessId,
+      fiscalDocument: {
+        kind: 'FACTURA_C',
+        status: 'AUTHORIZED',
+        ...(opts?.includeVoided ? {} : { creditNoteNumber: null }),
+      },
+    };
+    if (opts?.from || opts?.to) {
+      where.createdAt = {};
+      if (opts.from) (where.createdAt as Record<string, Date>).gte = opts.from;
+      if (opts.to) (where.createdAt as Record<string, Date>).lte = opts.to;
+    }
+    return this.prisma.sale.findMany({
+      where,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true } },
+        customer: true,
+        fiscalDocument: true,
+      },
+    });
   }
 
   private validatePair(certPem: string, keyPem: string) {

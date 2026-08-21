@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.10',
+    date: '2026-08-21',
+    summary: 'Módulo Facturas en el historial y aviso de tope facturado.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Facturas en historial de ventas',
+        desc: 'En Historial de ventas hay una pestaña Facturas con las Factura C autorizadas, totales del período y notas de crédito.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Aviso de tope facturado',
+        desc: 'Definís un monto límite (mes, 30 días o acumulado). Antes de emitir la próxima Factura C en el POS o desde el historial, avisamos si te estás acercando al tope.',
+      },
+    ],
+  },
+  {
     version: 'v1.9',
     date: '2026-08-20',
     summary: 'Comisión sobre costo o venta, y Precios Claros con EAN coexistente.',
