@@ -41,6 +41,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Primera foto: motivo de omitidos',
         desc: 'Si no aplica ninguna imagen, ahora explica por qué (falta key de Serper, sin resultados, etc.) en vez de solo decir “0 aplicadas · N omitidos”.',
       },
+      {
+        tag: 'NUEVO',
+        title: 'Precios Claros masivo',
+        desc: 'En Inventario → Precios Claros sembrás/barres un catálogo local, buscás coincidencias en lote y podés pedir ayuda de IA cuando el nombre no pega. El EAN se asocia sin reemplazar el código actual.',
+      },
     ],
   },
   {

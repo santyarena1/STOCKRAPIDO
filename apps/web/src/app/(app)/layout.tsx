@@ -75,6 +75,7 @@ const GROUPS = [
     icon: Package,
     items: [
       { href: '/productos', label: 'Productos' },
+      { href: '/precios-claros', label: 'Precios Claros' },
       { href: '/movimientos', label: 'Movimientos' },
       { href: '/promociones', label: 'Promociones' },
       { href: '/figuritas', label: 'Figuritas Mundial' },

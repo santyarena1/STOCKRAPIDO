@@ -1,18 +1,17 @@
-# Precios Claros (SEPA) — plan StockRápido
-
-## Estado (v2)
-
-Cliente live contra CloudFront + match por nombre (heurística / IA opcional) + asociación de EAN coexistente con el barcode actual.
-
-## Objetivo
-
-1. Buscar por EAN o nombre y sugerir coincidencias.
-2. Match aproximado de nombres; OpenAI opcional si el negocio tiene key.
-3. Enriquecer campos vacíos (marca, presentación) sin pisar lo ya cargado.
-4. Traer el EAN de Precios Claros a `allCodes` **sin reemplazar** el barcode (ambos coexisten).
-
-## Config
-
-`Business.posConfig.preciosClaros`: `{ enabled, lat, lng, branchIds[] }`
-
-Por defecto usa CABA (`-34.6037, -58.3816`) si no hay config.
+/**
+ * Precios Claros — plan StockRápido v3
+ *
+ * ## Base completa
+ * Sí existe dataset oficial SEPA (~70k productos / ~12M precios/día) en
+ * https://datos.produccion.gob.ar/dataset/sepa-precios
+ * Los zips diarios son enormes para serverless; por eso cacheamos un catálogo
+ * local (PreciosClarosCatalog) y lo llenamos de dos formas:
+ * 1) Semilla desde los nombres de tu negocio (búsqueda live CloudFront).
+ * 2) Barrido por categorías (sync-chunk) hasta completar el catálogo.
+ *
+ * ## Módulo masivo `/precios-claros`
+ * - Match heurístico catálogo + live
+ * - IA opcional: reordena candidatos y sugiere búsquedas alternativas
+ * - Aplicar EAN sin pisar el barcode actual (coexisten en allCodes)
+ */
+export {};

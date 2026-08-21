@@ -928,3 +928,19 @@ model SupportMessage {
   @@index([ticketId, createdAt])
 }
 
+/** Catálogo cacheado de Precios Claros / SEPA (global, ~EAN únicos). */
+model PreciosClarosCatalog {
+  ean          String   @id
+  name         String
+  brand        String?
+  presentation String?
+  priceMin     Decimal?
+  priceMax     Decimal?
+  nameNorm     String
+  syncedAt     DateTime @default(now()) @updatedAt
+
+  @@index([nameNorm])
+  @@index([brand])
+  @@index([syncedAt])
+}
+

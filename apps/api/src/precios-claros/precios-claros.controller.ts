@@ -27,6 +27,26 @@ export class PreciosClarosController {
     return { items: [], source: 'precios-claros', mode: 'empty' as const };
   }
 
+  @Get('catalog/stats')
+  catalogStats() {
+    return this.preciosClaros.catalogStats();
+  }
+
+  @Get('catalog/search')
+  catalogSearch(@Query('q') q?: string) {
+    return this.preciosClaros.searchCatalog(q || '', 40).then((items) => ({ items }));
+  }
+
+  @Post('catalog/sync-chunk')
+  syncChunk(@CurrentUser() user: User, @Body() body: { cursor?: string | null }) {
+    return this.preciosClaros.syncCatalogChunk(user.businessId, body?.cursor);
+  }
+
+  @Post('catalog/seed-business')
+  seedBusiness(@CurrentUser() user: User, @Body() body: { limit?: number }) {
+    return this.preciosClaros.seedCatalogFromBusiness(user.businessId, body?.limit);
+  }
+
   @Get('match/:productId')
   match(
     @CurrentUser() user: User,
@@ -52,5 +72,37 @@ export class PreciosClarosController {
     },
   ) {
     return this.preciosClaros.applyToProduct(user.businessId, productId, body);
+  }
+
+  @Post('bulk/preview')
+  bulkPreview(
+    @CurrentUser() user: User,
+    @Body()
+    body: {
+      onlyWithoutBarcode?: boolean;
+      limit?: number;
+      useAi?: boolean;
+      minScore?: number;
+      productIds?: string[];
+    },
+  ) {
+    return this.preciosClaros.bulkPreview(user.businessId, body || {});
+  }
+
+  @Post('bulk/apply')
+  bulkApply(
+    @CurrentUser() user: User,
+    @Body()
+    body: {
+      items: Array<{
+        productId: string;
+        ean: string;
+        name?: string;
+        brand?: string | null;
+        presentation?: string | null;
+      }>;
+    },
+  ) {
+    return this.preciosClaros.bulkApply(user.businessId, body?.items || []);
   }
 }
