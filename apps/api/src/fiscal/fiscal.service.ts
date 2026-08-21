@@ -146,18 +146,18 @@ export class FiscalService {
   }
 
   async getInvoicedNet(businessId: string, from?: Date, to?: Date) {
-    const where: Record<string, unknown> = {
-      businessId,
-      kind: 'FACTURA_C',
-      status: 'AUTHORIZED',
-    };
-    if (from || to) {
-      where.createdAt = {};
-      if (from) (where.createdAt as Record<string, Date>).gte = from;
-      if (to) (where.createdAt as Record<string, Date>).lte = to;
-    }
+    const saleCreatedAt: Record<string, Date> = {};
+    if (from) saleCreatedAt.gte = from;
+    if (to) saleCreatedAt.lte = to;
     const docs = await this.prisma.fiscalDocument.findMany({
-      where,
+      where: {
+        businessId,
+        kind: 'FACTURA_C',
+        status: 'AUTHORIZED',
+        ...(from || to
+          ? { sale: { createdAt: saleCreatedAt } }
+          : {}),
+      },
       select: {
         creditNoteNumber: true,
         sale: { select: { totalFinal: true } },
@@ -182,7 +182,76 @@ export class FiscalService {
       activeCount: invoiceCount - voidedCount,
       invoicedGross,
       creditNotes,
+      // Total facturado activo (sin NC). Net = bruto − NC.
+      invoicedActive: invoicedGross - creditNotes,
       invoicedNet: invoicedGross - creditNotes,
+    };
+  }
+
+  /** Totales del módulo Facturas según el mismo filtro de fechas que la lista (fecha de la venta). */
+  async getInvoicesSummary(businessId: string, from?: Date, to?: Date) {
+    const saleDate: Record<string, Date> = {};
+    if (from) saleDate.gte = from;
+    if (to) saleDate.lte = to;
+    const dateFilter = from || to ? { createdAt: saleDate } : {};
+
+    const [authorized, pending] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: {
+          businessId,
+          ...dateFilter,
+          fiscalDocument: { kind: 'FACTURA_C', status: 'AUTHORIZED' },
+        },
+        select: {
+          totalFinal: true,
+          fiscalDocument: { select: { creditNoteNumber: true } },
+        },
+      }),
+      this.prisma.sale.findMany({
+        where: {
+          businessId,
+          status: { not: 'voided' },
+          ...dateFilter,
+          OR: [
+            { fiscalDocument: null },
+            { fiscalDocument: { kind: 'INTERNAL' } },
+            { fiscalDocument: { kind: 'FACTURA_C', status: { in: ['ERROR', 'PENDING'] } } },
+          ],
+        },
+        select: { totalFinal: true },
+      }),
+    ]);
+
+    let invoicedGross = 0;
+    let creditNotes = 0;
+    let activeCount = 0;
+    let voidedCount = 0;
+    for (const sale of authorized) {
+      const amount = Number(sale.totalFinal);
+      invoicedGross += amount;
+      if (sale.fiscalDocument?.creditNoteNumber != null) {
+        creditNotes += amount;
+        voidedCount += 1;
+      } else {
+        activeCount += 1;
+      }
+    }
+
+    const pendingCount = pending.length;
+    const pendingTotal = pending.reduce((sum, s) => sum + Number(s.totalFinal), 0);
+    const totalFacturado = invoicedGross - creditNotes;
+
+    return {
+      from: from?.toISOString() ?? null,
+      to: to?.toISOString() ?? null,
+      invoiceCount: authorized.length,
+      activeCount,
+      voidedCount,
+      invoicedGross,
+      creditNotes,
+      totalFacturado,
+      pendingCount,
+      pendingTotal,
     };
   }
 

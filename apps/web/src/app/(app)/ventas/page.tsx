@@ -186,8 +186,15 @@ export default function VentasPage() {
   );
   const [selectedSaleIds, setSelectedSaleIds] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
-  const [pendingTotal, setPendingTotal] = useState(0);
-  const [pendingCount, setPendingCount] = useState(0);
+  const [invoiceSummary, setInvoiceSummary] = useState<{
+    totalFacturado: number;
+    pendingTotal: number;
+    pendingCount: number;
+    activeCount: number;
+    voidedCount: number;
+    creditNotes: number;
+    invoicedGross: number;
+  } | null>(null);
   const [invoiceAlert, setInvoiceAlert] = useState<InvoiceAlertStatus | null>(null);
   const [alertForm, setAlertForm] = useState({
     enabled: false,
@@ -288,16 +295,26 @@ export default function VentasPage() {
         if (filters.from) pendingParams.from = filters.from;
         if (filters.to) pendingParams.to = filters.to;
 
+        const summaryParams: Record<string, string> = {};
+        if (filters.from) summaryParams.from = filters.from;
+        if (filters.to) summaryParams.to = filters.to;
+
         const listUrl =
           facturasView === 'pendientes' ? '/fiscal/invoices/pending' : '/fiscal/invoices';
         const listParams = facturasView === 'pendientes' ? pendingParams : invParams;
 
-        const [salesRes, alertRes, pendingRes] = await Promise.allSettled([
+        const [salesRes, alertRes, summaryRes] = await Promise.allSettled([
           api<Sale[]>(listUrl, { params: listParams }),
           fetchInvoiceAlert(0),
-          facturasView === 'emitidas'
-            ? api<Sale[]>('/fiscal/invoices/pending', { params: pendingParams })
-            : Promise.resolve(null),
+          api<{
+            totalFacturado: number;
+            pendingTotal: number;
+            pendingCount: number;
+            activeCount: number;
+            voidedCount: number;
+            creditNotes: number;
+            invoicedGross: number;
+          }>('/fiscal/invoices/summary', { params: summaryParams }),
         ]);
         const listed =
           salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : [];
@@ -305,15 +322,10 @@ export default function VentasPage() {
         setSelectedSaleIds(new Set());
         setStats(null);
 
-        if (facturasView === 'pendientes') {
-          setPendingCount(listed.length);
-          setPendingTotal(listed.reduce((sum, s) => sum + Number(s.totalFinal || 0), 0));
-        } else if (pendingRes.status === 'fulfilled' && Array.isArray(pendingRes.value)) {
-          setPendingCount(pendingRes.value.length);
-          setPendingTotal(pendingRes.value.reduce((sum, s) => sum + Number(s.totalFinal || 0), 0));
+        if (summaryRes.status === 'fulfilled' && summaryRes.value) {
+          setInvoiceSummary(summaryRes.value);
         } else {
-          setPendingCount(0);
-          setPendingTotal(0);
+          setInvoiceSummary(null);
         }
 
         if (alertRes.status === 'fulfilled') {
@@ -704,11 +716,19 @@ export default function VentasPage() {
       {listTab === 'facturas' && (
         <div className="space-y-4">
           {(() => {
-            const totalFacturado = invoiceAlert?.invoicedNet ?? 0;
-            const limit = invoiceAlert?.limit != null && invoiceAlert.limit > 0 ? invoiceAlert.limit : null;
-            const quedaPorFacturar = pendingTotal;
+            const totalFacturado = invoiceSummary?.totalFacturado ?? 0;
+            const quedaPorFacturar = invoiceSummary?.pendingTotal ?? 0;
+            const pendingCount = invoiceSummary?.pendingCount ?? 0;
+            const activeCount = invoiceSummary?.activeCount ?? 0;
+            const creditNotes = invoiceSummary?.creditNotes ?? 0;
+            // Barra / tope: usa el período configurado del aviso (mes, 30 días, etc.)
+            const limit =
+              invoiceAlert?.enabled && invoiceAlert.limit != null && invoiceAlert.limit > 0
+                ? invoiceAlert.limit
+                : null;
+            const topeFacturado = invoiceAlert?.invoicedNet ?? totalFacturado;
             const towardLimitPct =
-              limit != null ? Math.min(100, Math.max(0, (totalFacturado / limit) * 100)) : null;
+              limit != null ? Math.min(100, Math.max(0, (topeFacturado / limit) * 100)) : null;
             const coverageBase = totalFacturado + quedaPorFacturar;
             const coveragePct =
               coverageBase > 0 ? Math.min(100, Math.max(0, (totalFacturado / coverageBase) * 100)) : 0;
@@ -717,6 +737,10 @@ export default function VentasPage() {
               towardLimitPct != null &&
               invoiceAlert != null &&
               towardLimitPct >= (invoiceAlert.percent ?? 80);
+            const filterLabel =
+              filters.from || filters.to
+                ? `Filtro: ${filters.from || '…'} → ${filters.to || '…'}`
+                : 'Sin filtro de fechas (todas las ventas)';
 
             return (
               <div
@@ -727,13 +751,7 @@ export default function VentasPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold text-fg">Progreso de facturación</h2>
-                    <p className="text-sm text-fg-faint mt-0.5">
-                      {invoiceAlert
-                        ? `Período del tope: ${INVOICE_ALERT_PERIOD_LABELS[invoiceAlert.period]}${
-                            invoiceAlert.periodFrom ? ` · ${invoiceAlert.periodFrom}` : ''
-                          }${invoiceAlert.periodTo ? ` → ${invoiceAlert.periodTo}` : ''}`
-                        : 'Totales según el filtro de fechas de la lista'}
-                    </p>
+                    <p className="text-sm text-fg-faint mt-0.5">{filterLabel}</p>
                   </div>
                   <p className="font-mono text-sm tabular-nums text-fg-muted">
                     {barPct.toFixed(0)}%
@@ -748,10 +766,8 @@ export default function VentasPage() {
                       {formatMoneyArs(totalFacturado)}
                     </p>
                     <p className="text-xs text-fg-faint mt-1">
-                      {invoiceAlert?.activeCount ?? 0} factura(s) activa(s)
-                      {(invoiceAlert?.creditNotes ?? 0) > 0
-                        ? ` · NC −${formatMoneyArs(invoiceAlert!.creditNotes)}`
-                        : ''}
+                      {activeCount} factura(s) activa(s)
+                      {creditNotes > 0 ? ` · NC −${formatMoneyArs(creditNotes)}` : ''}
                     </p>
                   </div>
                   <div className="rounded-lg border border-hair-soft bg-raised p-4">
@@ -762,7 +778,7 @@ export default function VentasPage() {
                     <p className="text-xs text-fg-faint mt-1">
                       {pendingCount} venta(s) pendiente(s)
                       {limit != null
-                        ? ` · tope restante ${formatMoneyArs(Math.max(0, limit - totalFacturado))}`
+                        ? ` · tope restante ${formatMoneyArs(Math.max(0, limit - topeFacturado))}`
                         : ''}
                     </p>
                   </div>
@@ -770,10 +786,14 @@ export default function VentasPage() {
 
                 <div className="mt-4">
                   <div className="mb-1.5 flex justify-between text-xs text-fg-faint">
-                    <span>Avance</span>
+                    <span>
+                      {limit != null
+                        ? `Avance del tope (${INVOICE_ALERT_PERIOD_LABELS[invoiceAlert!.period]})`
+                        : 'Avance'}
+                    </span>
                     <span className="font-mono tabular-nums">
                       {limit != null
-                        ? `${formatMoneyArs(totalFacturado)} / ${formatMoneyArs(limit)}`
+                        ? `${formatMoneyArs(topeFacturado)} / ${formatMoneyArs(limit)}`
                         : `${formatMoneyArs(totalFacturado)} / ${formatMoneyArs(coverageBase)}`}
                     </span>
                   </div>
@@ -812,7 +832,7 @@ export default function VentasPage() {
                   facturasView === 'pendientes' ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised text-fg-muted'
                 }`}
               >
-                Pendientes ({pendingCount})
+                Pendientes ({invoiceSummary?.pendingCount ?? 0})
               </button>
             </div>
             {facturasView === 'pendientes' && (

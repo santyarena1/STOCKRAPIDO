@@ -34,6 +34,15 @@ export class FiscalController {
       includeVoided: includeVoided === '1' || includeVoided === 'true',
     });
   }
+  @Get('invoices/summary')
+  invoicesSummary(
+    @CurrentUser() u: User,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
+    return this.fiscal.getInvoicesSummary(u.businessId, fromD, toD);
+  }
   @Get('invoices/pending')
   pendingInvoices(
     @CurrentUser() u: User,
