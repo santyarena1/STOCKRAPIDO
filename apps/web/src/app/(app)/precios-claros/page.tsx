@@ -357,6 +357,7 @@ export default function PreciosClarosPage() {
       await analyzeIds([row.product.id], {
         useLive: withOnline || useLive,
         useAi,
+        includePc: true,
         queryByProductId: { [row.product.id]: q },
         replace: false,
       });

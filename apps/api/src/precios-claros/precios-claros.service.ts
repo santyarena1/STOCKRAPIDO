@@ -457,7 +457,7 @@ export class PreciosClarosService {
         : [];
 
     const query = [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim();
-    const byName = await this.searchByName(businessId, query || product.name, 25);
+    const byName = await this.searchByName(businessId, query || product.name, 25, { includePc: true });
 
     const merged = new Map<string, PreciosClarosHit>();
     for (const h of [...byEan, ...byName]) {
