@@ -4,4 +4,4 @@
 // (Si Vercel compilara el .ts con esbuild se perderia esa metadata y romperia DI.)
 module.exports = require('../dist/src/vercel').default;
 
-// redeploy trigger 2026-08-21T00:02:50Z
+// redeploy trigger 2026-08-21T01:33:00Z
