@@ -251,9 +251,8 @@ export default function PreciosClarosPage() {
         body: JSON.stringify({ items }),
       });
       setMsg(`Aplicados ${data.applied}${data.failed ? ` · fallaron ${data.failed}` : ''}.`);
-      setRows((current) =>
-        current.filter((row) => !items.some((item) => item.productId === row.product.id && selected[row.product.id])),
-      );
+      const doneIds = new Set(items.map((item) => item.productId));
+      setRows((current) => current.filter((row) => !doneIds.has(row.product.id)));
       setSelected({});
       await refreshStats();
     } catch (err) {
