@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { formatMoneyInputArs, parseMoneyInputArs } from '@/lib/units';
 
 type FiscalConfig = {
   enabled: boolean;
@@ -79,10 +80,10 @@ export default function FiscalSettings() {
           activityStartDate: c.activityStartDate?.slice(0, 10) || '',
           address: c.address || '',
           invoiceAlertEnabled: !!c.invoiceAlertEnabled,
-          invoiceAlertLimit: c.invoiceAlertLimit != null ? String(c.invoiceAlertLimit) : '',
+          invoiceAlertLimit: formatMoneyInputArs(c.invoiceAlertLimit),
           invoiceAlertPercent: c.invoiceAlertPercent ?? 80,
           invoiceYearAlertEnabled: !!c.invoiceYearAlertEnabled,
-          invoiceYearAlertLimit: c.invoiceYearAlertLimit != null ? String(c.invoiceYearAlertLimit) : '',
+          invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
           invoiceYearAlertPercent: c.invoiceYearAlertPercent ?? 80,
         }));
       })
@@ -111,16 +112,21 @@ export default function FiscalSettings() {
         certificate: form.certificate || undefined,
         privateKey: form.privateKey || undefined,
         invoiceAlertEnabled: form.invoiceAlertEnabled,
-        invoiceAlertLimit: form.invoiceAlertLimit.trim() === '' ? null : Number(form.invoiceAlertLimit.replace(',', '.')),
+        invoiceAlertLimit: parseMoneyInputArs(form.invoiceAlertLimit),
         invoiceAlertPercent: form.invoiceAlertPercent,
         invoiceYearAlertEnabled: form.invoiceYearAlertEnabled,
-        invoiceYearAlertLimit:
-          form.invoiceYearAlertLimit.trim() === '' ? null : Number(form.invoiceYearAlertLimit.replace(',', '.')),
+        invoiceYearAlertLimit: parseMoneyInputArs(form.invoiceYearAlertLimit),
         invoiceYearAlertPercent: form.invoiceYearAlertPercent,
       };
       const c = await api<FiscalConfig>('/fiscal/config', { method: 'PUT', body: JSON.stringify(body) });
       setMeta(c);
-      setForm((f) => ({ ...f, certificate: '', privateKey: '' }));
+      setForm((f) => ({
+        ...f,
+        certificate: '',
+        privateKey: '',
+        invoiceAlertLimit: formatMoneyInputArs(c.invoiceAlertLimit),
+        invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
+      }));
       setMessage('Configuración fiscal guardada.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error al guardar');
@@ -233,11 +239,11 @@ export default function FiscalSettings() {
             <div>
               <label className="text-sm text-slate-400">Monto límite del mes</label>
               <input
-                className={input}
-                inputMode="decimal"
-                placeholder="Ej. 5000000"
+                className={`${input} font-mono tabular-nums`}
+                inputMode="numeric"
+                placeholder="$ 0"
                 value={form.invoiceAlertLimit}
-                onChange={(e) => setForm((f) => ({ ...f, invoiceAlertLimit: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceAlertLimit: formatMoneyInputArs(e.target.value) }))}
               />
             </div>
             <div>
@@ -270,11 +276,11 @@ export default function FiscalSettings() {
             <div>
               <label className="text-sm text-slate-400">Monto límite del año</label>
               <input
-                className={input}
-                inputMode="decimal"
-                placeholder="Ej. 50000000"
+                className={`${input} font-mono tabular-nums`}
+                inputMode="numeric"
+                placeholder="$ 0"
                 value={form.invoiceYearAlertLimit}
-                onChange={(e) => setForm((f) => ({ ...f, invoiceYearAlertLimit: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, invoiceYearAlertLimit: formatMoneyInputArs(e.target.value) }))}
               />
             </div>
             <div>

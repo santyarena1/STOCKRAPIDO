@@ -31,6 +31,23 @@ export function formatMoneyArs(n: number | null | undefined, decimals = 0): stri
   }).format(n);
 }
 
+/** Solo dígitos → número entero (pesos). Vacío → null. */
+export function parseMoneyInputArs(raw: string | number | null | undefined): number | null {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? Math.trunc(raw) : null;
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Formatea en vivo como pesos ARS ($ 1.234.567) mientras se escribe. */
+export function formatMoneyInputArs(raw: string | number | null | undefined): string {
+  const n = parseMoneyInputArs(raw);
+  if (n == null) return '';
+  return formatMoneyArs(n, 0);
+}
+
 export type UnitPriceFields = {
   cost?: unknown;
   price?: unknown;

@@ -14,7 +14,7 @@ import {
   type InvoiceAlertBucket,
   type InvoiceAlertStatus,
 } from '@/lib/invoice-alert';
-import { formatMoneyArs as formatMoneyArsShared } from '@/lib/units';
+import { formatMoneyArs as formatMoneyArsShared, formatMoneyInputArs, parseMoneyInputArs } from '@/lib/units';
 
 type SaleItem = {
   id: string;
@@ -336,10 +336,10 @@ export default function VentasPage() {
           const year = a.yearly;
           setAlertForm({
             monthEnabled: month.alertEnabled ?? month.enabled,
-            monthLimit: month.limit != null ? String(month.limit) : '',
+            monthLimit: formatMoneyInputArs(month.limit),
             monthPercent: month.percent ?? 80,
             yearEnabled: year?.alertEnabled ?? year?.enabled ?? false,
-            yearLimit: year?.limit != null ? String(year.limit) : '',
+            yearLimit: formatMoneyInputArs(year?.limit),
             yearPercent: year?.percent ?? 80,
           });
         } else {
@@ -467,12 +467,10 @@ export default function VentasPage() {
         method: 'PUT',
         body: JSON.stringify({
           invoiceAlertEnabled: alertForm.monthEnabled,
-          invoiceAlertLimit:
-            alertForm.monthLimit.trim() === '' ? null : Number(alertForm.monthLimit.replace(',', '.')),
+          invoiceAlertLimit: parseMoneyInputArs(alertForm.monthLimit),
           invoiceAlertPercent: alertForm.monthPercent,
           invoiceYearAlertEnabled: alertForm.yearEnabled,
-          invoiceYearAlertLimit:
-            alertForm.yearLimit.trim() === '' ? null : Number(alertForm.yearLimit.replace(',', '.')),
+          invoiceYearAlertLimit: parseMoneyInputArs(alertForm.yearLimit),
           invoiceYearAlertPercent: alertForm.yearPercent,
         }),
       });
@@ -481,10 +479,10 @@ export default function VentasPage() {
       const year = updated.yearly;
       setAlertForm({
         monthEnabled: month.alertEnabled ?? month.enabled,
-        monthLimit: month.limit != null ? String(month.limit) : '',
+        monthLimit: formatMoneyInputArs(month.limit),
         monthPercent: month.percent ?? 80,
         yearEnabled: year?.alertEnabled ?? year?.enabled ?? false,
-        yearLimit: year?.limit != null ? String(year.limit) : '',
+        yearLimit: formatMoneyInputArs(year?.limit),
         yearPercent: year?.percent ?? 80,
       });
       setAlertMessage('Topes mensual y anual guardados.');
@@ -920,11 +918,13 @@ export default function VentasPage() {
                   <label className="text-sm text-fg-muted">
                     Monto límite
                     <input
-                      className="mt-1 block w-40 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg"
-                      inputMode="decimal"
+                      className="mt-1 block w-48 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm tabular-nums text-fg"
+                      inputMode="numeric"
                       value={alertForm.monthLimit}
-                      onChange={(e) => setAlertForm((f) => ({ ...f, monthLimit: e.target.value }))}
-                      placeholder="5000000"
+                      onChange={(e) =>
+                        setAlertForm((f) => ({ ...f, monthLimit: formatMoneyInputArs(e.target.value) }))
+                      }
+                      placeholder="$ 0"
                     />
                   </label>
                   <label className="text-sm text-fg-muted">
@@ -959,11 +959,13 @@ export default function VentasPage() {
                   <label className="text-sm text-fg-muted">
                     Monto límite
                     <input
-                      className="mt-1 block w-40 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm text-fg"
-                      inputMode="decimal"
+                      className="mt-1 block w-48 rounded-lg border border-hair bg-surface px-2 py-1.5 font-mono text-sm tabular-nums text-fg"
+                      inputMode="numeric"
                       value={alertForm.yearLimit}
-                      onChange={(e) => setAlertForm((f) => ({ ...f, yearLimit: e.target.value }))}
-                      placeholder="50000000"
+                      onChange={(e) =>
+                        setAlertForm((f) => ({ ...f, yearLimit: formatMoneyInputArs(e.target.value) }))
+                      }
+                      placeholder="$ 0"
                     />
                   </label>
                   <label className="text-sm text-fg-muted">
