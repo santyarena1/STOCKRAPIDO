@@ -333,8 +333,9 @@ export class PreciosClarosService {
   }
 
   /**
-   * Asocia EAN de Precios Claros al producto sin pisar barcode;
-   * completa solo campos vacíos.
+   * Asocia EAN de Precios Claros al producto.
+   * Por defecto pone el EAN oficial como barcode principal y guarda el código
+   * interno/importado en allCodes (sigue encontrándose en POS/búsqueda).
    */
   async applyToProduct(
     businessId: string,
@@ -345,6 +346,8 @@ export class PreciosClarosService {
       brand?: string | null;
       presentation?: string | null;
       fillEmptyOnly?: boolean;
+      /** true (default): barcode = EAN oficial; el código viejo queda en allCodes. */
+      setAsPrimary?: boolean;
     },
   ) {
     const ean = String(body.ean ?? '').replace(/\D/g, '');
@@ -364,16 +367,19 @@ export class PreciosClarosService {
     if (!product) throw new NotFoundException('Producto no encontrado');
 
     const fillEmptyOnly = body.fillEmptyOnly !== false;
+    const setAsPrimary = body.setAsPrimary !== false;
+    const previousBarcode = product.barcode?.trim() || null;
     const codes = new Set((product.allCodes ?? '').split(/\s+/).filter(Boolean));
-    if (product.barcode) codes.add(product.barcode);
+    if (previousBarcode) codes.add(previousBarcode);
     codes.add(ean);
 
     const data: Record<string, unknown> = {
       allCodes: [...codes].join(' '),
     };
 
-    // Nunca reemplazar el barcode principal si ya hay uno distinto.
-    if (!product.barcode) {
+    if (setAsPrimary) {
+      data.barcode = ean;
+    } else if (!previousBarcode) {
       data.barcode = ean;
     }
 
@@ -385,7 +391,7 @@ export class PreciosClarosService {
       data.presentation = presentation;
     }
 
-    // Nombre: solo si está vacío o es muy genérico (opcional / fillEmpty)
+    // Nombre: solo si está vacío (fillEmpty)
     const incomingName = body.name?.trim();
     if (incomingName && (!fillEmptyOnly || !product.name?.trim())) {
       data.name = incomingName;
@@ -404,12 +410,18 @@ export class PreciosClarosService {
       },
     });
 
+    const promoted =
+      setAsPrimary && Boolean(previousBarcode) && previousBarcode !== ean;
+
     return {
       ok: true,
       product: updated,
       eanAdded: ean,
-      barcodeUnchanged: Boolean(product.barcode) && product.barcode !== ean,
-      coexist: Boolean(product.barcode) && product.barcode !== ean,
+      previousBarcode,
+      setAsPrimary,
+      barcodePromoted: promoted,
+      barcodeUnchanged: !setAsPrimary && Boolean(previousBarcode) && previousBarcode !== ean,
+      coexist: Boolean(previousBarcode) && previousBarcode !== ean,
     };
   }
 
@@ -578,7 +590,7 @@ export class PreciosClarosService {
     const useLive = opts.useLive !== false;
     const where: Record<string, unknown> = { businessId, isActive: true };
     if (opts.productIds?.length) where.id = { in: opts.productIds.slice(0, 80) };
-    else if (opts.onlyWithoutBarcode !== false) {
+    else if (opts.onlyWithoutBarcode === true) {
       where.OR = [{ barcode: null }, { barcode: '' }];
     }
     const totalMatching = await this.prisma.product.count({ where });
@@ -757,15 +769,19 @@ export class PreciosClarosService {
       brand?: string | null;
       presentation?: string | null;
     }>,
+    opts?: { setAsPrimary?: boolean },
   ) {
     const list = (items || []).slice(0, 80);
     if (!list.length) throw new BadRequestException('No hay ítems para aplicar.');
+    const setAsPrimary = opts?.setAsPrimary !== false;
     const results: Array<{
       productId: string;
       ok: boolean;
       error?: string;
       eanAdded?: string;
       coexist?: boolean;
+      barcodePromoted?: boolean;
+      previousBarcode?: string | null;
     }> = [];
     for (const item of list) {
       try {
@@ -775,12 +791,15 @@ export class PreciosClarosService {
           brand: item.brand,
           presentation: item.presentation,
           fillEmptyOnly: true,
+          setAsPrimary,
         });
         results.push({
           productId: item.productId,
           ok: true,
           eanAdded: applied.eanAdded,
           coexist: applied.coexist,
+          barcodePromoted: applied.barcodePromoted,
+          previousBarcode: applied.previousBarcode,
         });
       } catch (err) {
         results.push({
@@ -793,6 +812,7 @@ export class PreciosClarosService {
     return {
       applied: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
+      setAsPrimary,
       results,
     };
   }

@@ -223,6 +223,8 @@ export default function EditarProductoPage() {
         ok: boolean;
         eanAdded: string;
         coexist?: boolean;
+        barcodePromoted?: boolean;
+        previousBarcode?: string | null;
         product: Product;
       }>(`/precios-claros/apply/${id}`, {
         method: 'POST',
@@ -232,6 +234,7 @@ export default function EditarProductoPage() {
           brand: hit.brand,
           presentation: hit.presentation,
           fillEmptyOnly: true,
+          setAsPrimary: true,
         }),
       });
       setProduct((p) => (p ? { ...p, ...res.product } : res.product));
@@ -246,9 +249,11 @@ export default function EditarProductoPage() {
         rows.map((r) => (r.ean === hit.ean ? { ...r, alreadyLinked: true } : r)),
       );
       setPcMsg(
-        res.coexist
-          ? `EAN ${res.eanAdded} asociado. El código actual se mantiene; ambos sirven para buscar.`
-          : `EAN ${res.eanAdded} guardado.`,
+        res.barcodePromoted
+          ? `EAN ${res.eanAdded} quedó como código principal. El anterior (${res.previousBarcode}) sigue en códigos alternativos.`
+          : res.coexist
+            ? `EAN ${res.eanAdded} asociado. Ambos códigos sirven para buscar.`
+            : `EAN ${res.eanAdded} guardado.`,
       );
     } catch (err) {
       setPcMsg(err instanceof Error ? err.message : 'No se pudo aplicar');

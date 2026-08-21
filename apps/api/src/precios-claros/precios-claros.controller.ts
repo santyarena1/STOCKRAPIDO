@@ -69,6 +69,7 @@ export class PreciosClarosController {
       brand?: string | null;
       presentation?: string | null;
       fillEmptyOnly?: boolean;
+      setAsPrimary?: boolean;
     },
   ) {
     return this.preciosClaros.applyToProduct(user.businessId, productId, body);
@@ -103,8 +104,12 @@ export class PreciosClarosController {
         brand?: string | null;
         presentation?: string | null;
       }>;
+      /** true (default): EAN oficial como barcode; el interno queda en allCodes. */
+      setAsPrimary?: boolean;
     },
   ) {
-    return this.preciosClaros.bulkApply(user.businessId, body?.items || []);
+    return this.preciosClaros.bulkApply(user.businessId, body?.items || [], {
+      setAsPrimary: body?.setAsPrimary,
+    });
   }
 }

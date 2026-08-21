@@ -72,8 +72,10 @@ export default function PreciosClarosPage() {
   const [stats, setStats] = useState<CatalogStats>({ total: 0 });
   const [useAi, setUseAi] = useState(true);
   const [useLive, setUseLive] = useState(true);
-  const [onlyWithoutBarcode, setOnlyWithoutBarcode] = useState(true);
-  /** Cuántos productos querés analizar en total (se parte en lotes de BATCH_SIZE). */
+  /** Por defecto off: casi todos tienen código interno del proveedor; buscamos el EAN real. */
+  const [onlyWithoutBarcode, setOnlyWithoutBarcode] = useState(false);
+  /** EAN de Precios Claros como barcode principal; el interno queda en allCodes. */
+  const [setAsPrimary, setSetAsPrimary] = useState(true);
   const [totalWanted, setTotalWanted] = useState(50);
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -243,14 +245,22 @@ export default function PreciosClarosPage() {
       alert('Elegí al menos una coincidencia.');
       return;
     }
-    if (!confirm(`¿Aplicar EAN a ${items.length} producto(s)? El código actual se mantiene si ya había uno.`)) return;
+    if (!confirm(
+      setAsPrimary
+        ? `¿Poner el EAN oficial como código principal en ${items.length} producto(s)? El código interno/importado se conserva en códigos alternativos (sigue sirviendo para buscar).`
+        : `¿Agregar EAN a ${items.length} producto(s) sin cambiar el código principal?`,
+    )) return;
     setBusy('apply');
     try {
       const data = await api<{ applied: number; failed: number }>('/precios-claros/bulk/apply', {
         method: 'POST',
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, setAsPrimary }),
       });
-      setMsg(`Aplicados ${data.applied}${data.failed ? ` · fallaron ${data.failed}` : ''}.`);
+      setMsg(
+        setAsPrimary
+          ? `Aplicados ${data.applied}: EAN oficial como principal${data.failed ? ` · fallaron ${data.failed}` : ''}.`
+          : `Aplicados ${data.applied}${data.failed ? ` · fallaron ${data.failed}` : ''}.`,
+      );
       const doneIds = new Set(items.map((item) => item.productId));
       setRows((current) => current.filter((row) => !doneIds.has(row.product.id)));
       setSelected({});
@@ -281,7 +291,7 @@ export default function PreciosClarosPage() {
     <Container className="space-y-6">
       <PageHeader
         title="Precios Claros"
-        subtitle="Match masivo de nombres/EAN contra el catálogo SEPA. La IA ayuda cuando el nombre no pega. El EAN se suma sin pisar el código actual."
+        subtitle="Encontrá el EAN real del envase para productos importados que solo traen código interno. Al aplicar, el EAN oficial pasa a ser el código principal y el interno queda como alternativo."
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -320,14 +330,18 @@ export default function PreciosClarosPage() {
       <section className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5 space-y-4">
         <h2 className="text-base font-semibold text-fg">Buscar coincidencias masivas</h2>
         <p className="text-sm text-fg-muted">
-          Por cada producto: busca en el catálogo local; si no hay match bueno, consulta Precios Claros online;
-          si sigue flojo y hay IA, reordena o sugiere otras búsquedas. Después vos revisás y aplicás el EAN
-          (se agrega a códigos alternativos; no pisa el barcode si ya tenés uno).
+          Caso típico: el proveedor te dejó un código interno. Acá matcheamos por nombre contra Precios Claros
+          y, al aplicar, ponemos el EAN del producto real como barcode principal (el interno sigue en
+          códigos alternativos para el POS).
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex items-center gap-2 text-sm text-fg-muted">
             <input type="checkbox" checked={onlyWithoutBarcode} onChange={(e) => setOnlyWithoutBarcode(e.target.checked)} />
-            Solo sin código de barras
+            Solo sin código (omití los que ya tienen uno)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-fg-muted">
+            <input type="checkbox" checked={setAsPrimary} onChange={(e) => setSetAsPrimary(e.target.checked)} />
+            EAN oficial como código principal
           </label>
           <label className="flex items-center gap-2 text-sm text-fg-muted">
             <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
