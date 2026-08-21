@@ -584,24 +584,47 @@ export class PreciosClarosService {
     },
   ) {
     // Lotes chicos: cada producto puede pegarle a CloudFront + OpenAI.
-    const limit = Math.min(15, Math.max(1, opts.limit ?? 10));
+    const limit = Math.min(10, Math.max(1, opts.limit ?? 8));
     const offset = Math.max(0, opts.offset ?? 0);
     const minScore = opts.minScore ?? 0.45;
-    const useLive = opts.useLive !== false;
-    const where: Record<string, unknown> = { businessId, isActive: true };
-    if (opts.productIds?.length) where.id = { in: opts.productIds.slice(0, 80) };
-    else if (opts.onlyWithoutBarcode === true) {
-      where.OR = [{ barcode: null }, { barcode: '' }];
-    }
-    const totalMatching = await this.prisma.product.count({ where });
-    const products = await this.prisma.product.findMany({
-      where,
-      select: { id: true, name: true, brand: true, barcode: true, presentation: true, allCodes: true, imageUrl: true },
-      orderBy: { name: 'asc' },
-      skip: offset,
-      take: limit,
-    });
+    const useLive = opts.useLive === true; // off por defecto: evita timeout
+    const explicitIds = [...new Set((opts.productIds ?? []).filter(Boolean))].slice(0, 40);
 
+    let totalMatching = 0;
+    let products: Array<{
+      id: string;
+      name: string;
+      brand: string | null;
+      barcode: string | null;
+      presentation: string | null;
+      allCodes: string | null;
+      imageUrl: string | null;
+    }> = [];
+
+    if (explicitIds.length) {
+      // Cliente manda los IDs del lote; no usamos offset sobre “todos”.
+      const chunkIds = explicitIds.slice(0, limit);
+      const found = await this.prisma.product.findMany({
+        where: { businessId, isActive: true, id: { in: chunkIds } },
+        select: { id: true, name: true, brand: true, barcode: true, presentation: true, allCodes: true, imageUrl: true },
+      });
+      const byId = new Map(found.map((p) => [p.id, p]));
+      products = chunkIds.map((id) => byId.get(id)).filter(Boolean) as typeof products;
+      totalMatching = explicitIds.length;
+    } else {
+      const where: Record<string, unknown> = { businessId, isActive: true };
+      if (opts.onlyWithoutBarcode === true) {
+        where.OR = [{ barcode: null }, { barcode: '' }];
+      }
+      totalMatching = await this.prisma.product.count({ where });
+      products = await this.prisma.product.findMany({
+        where,
+        select: { id: true, name: true, brand: true, barcode: true, presentation: true, allCodes: true, imageUrl: true },
+        orderBy: { name: 'asc' },
+        skip: offset,
+        take: limit,
+      });
+    }
     const rows: Array<{
       product: {
         id: string;
@@ -700,7 +723,11 @@ export class PreciosClarosService {
       });
     }
 
-    const nextOffset = offset + products.length;
+    const nextOffset = explicitIds.length
+      ? null
+      : offset + products.length < totalMatching
+        ? offset + products.length
+        : null;
     return {
       rows,
       aiUsedCount,
@@ -708,9 +735,9 @@ export class PreciosClarosService {
       totalMatching,
       offset,
       limit,
-      nextOffset: nextOffset < totalMatching ? nextOffset : null,
+      nextOffset,
       tip:
-        'Procesá de a lotes chicos (10–15). Primero sembrá/barré el catálogo; con catálogo lleno va mucho más rápido y no se corta por timeout.',
+        'Seleccioná productos concretos y analizá de a lotes chicos. Primero sembrá/barré el catálogo; con catálogo lleno y sin “online”/IA va mucho más rápido.',
     };
   }
 
