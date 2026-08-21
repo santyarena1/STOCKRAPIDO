@@ -71,7 +71,21 @@ function normalizeName(s: string) {
     .trim();
 }
 
-/** Score 0..1 por tokens + contención. */
+/** Palabras que no sirven para match (muy comunes en góndola). */
+const STOP_TOKENS = new Set([
+  'de', 'la', 'el', 'los', 'las', 'y', 'con', 'en', 'un', 'una', 'unos', 'unas',
+  'por', 'para', 'del', 'al', 'x', 'gr', 'g', 'kg', 'ml', 'lt', 'l', 'cc', 'cm',
+  'pack', 'unidad', 'unidades', 'u', 'und', 'desc', 'descartable', 'retornable',
+  'botella', 'lata', 'caja', 'paq', 'paquete',
+]);
+
+function meaningfulTokens(s: string): string[] {
+  return normalizeName(s)
+    .split(' ')
+    .filter((t) => t.length > 1 && !STOP_TOKENS.has(t));
+}
+
+/** Score 0..1 por tokens + contención (ignora stopwords). */
 export function nameSimilarity(a: string, b: string): number {
   const na = normalizeName(a);
   const nb = normalizeName(b);
@@ -82,15 +96,36 @@ export function nameSimilarity(a: string, b: string): number {
     const longer = Math.max(na.length, nb.length);
     return 0.72 + (0.28 * shorter) / longer;
   }
-  const ta = new Set(na.split(' ').filter((t) => t.length > 1));
-  const tb = new Set(nb.split(' ').filter((t) => t.length > 1));
+  const ta = new Set(meaningfulTokens(a));
+  const tb = new Set(meaningfulTokens(b));
   if (!ta.size || !tb.size) return 0;
   let inter = 0;
   for (const t of ta) if (tb.has(t)) inter += 1;
-  const union = ta.size + tb.size - inter;
+  if (!inter) {
+    // Prefijos cortos: "coca" vs "cocacola"
+    for (const x of ta) {
+      for (const y of tb) {
+        if (x.length >= 3 && y.length >= 3 && (x.startsWith(y) || y.startsWith(x))) {
+          inter += 0.5;
+          break;
+        }
+      }
+    }
+  }
+  const union = ta.size + tb.size - Math.floor(inter);
   const jaccard = union ? inter / union : 0;
   const coverage = inter / ta.size;
-  return Math.min(1, jaccard * 0.55 + coverage * 0.45);
+  return Math.min(1, jaccard * 0.5 + coverage * 0.5);
+}
+
+/** Mejor score entre variantes (nombre solo / marca+nombre / etc.). */
+function bestNameScore(productLabel: string, hit: { name: string; brand?: string | null; presentation?: string | null }) {
+  const hitFull = [hit.brand, hit.name, hit.presentation].filter(Boolean).join(' ');
+  return Math.max(
+    nameSimilarity(productLabel, hit.name),
+    nameSimilarity(productLabel, hitFull),
+    hit.brand ? nameSimilarity(productLabel, `${hit.brand} ${hit.name}`) : 0,
+  );
 }
 
 export function normalizeProductName(s: string) {
@@ -128,6 +163,30 @@ export class PreciosClarosService {
     return params;
   }
 
+  /** Cache corta de sucursales por negocio (evita pedirlas en cada producto). */
+  private branchCache = new Map<string, { ids: string[]; at: number }>();
+
+  private async resolveBranchIds(businessId: string, cfg: PreciosClarosConfig): Promise<string[]> {
+    if (cfg.branchIds?.length) return cfg.branchIds.slice(0, 30);
+    const cached = this.branchCache.get(businessId);
+    if (cached && Date.now() - cached.at < 30 * 60_000) return cached.ids;
+    const lat = cfg.lat ?? -34.6037;
+    const lng = cfg.lng ?? -58.3816;
+    try {
+      const url = `${PRECIOS_CLAROS_BASE}/sucursales?lat=${lat}&lng=${lng}&limit=30`;
+      const data = (await this.fetchJson(url)) as { sucursales?: Array<{ id?: string }> };
+      const ids = (data.sucursales || [])
+        .map((s) => String(s.id || '').trim())
+        .filter(Boolean)
+        .slice(0, 30);
+      if (ids.length) this.branchCache.set(businessId, { ids, at: Date.now() });
+      return ids;
+    } catch (err) {
+      this.logger.warn(`sucursales falló: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    }
+  }
+
   private mapProducto(p: PcProducto, score?: number): PreciosClarosHit | null {
     const ean = String(p.id ?? '').replace(/\D/g, '');
     if (ean.length < 8) return null;
@@ -147,9 +206,11 @@ export class PreciosClarosService {
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'StockRapido/1.0 (precios-claros)',
+        'Accept-Language': 'es-AR,es;q=0.9',
+        'User-Agent':
+          'Mozilla/5.0 (compatible; StockRapido/1.0; +https://stockrapido.app)',
       },
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(14_000),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -185,20 +246,34 @@ export class PreciosClarosService {
     const cfg = await this.configFor(businessId);
     if (!cfg.enabled) return [];
 
-    const params = this.geoQuery(cfg);
-    params.set('string', term);
-    params.set('limit', String(Math.min(50, Math.max(5, limit))));
+    // Query corta: la API rankea mejor sin basura (descartable, lt, etc.).
+    const tokens = meaningfulTokens(term).slice(0, 5);
+    const shortQuery = tokens.join(' ') || term.slice(0, 60);
+
+    const branchIds = await this.resolveBranchIds(businessId, cfg);
+    const params = new URLSearchParams();
+    params.set('string', shortQuery);
+    params.set('limit', String(Math.min(50, Math.max(8, limit))));
+    if (branchIds.length) {
+      params.set('array_sucursales', branchIds.join(','));
+    } else {
+      params.set('lat', String(cfg.lat ?? -34.6037));
+      params.set('lng', String(cfg.lng ?? -58.3816));
+    }
     const url = `${PRECIOS_CLAROS_BASE}/productos?${params.toString()}`;
     try {
       const data = (await this.fetchJson(url)) as { productos?: PcProducto[] };
       const list = Array.isArray(data?.productos) ? data.productos : [];
-      const hits = list
-        .map((p) => this.mapProducto(p, nameSimilarity(term, String(p.nombre ?? ''))))
-        .filter((h): h is PreciosClarosHit => Boolean(h))
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-        .slice(0, limit);
-      await this.upsertCatalog(hits);
-      return hits;
+      const hits: PreciosClarosHit[] = [];
+      for (const p of list) {
+        const hit = this.mapProducto(p);
+        if (!hit) continue;
+        hits.push({ ...hit, score: bestNameScore(term, hit) });
+      }
+      hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      const top = hits.slice(0, limit);
+      await this.upsertCatalog(top);
+      return top;
     } catch (err) {
       this.logger.warn(`searchByName falló: ${err instanceof Error ? err.message : String(err)}`);
       return [];
@@ -468,29 +543,37 @@ export class PreciosClarosService {
     const term = q.trim();
     if (term.length < 2) return [];
     const norm = normalizeName(term);
-    const tokens = norm.split(' ').filter((t) => t.length > 1).slice(0, 6);
+    const tokens = meaningfulTokens(term).slice(0, 6);
+    if (!tokens.length && norm.length < 2) return [];
     const rows = await this.prisma.preciosClarosCatalog.findMany({
       where: {
         OR: [
-          { ean: { contains: term.replace(/\D/g, '') || term } },
+          { ean: { contains: term.replace(/\D/g, '') || '___' } },
           { nameNorm: { contains: norm } },
           ...tokens.map((t) => ({ nameNorm: { contains: t } })),
+          ...tokens.map((t) => ({ brand: { contains: t, mode: 'insensitive' as const } })),
         ],
       },
-      take: Math.min(80, Math.max(10, limit * 3)),
+      take: Math.min(120, Math.max(20, limit * 4)),
       orderBy: { syncedAt: 'desc' },
     });
     return rows
-      .map((r) => ({
-        ean: r.ean,
-        name: r.name,
-        brand: r.brand,
-        presentation: r.presentation,
-        priceMin: r.priceMin == null ? null : Number(r.priceMin),
-        priceMax: r.priceMax == null ? null : Number(r.priceMax),
-        score: nameSimilarity(term, `${r.brand ?? ''} ${r.name}`),
-        source: 'precios-claros' as const,
-      }))
+      .map((r) => {
+        const hit = {
+          ean: r.ean,
+          name: r.name,
+          brand: r.brand,
+          presentation: r.presentation,
+          priceMin: r.priceMin == null ? null : Number(r.priceMin),
+          priceMax: r.priceMax == null ? null : Number(r.priceMax),
+          source: 'precios-claros' as const,
+        };
+        return {
+          ...hit,
+          score: bestNameScore(term, hit),
+        };
+      })
+      .filter((h) => (h.score ?? 0) > 0.05)
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
       .slice(0, limit);
   }
@@ -588,8 +671,8 @@ export class PreciosClarosService {
     // Lotes chicos: cada producto puede pegarle a CloudFront + OpenAI.
     const limit = Math.min(10, Math.max(1, opts.limit ?? 8));
     const offset = Math.max(0, opts.offset ?? 0);
-    const minScore = opts.minScore ?? 0.45;
-    const useLive = opts.useLive === true; // off por defecto: evita timeout
+    const minScore = opts.minScore ?? 0.4;
+    const useLive = opts.useLive !== false; // online ON por defecto: sin catálogo no hay magia
     const explicitIds = [...new Set((opts.productIds ?? []).filter(Boolean))].slice(0, 40);
 
     let totalMatching = 0;
@@ -643,26 +726,31 @@ export class PreciosClarosService {
       queryUsed: string;
     }> = [];
     let aiUsedCount = 0;
-    const forceLiveFallback = products.length <= 5; // pocos ítems: si el catálogo no alcanza, probamos online
     for (const product of products) {
       const override = opts.queryByProductId?.[product.id]?.trim();
-      const query =
-        override ||
-        [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim() ||
-        product.name;
-      // 1) Catálogo local (rápido)
+      const productLabel = [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim() || product.name;
+      const query = override || productLabel;
+      // 1) Catálogo local
       let fromCatalog = await this.searchCatalog(query, 24);
       let fromLive: PreciosClarosHit[] = [];
       const catalogBest = fromCatalog[0]?.score ?? 0;
-      // 2) Live si lo pidieron, o fallback automático cuando no hay nada decente
-      const needLive =
-        useLive || (forceLiveFallback && catalogBest < 0.55);
+      // 2) Online si está on, o si el catálogo no da nada útil
+      const needLive = useLive || catalogBest < 0.5 || fromCatalog.length < 2;
       if (needLive) {
-        fromLive = await this.searchByName(businessId, query, 12);
+        fromLive = await this.searchByName(businessId, query, 15);
+        // Segunda pasada más corta si no vino nada (solo tokens fuertes)
+        if (!fromLive.length) {
+          const short = meaningfulTokens(query).slice(0, 3).join(' ');
+          if (short && short !== meaningfulTokens(query).slice(0, 5).join(' ')) {
+            fromLive = await this.searchByName(businessId, short, 15);
+          } else if (product.name.trim().length >= 2) {
+            fromLive = await this.searchByName(businessId, product.name, 15);
+          }
+        }
       }
       const merged = new Map<string, PreciosClarosHit>();
       for (const h of [...fromCatalog, ...fromLive]) {
-        const scored = { ...h, score: h.score ?? nameSimilarity(product.name, h.name) };
+        const scored = { ...h, score: bestNameScore(productLabel, h) };
         const prev = merged.get(h.ean);
         if (!prev || (scored.score ?? 0) > (prev.score ?? 0)) merged.set(h.ean, scored);
       }
@@ -674,8 +762,7 @@ export class PreciosClarosService {
       if (candidates.length) {
         if (topScore >= 0.72) status = 'matched';
         else if (topScore >= minScore) status = 'weak';
-        else if (topScore >= 0.18) status = 'closest'; // igual mostramos lo más parecido
-        else status = 'unmatched';
+        else status = 'closest'; // siempre mostramos lo más parecido si hay algo
       }
 
       // IA solo si no hay match fuerte (ahorra tiempo y tokens)
@@ -693,7 +780,7 @@ export class PreciosClarosService {
             const s = candidates[0]?.score ?? 0;
             if (s >= 0.72) status = 'matched';
             else if (s >= minScore) status = 'weak';
-            else if (s >= 0.18) status = 'closest';
+            else if (candidates.length) status = 'closest';
           }
         }
         if (status === 'unmatched' || (candidates[0]?.score ?? 0) < minScore) {
@@ -701,9 +788,9 @@ export class PreciosClarosService {
           if (alt?.length) {
             for (const q of alt.slice(0, 2)) {
               const extraLocal = await this.searchCatalog(q, 12);
-              const extraLive = needLive || useLive ? await this.searchByName(businessId, q, 10) : [];
+              const extraLive = needLive ? await this.searchByName(businessId, q, 10) : [];
               for (const h of [...extraLocal, ...extraLive]) {
-                const scored = { ...h, score: Math.max(h.score ?? 0, nameSimilarity(product.name, h.name)) };
+                const scored = { ...h, score: bestNameScore(productLabel, h) };
                 const prev = merged.get(h.ean);
                 if (!prev || (scored.score ?? 0) > (prev.score ?? 0)) merged.set(h.ean, scored);
               }
@@ -717,8 +804,8 @@ export class PreciosClarosService {
             const s = candidates[0]?.score ?? 0;
             if (s >= 0.72) status = 'matched';
             else if (s >= minScore) status = 'weak';
-            else if (candidates.length && s >= 0.18) status = 'closest';
-            else if (!candidates.length) status = 'unmatched';
+            else if (candidates.length) status = 'closest';
+            else status = 'unmatched';
           }
         }
       }
@@ -755,7 +842,7 @@ export class PreciosClarosService {
       limit,
       nextOffset,
       tip:
-        'Seleccioná productos concretos y analizá de a lotes chicos. Primero sembrá/barré el catálogo; con catálogo lleno y sin “online”/IA va mucho más rápido.',
+        'Online viene prendido: busca en Precios Claros de verdad. Sembrá el catálogo para que después sea más rápido.',
     };
   }
 

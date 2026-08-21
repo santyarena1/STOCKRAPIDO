@@ -106,7 +106,7 @@ function statusMeta(status: MatchStatus) {
 export default function PreciosClarosPage() {
   const [stats, setStats] = useState<CatalogStats>({ total: 0 });
   const [useAi, setUseAi] = useState(false);
-  const [useLive, setUseLive] = useState(false);
+  const [useLive, setUseLive] = useState(true);
   const [setAsPrimary, setSetAsPrimary] = useState(true);
 
   const [listQ, setListQ] = useState('');
@@ -441,7 +441,7 @@ export default function PreciosClarosPage() {
             <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-fg">{stats.total} EAN</p>
             <p className="mt-1 text-xs text-fg-faint">
               {stats.total < 50
-                ? 'Catálogo chico: sembrá o barré para mejores resultados.'
+                ? 'Catálogo chico: igual buscamos online. Sembrar/barrer mejora la velocidad.'
                 : stats.lastSyncedAt
                   ? `Última sync ${new Date(stats.lastSyncedAt).toLocaleString('es-AR')}`
                   : 'Listo para buscar'}
@@ -492,9 +492,9 @@ export default function PreciosClarosPage() {
             <input type="checkbox" checked={setAsPrimary} onChange={(e) => setSetAsPrimary(e.target.checked)} />
             EAN como código principal
           </label>
-          <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Más lento">
+          <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Consulta Precios Claros en vivo (recomendado)">
             <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
-            Online
+            Online (recomendado)
           </label>
           <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Más lento">
             <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
