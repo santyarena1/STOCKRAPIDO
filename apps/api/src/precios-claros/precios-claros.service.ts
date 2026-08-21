@@ -16,7 +16,7 @@ export type PreciosClarosHit = {
   priceMin?: number | null;
   priceMax?: number | null;
   score?: number;
-  source: 'precios-claros';
+  source: 'precios-claros' | 'dia';
 };
 
 export type PreciosClarosConfig = {
@@ -240,19 +240,14 @@ export class PreciosClarosService {
     }
   }
 
-  async searchByName(businessId: string, q: string, limit = 20): Promise<PreciosClarosHit[]> {
-    const term = q.trim();
-    if (term.length < 2) return [];
-    const cfg = await this.configFor(businessId);
-    if (!cfg.enabled) return [];
-
-    // Query corta: la API rankea mejor sin basura (descartable, lt, etc.).
-    const tokens = meaningfulTokens(term).slice(0, 5);
-    const shortQuery = tokens.join(' ') || term.slice(0, 60);
-
-    const branchIds = await this.resolveBranchIds(businessId, cfg);
+  private async fetchPcProductos(
+    query: string,
+    branchIds: string[],
+    cfg: PreciosClarosConfig,
+    limit: number,
+  ): Promise<PcProducto[]> {
     const params = new URLSearchParams();
-    params.set('string', shortQuery);
+    params.set('string', query);
     params.set('limit', String(Math.min(50, Math.max(8, limit))));
     if (branchIds.length) {
       params.set('array_sucursales', branchIds.join(','));
@@ -261,23 +256,131 @@ export class PreciosClarosService {
       params.set('lng', String(cfg.lng ?? -58.3816));
     }
     const url = `${PRECIOS_CLAROS_BASE}/productos?${params.toString()}`;
-    try {
-      const data = (await this.fetchJson(url)) as { productos?: PcProducto[] };
-      const list = Array.isArray(data?.productos) ? data.productos : [];
-      const hits: PreciosClarosHit[] = [];
-      for (const p of list) {
-        const hit = this.mapProducto(p);
-        if (!hit) continue;
-        hits.push({ ...hit, score: bestNameScore(term, hit) });
+    const data = (await this.fetchJson(url)) as { productos?: PcProducto[] };
+    return Array.isArray(data?.productos) ? data.productos : [];
+  }
+
+  /**
+   * Variantes de texto: la API de PC es estricta con multi-palabra
+   * ("mogul ositos" = 0, "mogul" = 34).
+   */
+  private buildSearchQueries(term: string): string[] {
+    const tokens = meaningfulTokens(term);
+    const out: string[] = [];
+    const push = (q: string) => {
+      const t = q.trim();
+      if (t.length >= 2 && !out.includes(t)) out.push(t);
+    };
+    if (tokens.length) {
+      push(tokens.slice(0, 3).join(' '));
+      push(tokens.slice(0, 2).join(' '));
+      for (const t of tokens.slice(0, 3)) push(t);
+    } else {
+      push(term.slice(0, 60));
+    }
+    return out.slice(0, 5);
+  }
+
+  async searchByName(businessId: string, q: string, limit = 20): Promise<PreciosClarosHit[]> {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const cfg = await this.configFor(businessId);
+    if (!cfg.enabled) return [];
+
+    const branchIds = await this.resolveBranchIds(businessId, cfg);
+    const queries = this.buildSearchQueries(term);
+    const mergedPc = new Map<string, PcProducto>();
+
+    for (const query of queries) {
+      try {
+        const list = await this.fetchPcProductos(query, branchIds, cfg, limit);
+        for (const p of list) {
+          const ean = String(p.id ?? '').replace(/\D/g, '');
+          if (ean.length >= 8 && !mergedPc.has(ean)) mergedPc.set(ean, p);
+        }
+        // Si con una query corta ya trajimos bastante, no hace falta seguir.
+        if (mergedPc.size >= limit && query.split(/\s+/).length === 1) break;
+      } catch (err) {
+        this.logger.warn(`PC query "${query}" falló: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    const hits: PreciosClarosHit[] = [];
+    for (const p of mergedPc.values()) {
+      const hit = this.mapProducto(p);
+      if (!hit) continue;
+      hits.push({ ...hit, score: bestNameScore(term, hit), source: 'precios-claros' });
+    }
+    hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+
+    // Fallback Día online si PC no dio nada útil.
+    if (hits.length < 3 || (hits[0]?.score ?? 0) < 0.35) {
+      const fromDia = await this.searchDia(term, limit);
+      for (const hit of fromDia) {
+        const prev = hits.find((h) => h.ean === hit.ean);
+        if (!prev) hits.push(hit);
+        else if ((hit.score ?? 0) > (prev.score ?? 0)) Object.assign(prev, hit);
       }
       hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-      const top = hits.slice(0, limit);
-      await this.upsertCatalog(top);
-      return top;
-    } catch (err) {
-      this.logger.warn(`searchByName falló: ${err instanceof Error ? err.message : String(err)}`);
-      return [];
     }
+
+    const top = hits.slice(0, limit);
+    await this.upsertCatalog(top);
+    return top;
+  }
+
+  /** Catálogo público VTEX de Dia Online (EAN en productReference / items[].ean). */
+  private async searchDia(q: string, limit = 15): Promise<PreciosClarosHit[]> {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const queries = this.buildSearchQueries(term).slice(0, 3);
+    const byEan = new Map<string, PreciosClarosHit>();
+
+    for (const query of queries) {
+      try {
+        const url = `https://diaonline.supermercadosdia.com.ar/api/catalog_system/pub/products/search?ft=${encodeURIComponent(query)}&_from=0&_to=${Math.min(19, limit + 5)}`;
+        const res = await fetch(url, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; StockRapido/1.0)',
+          },
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (!res.ok) continue;
+        const list = (await res.json()) as Array<{
+          productName?: string;
+          brand?: string;
+          productReference?: string;
+          items?: Array<{ ean?: string; name?: string; sellers?: Array<{ commertialOffer?: { Price?: number } }> }>;
+        }>;
+        if (!Array.isArray(list)) continue;
+        for (const p of list) {
+          const item = p.items?.[0];
+          const ean = String(item?.ean || p.productReference || '').replace(/\D/g, '');
+          if (ean.length < 8 || ean.length > 18) continue;
+          const name = String(p.productName || item?.name || '').trim();
+          if (!name) continue;
+          const price = item?.sellers?.[0]?.commertialOffer?.Price;
+          const hit: PreciosClarosHit = {
+            ean,
+            name,
+            brand: p.brand ? String(p.brand).trim() : null,
+            presentation: null,
+            priceMin: typeof price === 'number' ? price : null,
+            priceMax: typeof price === 'number' ? price : null,
+            score: bestNameScore(term, { name, brand: p.brand ?? null, presentation: null }),
+            source: 'dia',
+          };
+          const prev = byEan.get(ean);
+          if (!prev || (hit.score ?? 0) > (prev.score ?? 0)) byEan.set(ean, hit);
+        }
+        if (byEan.size >= limit) break;
+      } catch (err) {
+        this.logger.warn(`Día search falló: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return [...byEan.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, limit);
   }
 
   /**

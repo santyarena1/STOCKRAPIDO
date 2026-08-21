@@ -16,6 +16,7 @@ type Hit = {
   presentation?: string | null;
   priceMin?: number | null;
   score?: number;
+  source?: 'precios-claros' | 'dia';
 };
 
 type MatchStatus = 'matched' | 'weak' | 'closest' | 'unmatched';
@@ -692,6 +693,7 @@ export default function PreciosClarosPage() {
                                 {hit.presentation ? ` · ${hit.presentation}` : ''}
                                 {hit.score != null ? ` · ${Math.round(hit.score * 100)}%` : ''}
                                 {hit.priceMin != null ? ` · desde ${money(hit.priceMin)}` : ''}
+                                {hit.source === 'dia' ? ' · Día' : hit.source === 'precios-claros' ? ' · Precios Claros' : ''}
                               </span>
                             </span>
                           </label>
