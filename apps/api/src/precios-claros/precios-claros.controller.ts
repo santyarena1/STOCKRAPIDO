@@ -86,6 +86,7 @@ export class PreciosClarosController {
       minScore?: number;
       productIds?: string[];
       useLive?: boolean;
+      includePc?: boolean;
       offset?: number;
       queryByProductId?: Record<string, string>;
     },
