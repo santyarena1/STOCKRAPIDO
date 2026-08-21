@@ -721,42 +721,55 @@ export default function VentasPage() {
             const pendingCount = invoiceSummary?.pendingCount ?? 0;
             const activeCount = invoiceSummary?.activeCount ?? 0;
             const creditNotes = invoiceSummary?.creditNotes ?? 0;
-            // Barra / tope: usa el período configurado del aviso (mes, 30 días, etc.)
+            // Barra siempre contra el límite configurado (período del aviso).
             const limit =
-              invoiceAlert?.enabled && invoiceAlert.limit != null && invoiceAlert.limit > 0
-                ? invoiceAlert.limit
-                : null;
-            const topeFacturado = invoiceAlert?.invoicedNet ?? totalFacturado;
-            const towardLimitPct =
-              limit != null ? Math.min(100, Math.max(0, (topeFacturado / limit) * 100)) : null;
-            const coverageBase = totalFacturado + quedaPorFacturar;
-            const coveragePct =
-              coverageBase > 0 ? Math.min(100, Math.max(0, (totalFacturado / coverageBase) * 100)) : 0;
-            const barPct = towardLimitPct ?? coveragePct;
-            const barWarn =
-              towardLimitPct != null &&
-              invoiceAlert != null &&
-              towardLimitPct >= (invoiceAlert.percent ?? 80);
+              invoiceAlert?.limit != null && invoiceAlert.limit > 0 ? invoiceAlert.limit : null;
+            const warnFrom = invoiceAlert?.percent ?? 80;
+            const topeFacturado = invoiceAlert?.invoicedNet ?? 0;
+            const barPct =
+              limit != null ? Math.min(100, Math.max(0, (topeFacturado / limit) * 100)) : 0;
+            const barWarn = limit != null && barPct >= warnFrom && barPct < 100;
+            const barOver = limit != null && barPct >= 100;
+            const barColor = barOver
+              ? 'bg-crit'
+              : barWarn
+                ? 'bg-amber-500'
+                : 'bg-emerald-600';
             const filterLabel =
               filters.from || filters.to
-                ? `Filtro: ${filters.from || '…'} → ${filters.to || '…'}`
-                : 'Sin filtro de fechas (todas las ventas)';
+                ? `Filtro de lista: ${filters.from || '…'} → ${filters.to || '…'}`
+                : 'Sin filtro de fechas en la lista';
+            const topeLabel = invoiceAlert
+              ? `Tope: ${INVOICE_ALERT_PERIOD_LABELS[invoiceAlert.period]}${
+                  invoiceAlert.periodFrom ? ` · ${invoiceAlert.periodFrom}` : ''
+                }${invoiceAlert.periodTo ? ` → ${invoiceAlert.periodTo}` : ''} · aviso desde ${warnFrom}%`
+              : 'Configurá un monto límite para ver el avance';
 
             return (
               <div
                 className={`rounded-xl border px-4 py-4 ${
-                  barWarn ? 'border-amber-600/40 bg-amber-950/25' : 'border-hair-soft bg-surface'
+                  barOver
+                    ? 'border-crit/40 bg-[var(--crit-soft)]'
+                    : barWarn
+                      ? 'border-amber-600/40 bg-amber-950/25'
+                      : 'border-hair-soft bg-surface'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold text-fg">Progreso de facturación</h2>
                     <p className="text-sm text-fg-faint mt-0.5">{filterLabel}</p>
+                    <p className="text-xs text-fg-faint mt-0.5">{topeLabel}</p>
                   </div>
-                  <p className="font-mono text-sm tabular-nums text-fg-muted">
-                    {barPct.toFixed(0)}%
-                    {limit != null ? ' del tope' : ' facturado vs pendiente'}
-                  </p>
+                  {limit != null && (
+                    <p
+                      className={`font-mono text-sm tabular-nums ${
+                        barOver ? 'text-crit' : barWarn ? 'text-amber-300' : 'text-fg-muted'
+                      }`}
+                    >
+                      {barPct.toFixed(0)}% del límite
+                    </p>
+                  )}
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -778,33 +791,44 @@ export default function VentasPage() {
                     <p className="text-xs text-fg-faint mt-1">
                       {pendingCount} venta(s) pendiente(s)
                       {limit != null
-                        ? ` · tope restante ${formatMoneyArs(Math.max(0, limit - topeFacturado))}`
+                        ? ` · margen del tope ${formatMoneyArs(Math.max(0, limit - topeFacturado))}`
                         : ''}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <div className="mb-1.5 flex justify-between text-xs text-fg-faint">
-                    <span>
-                      {limit != null
-                        ? `Avance del tope (${INVOICE_ALERT_PERIOD_LABELS[invoiceAlert!.period]})`
-                        : 'Avance'}
-                    </span>
-                    <span className="font-mono tabular-nums">
-                      {limit != null
-                        ? `${formatMoneyArs(topeFacturado)} / ${formatMoneyArs(limit)}`
-                        : `${formatMoneyArs(totalFacturado)} / ${formatMoneyArs(coverageBase)}`}
-                    </span>
-                  </div>
-                  <div className="h-3 rounded-full bg-raised overflow-hidden border border-hair-soft">
-                    <div
-                      className={`h-full rounded-full transition-[width] ${
-                        barWarn ? 'bg-amber-500' : 'bg-emerald-600'
-                      }`}
-                      style={{ width: `${barPct}%` }}
-                    />
-                  </div>
+                  {limit != null ? (
+                    <>
+                      <div className="mb-1.5 flex justify-between text-xs text-fg-faint">
+                        <span>
+                          Contra el límite
+                          {barWarn || barOver
+                            ? ` · ${barOver ? 'límite alcanzado' : `umbral de aviso (≥${warnFrom}%)`}`
+                            : ''}
+                        </span>
+                        <span className="font-mono tabular-nums">
+                          {formatMoneyArs(topeFacturado)} / {formatMoneyArs(limit)}
+                        </span>
+                      </div>
+                      <div className="relative h-3 rounded-full bg-raised overflow-hidden border border-hair-soft">
+                        {/* Marca del umbral de aviso */}
+                        <div
+                          className="absolute top-0 bottom-0 w-px bg-amber-400/80 z-10"
+                          style={{ left: `${Math.min(100, Math.max(0, warnFrom))}%` }}
+                          title={`Aviso desde ${warnFrom}%`}
+                        />
+                        <div
+                          className={`h-full rounded-full transition-[width] ${barColor}`}
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-fg-faint">
+                      Definí un monto límite abajo (o en Config → Fiscal) para ver la barra de progreso.
+                    </p>
+                  )}
                 </div>
 
                 {invoiceAlert?.shouldAlert && invoiceAlert.message && (
