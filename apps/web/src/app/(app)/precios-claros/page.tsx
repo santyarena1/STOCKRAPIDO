@@ -331,9 +331,9 @@ export default function PreciosClarosPage() {
         { method: 'POST', body: JSON.stringify({ limit: 40 }) },
       );
       setStats({ total: data.total, lastSyncedAt: data.lastSyncedAt });
-      setMsg(`Catálogo sembrado: ${data.total} EAN. Ahora las búsquedas van más rápido.`);
+      setMsg(`Listo: cargamos ${data.total} códigos oficiales a partir de tus productos. Las próximas búsquedas van más rápido.`);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'No se pudo sembrar el catálogo.');
+      setMsg(err instanceof Error ? err.message : 'No se pudo armar el catálogo inicial.');
     } finally {
       setBusy('');
     }
@@ -356,13 +356,13 @@ export default function PreciosClarosPage() {
         cursor = data.nextCursor;
         setMsg(
           data.done
-            ? `Catálogo completo · ${data.total} EAN.`
-            : `Barrido en curso · ${data.total} EAN. Tocá de nuevo para seguir.`,
+            ? `Catálogo completo · ${data.total} códigos oficiales.`
+            : `Descarga en curso · ${data.total} códigos. Tocá de nuevo para seguir.`,
         );
         if (data.done || !data.nextCursor) break;
       }
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Falló el barrido del catálogo.');
+      setMsg(err instanceof Error ? err.message : 'Falló la descarga del catálogo.');
     } finally {
       setBusy('');
     }
@@ -434,28 +434,37 @@ export default function PreciosClarosPage() {
       />
 
       {/* Catálogo */}
-      <section className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
+      <section className="rounded-xl border border-hair-soft bg-surface p-4 sm:p-5 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-fg-faint">Base local</p>
-            <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-fg">{stats.total} EAN</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-fg-faint">Códigos oficiales guardados</p>
+            <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-fg">{stats.total}</p>
+            <p className="mt-2 max-w-xl text-sm text-fg-muted">
+              Acá guardamos EAN de Precios Claros para no consultar internet en cada búsqueda.
+              Si está vacío igual funciona (busca online), pero más lento.
+            </p>
             <p className="mt-1 text-xs text-fg-faint">
               {stats.total < 50
-                ? 'Catálogo chico: igual buscamos online. Sembrar/barrer mejora la velocidad.'
+                ? 'Todavía hay pocos. Conviene armar el catálogo una vez.'
                 : stats.lastSyncedAt
-                  ? `Última sync ${new Date(stats.lastSyncedAt).toLocaleString('es-AR')}`
+                  ? `Última actualización ${new Date(stats.lastSyncedAt).toLocaleString('es-AR')}`
                   : 'Listo para buscar'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:items-end">
             <button type="button" disabled={!!busy} onClick={() => void seedCatalog()} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg hover:bg-raised disabled:opacity-50">
-              {busy === 'seed' ? 'Sembrando…' : 'Sembrar'}
+              {busy === 'seed' ? 'Cargando…' : '1. Armar con mis productos'}
             </button>
             <button type="button" disabled={!!busy} onClick={() => void syncChunk()} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg hover:bg-raised disabled:opacity-50">
-              {busy === 'sync' ? 'Barriendo…' : 'Barrido categorías'}
+              {busy === 'sync' ? 'Descargando…' : '2. Descargar más del listado oficial'}
             </button>
           </div>
         </div>
+        <p className="text-xs text-fg-faint">
+          <span className="font-medium text-fg-muted">Armar con mis productos:</span> busca en Precios Claros lo que ya tenés cargado y guarda esos EAN.
+          {' '}
+          <span className="font-medium text-fg-muted">Descargar más:</span> trae de a poco el listado oficial por rubros (tocá varias veces).
+        </p>
       </section>
 
       {/* Paso 1 */}
