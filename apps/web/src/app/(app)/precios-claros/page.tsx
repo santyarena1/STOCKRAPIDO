@@ -60,7 +60,7 @@ type SyncChunkResult = {
   progress?: { catIndex: number; totalCats: number };
 };
 
-const BATCH_SIZE = 6;
+const BATCH_SIZE = 3;
 const LIST_PAGE_SIZE = 40;
 
 function money(n: number) {
@@ -69,8 +69,8 @@ function money(n: number) {
 
 function previewErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : 'No se pudo buscar coincidencias.';
-  if (/failed to fetch|networkerror|load failed|aborted|timeout/i.test(raw)) {
-    return 'Se cortó la conexión. Probá de a pocos productos, o sin IA.';
+  if (/failed to fetch|networkerror|load failed|aborted|timeout|504|502|503/i.test(raw)) {
+    return 'Se cortó la conexión. Seguí con menos productos a la vez, o desactivá IA.';
   }
   return raw;
 }
@@ -231,7 +231,13 @@ export default function PreciosClarosPage() {
 
   const analyzeIds = async (
     ids: string[],
-    opts?: { useLive?: boolean; useAi?: boolean; queryByProductId?: Record<string, string>; replace?: boolean },
+    opts?: {
+      useLive?: boolean;
+      useAi?: boolean;
+      includePc?: boolean;
+      queryByProductId?: Record<string, string>;
+      replace?: boolean;
+    },
   ) => {
     if (!ids.length) {
       setMsg('Seleccioná al menos un producto.');
@@ -249,44 +255,81 @@ export default function PreciosClarosPage() {
     }
     const live = opts?.useLive ?? useLive;
     const ai = opts?.useAi ?? useAi;
-    const batchSize = ai || live || ids.length <= 3 ? Math.min(4, BATCH_SIZE) : BATCH_SIZE;
+    // Lotes chicos: online/IA se cortan si el request dura demasiado.
+    const batchSize = ai ? 1 : live ? 2 : BATCH_SIZE;
+    // PC solo en rebuscar de 1 producto (más lento); en lote masivo solo Día.
+    const includePc = opts?.includePc ?? ids.length === 1;
     const allRows: PreviewRow[] = [];
     let aiUsedCount = 0;
+    let failedChunks = 0;
+
+    const previewChunk = async (chunk: string[]) => {
+      const body: Record<string, unknown> = {
+        productIds: chunk,
+        limit: chunk.length,
+        useAi: ai,
+        useLive: live,
+        includePc: includePc && chunk.length === 1,
+        minScore: 0.45,
+      };
+      if (opts?.queryByProductId) {
+        const subset: Record<string, string> = {};
+        for (const id of chunk) {
+          if (opts.queryByProductId[id]) subset[id] = opts.queryByProductId[id];
+        }
+        if (Object.keys(subset).length) body.queryByProductId = subset;
+      }
+      return api<PreviewBatch>('/precios-claros/bulk/preview', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    };
 
     try {
       for (let i = 0; i < ids.length; i += batchSize) {
         const chunk = ids.slice(i, i + batchSize);
         setProgress(`Buscando ${i + 1}–${Math.min(i + chunk.length, ids.length)} de ${ids.length}…`);
-        const body: Record<string, unknown> = {
-          productIds: chunk,
-          limit: chunk.length,
-          useAi: ai,
-          useLive: live,
-          minScore: 0.45,
-        };
-        if (opts?.queryByProductId) {
-          const subset: Record<string, string> = {};
-          for (const id of chunk) {
-            if (opts.queryByProductId[id]) subset[id] = opts.queryByProductId[id];
+        try {
+          const data = await previewChunk(chunk);
+          setStats(data.catalog);
+          aiUsedCount += data.aiUsedCount || 0;
+          allRows.push(...(data.rows || []));
+          mergePreviewRows(data.rows || [], chunk);
+        } catch {
+          // Si el lote se corta, reintentamos de a uno para no perder todo.
+          if (chunk.length === 1) {
+            failedChunks += 1;
+            continue;
           }
-          if (Object.keys(subset).length) body.queryByProductId = subset;
+          for (let j = 0; j < chunk.length; j++) {
+            const one = [chunk[j]];
+            setProgress(`Reintento ${i + j + 1} de ${ids.length} (de a uno)…`);
+            try {
+              const data = await previewChunk(one);
+              setStats(data.catalog);
+              aiUsedCount += data.aiUsedCount || 0;
+              allRows.push(...(data.rows || []));
+              mergePreviewRows(data.rows || [], one);
+            } catch {
+              failedChunks += 1;
+            }
+          }
         }
-        const data = await api<PreviewBatch>('/precios-claros/bulk/preview', {
-          method: 'POST',
-          body: JSON.stringify(body),
-        });
-        setStats(data.catalog);
-        aiUsedCount += data.aiUsedCount || 0;
-        allRows.push(...(data.rows || []));
-        mergePreviewRows(data.rows || [], chunk);
       }
       setProgress('');
+      if (!allRows.length && failedChunks) {
+        setMsg(previewErrorMessage(new Error('failed to fetch')));
+        return;
+      }
       const matched = allRows.filter((r) => r.status === 'matched').length;
       const weak = allRows.filter((r) => r.status === 'weak').length;
       const closest = allRows.filter((r) => r.status === 'closest').length;
       const none = allRows.filter((r) => r.status === 'unmatched').length;
+      const failNote = failedChunks
+        ? ` · ${failedChunks} sin respuesta (reintentá esos)`
+        : '';
       setMsg(
-        `Listo: ${allRows.length} producto${allRows.length === 1 ? '' : 's'} · ${matched} buenas · ${weak} a revisar · ${closest} solo parecidas · ${none} sin nada${aiUsedCount ? ` · IA ${aiUsedCount}` : ''}.`,
+        `Listo: ${allRows.length} producto${allRows.length === 1 ? '' : 's'} · ${matched} buenas · ${weak} a revisar · ${closest} solo parecidas · ${none} sin nada${aiUsedCount ? ` · IA ${aiUsedCount}` : ''}${failNote}.`,
       );
     } catch (err) {
       setProgress('');
@@ -314,6 +357,7 @@ export default function PreciosClarosPage() {
       await analyzeIds([row.product.id], {
         useLive: withOnline || useLive,
         useAi,
+        includePc: true,
         queryByProductId: { [row.product.id]: q },
         replace: false,
       });
@@ -502,11 +546,11 @@ export default function PreciosClarosPage() {
             <input type="checkbox" checked={setAsPrimary} onChange={(e) => setSetAsPrimary(e.target.checked)} />
             EAN como código principal
           </label>
-          <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Consulta Precios Claros en vivo (recomendado)">
+          <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Consulta Día Online (rápido). En rebuscar de 1 producto también puede probar Precios Claros.">
             <input type="checkbox" checked={useLive} onChange={(e) => setUseLive(e.target.checked)} />
-            Online (recomendado)
+            Online (Día)
           </label>
-          <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Más lento">
+          <label className="flex items-center gap-2 pb-2 text-sm text-fg-muted" title="Más lento; puede cortar la conexión en lotes grandes">
             <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
             IA
           </label>

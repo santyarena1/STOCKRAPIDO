@@ -21,7 +21,7 @@ export class PreciosClarosController {
       return { items, source: 'precios-claros', mode: 'ean' as const };
     }
     if (q?.trim()) {
-      const items = await this.preciosClaros.searchByName(user.businessId, q);
+      const items = await this.preciosClaros.searchByName(user.businessId, q, 20, { includePc: true });
       return { items, source: 'precios-claros', mode: 'name' as const };
     }
     return { items: [], source: 'precios-claros', mode: 'empty' as const };
@@ -86,6 +86,7 @@ export class PreciosClarosController {
       minScore?: number;
       productIds?: string[];
       useLive?: boolean;
+      includePc?: boolean;
       offset?: number;
       queryByProductId?: Record<string, string>;
     },

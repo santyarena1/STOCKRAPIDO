@@ -202,7 +202,7 @@ export class PreciosClarosService {
     };
   }
 
-  private async fetchJson(url: string): Promise<unknown> {
+  private async fetchJson(url: string, timeoutMs = 5_000): Promise<unknown> {
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json',
@@ -210,7 +210,8 @@ export class PreciosClarosService {
         'User-Agent':
           'Mozilla/5.0 (compatible; StockRapido/1.0; +https://stockrapido.app)',
       },
-      signal: AbortSignal.timeout(14_000),
+      // PC suele colgarse: timeout corto para no tumbar lotes serverless.
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -288,23 +289,27 @@ export class PreciosClarosService {
     return out.slice(0, 5);
   }
 
-  async searchByName(businessId: string, q: string, limit = 20): Promise<PreciosClarosHit[]> {
+  async searchByName(
+    businessId: string,
+    q: string,
+    limit = 20,
+    opts?: { includePc?: boolean },
+  ): Promise<PreciosClarosHit[]> {
     const term = q.trim();
     if (term.length < 2) return [];
     const cfg = await this.configFor(businessId);
     if (!cfg.enabled) return [];
 
     // Día (VTEX) primero: suele responder en <1s con EAN real.
-    // Precios Claros queda como complemento (más cobertura, pero lento/inestable).
     const hits: PreciosClarosHit[] = await this.searchDia(term, limit);
     hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
-    const diaGoodEnough =
-      hits.length >= 3 && (hits[0]?.score ?? 0) >= 0.35;
-
-    if (!diaGoodEnough) {
+    // PC solo si Día no trajo nada y el caller lo pidió (lotes masivos lo apagan).
+    const includePc = opts?.includePc === true && hits.length === 0;
+    if (includePc) {
       const branchIds = await this.resolveBranchIds(businessId, cfg);
-      const queries = this.buildSearchQueries(term);
+      // Una sola query corta: PC es lento/inestable y tumba serverless.
+      const queries = this.buildSearchQueries(term).slice(0, 1);
       const mergedPc = new Map<string, PcProducto>();
 
       for (const query of queries) {
@@ -314,7 +319,6 @@ export class PreciosClarosService {
             const ean = String(p.id ?? '').replace(/\D/g, '');
             if (ean.length >= 8 && !mergedPc.has(ean)) mergedPc.set(ean, p);
           }
-          if (mergedPc.size >= limit && query.split(/\s+/).length === 1) break;
         } catch (err) {
           this.logger.warn(`PC query "${query}" falló: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -323,10 +327,7 @@ export class PreciosClarosService {
       for (const p of mergedPc.values()) {
         const hit = this.mapProducto(p);
         if (!hit) continue;
-        const scored = { ...hit, score: bestNameScore(term, hit), source: 'precios-claros' as const };
-        const prev = hits.find((h) => h.ean === scored.ean);
-        if (!prev) hits.push(scored);
-        else if ((scored.score ?? 0) > (prev.score ?? 0)) Object.assign(prev, scored);
+        hits.push({ ...hit, score: bestNameScore(term, hit), source: 'precios-claros' });
       }
       hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
     }
@@ -456,7 +457,7 @@ export class PreciosClarosService {
         : [];
 
     const query = [product.brand, product.name, product.presentation].filter(Boolean).join(' ').trim();
-    const byName = await this.searchByName(businessId, query || product.name, 25);
+    const byName = await this.searchByName(businessId, query || product.name, 25, { includePc: true });
 
     const merged = new Map<string, PreciosClarosHit>();
     for (const h of [...byEan, ...byName]) {
@@ -813,18 +814,22 @@ export class PreciosClarosService {
       useAi?: boolean;
       minScore?: number;
       productIds?: string[];
-      /** Si false, no llama a CloudFront live (solo catálogo local). Más rápido. */
+      /** Si false, no llama a CloudFront/Día live (solo catálogo local). Más rápido. */
       useLive?: boolean;
+      /** Si true, complementa con Precios Claros cuando Día no trae nada (más lento). */
+      includePc?: boolean;
       offset?: number;
       /** Texto de búsqueda custom por producto (re-buscar). */
       queryByProductId?: Record<string, string>;
     },
   ) {
-    // Lotes chicos: cada producto puede pegarle a CloudFront + OpenAI.
-    const limit = Math.min(10, Math.max(1, opts.limit ?? 8));
+    // Lotes chicos: serverless + fetch externos. Max 5 por request.
+    const limit = Math.min(5, Math.max(1, opts.limit ?? 3));
     const offset = Math.max(0, opts.offset ?? 0);
     const minScore = opts.minScore ?? 0.4;
     const useLive = opts.useLive !== false; // online ON por defecto: sin catálogo no hay magia
+    // En lote masivo no tocamos PC (timeouts); solo en rebuscar puntual si lo piden.
+    const includePc = opts.includePc === true;
     const explicitIds = [...new Set((opts.productIds ?? []).filter(Boolean))].slice(0, 40);
 
     let totalMatching = 0;
@@ -889,14 +894,14 @@ export class PreciosClarosService {
       // 2) Online si está on, o si el catálogo no da nada útil
       const needLive = useLive || catalogBest < 0.5 || fromCatalog.length < 2;
       if (needLive) {
-        fromLive = await this.searchByName(businessId, query, 15);
+        fromLive = await this.searchByName(businessId, query, 12, { includePc });
         // Segunda pasada más corta si no vino nada (solo tokens fuertes)
         if (!fromLive.length) {
           const short = meaningfulTokens(query).slice(0, 3).join(' ');
           if (short && short !== meaningfulTokens(query).slice(0, 5).join(' ')) {
-            fromLive = await this.searchByName(businessId, short, 15);
+            fromLive = await this.searchByName(businessId, short, 12, { includePc });
           } else if (product.name.trim().length >= 2) {
-            fromLive = await this.searchByName(businessId, product.name, 15);
+            fromLive = await this.searchByName(businessId, product.name, 12, { includePc });
           }
         }
       }
@@ -940,7 +945,9 @@ export class PreciosClarosService {
           if (alt?.length) {
             for (const q of alt.slice(0, 2)) {
               const extraLocal = await this.searchCatalog(q, 12);
-              const extraLive = needLive ? await this.searchByName(businessId, q, 10) : [];
+              const extraLive = needLive
+                ? await this.searchByName(businessId, q, 10, { includePc })
+                : [];
               for (const h of [...extraLocal, ...extraLive]) {
                 const scored = { ...h, score: bestNameScore(productLabel, h) };
                 const prev = merged.get(h.ean);
