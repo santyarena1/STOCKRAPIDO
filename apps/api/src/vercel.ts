@@ -7,7 +7,7 @@ import { AppModule } from './app.module';
 function healthPayload() {
   return {
     status: 'ok',
-    v: 4,
+    v: 5,
     sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || 'dev',
   };
 }

@@ -86,9 +86,11 @@ export default function ClientesPage() {
   const [detailPayments, setDetailPayments] = useState<Payment[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<'ventas' | 'pagos' | 'todo'>('ventas');
   const [busyAction, setBusyAction] = useState('');
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareMsg, setShareMsg] = useState('');
+  const [shareErr, setShareErr] = useState('');
   const [editSale, setEditSale] = useState<Sale | null>(null);
   const [editDiscount, setEditDiscount] = useState('');
 
@@ -137,8 +139,10 @@ export default function ClientesPage() {
   const openDetail = async (customer: Customer) => {
     setDetailCustomer(customer);
     setExpandedSaleId(null);
+    setDetailTab('ventas');
     setShareUrl(null);
     setShareMsg('');
+    setShareErr('');
     setDetailSales([]);
     setDetailPayments([]);
     await refreshDetail(customer);
@@ -211,6 +215,16 @@ export default function ClientesPage() {
     [detailSales],
   );
   const pendingFacturaTotal = pendingFacturaSales.reduce((s, x) => s + Number(x.totalFinal), 0);
+
+  const fiadoSales = useMemo(
+    () =>
+      detailSales
+        .filter((s) => s.paymentMethod === 'fiado' && s.status !== 'voided')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [detailSales],
+  );
+  const fiadoTotal = fiadoSales.reduce((s, x) => s + Number(x.totalFinal), 0);
+  const pagosTotal = detailPayments.reduce((s, x) => s + Number(x.amount), 0);
 
   const handleDeleteSale = async (sale: Sale) => {
     if (!confirm(`¿Eliminar esta venta de ${formatMoney(sale.totalFinal)}? Se revierte stock y saldo.`)) return;
@@ -313,6 +327,7 @@ export default function ClientesPage() {
     if (!detailCustomer) return;
     setBusyAction('share');
     setShareMsg('');
+    setShareErr('');
     try {
       const data = await api<{ shareToken: string }>(`/customers/${detailCustomer.id}/share-link`, {
         method: 'POST',
@@ -322,12 +337,17 @@ export default function ClientesPage() {
       setShareUrl(url);
       try {
         await navigator.clipboard.writeText(url);
-        setShareMsg('Link copiado. El cliente puede ver su cuenta (solo lectura, sin vencimiento).');
+        setShareMsg('Link copiado. El cliente puede ver su saldo y movimientos (solo lectura, sin vencimiento).');
       } catch {
-        setShareMsg('Link listo. Copialo y compartilo con el cliente.');
+        setShareMsg('Link listo. Copialo y mandáselo al cliente por WhatsApp.');
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'No se pudo generar el link');
+      const raw = err instanceof Error ? err.message : 'No se pudo generar el link';
+      if (/cannot post|not found|404/i.test(raw)) {
+        setShareErr('La API todavía no tiene este endpoint activo. En unos minutos, tras el redeploy, volvé a intentar.');
+      } else {
+        setShareErr(raw);
+      }
     } finally {
       setBusyAction('');
     }
@@ -474,81 +494,93 @@ export default function ClientesPage() {
       )}
 
       {detailCustomer && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          onClick={() => setDetailCustomer(null)}
-        >
+        <div className="fixed inset-0 z-50 flex bg-black/70 p-0 sm:items-center sm:justify-center sm:p-4">
           <div
-            className="bg-surface border border-hair-soft rounded-xl w-full max-w-3xl max-h-[92dvh] flex flex-col"
+            className="flex h-full w-full max-w-5xl flex-col bg-surface sm:h-[min(94dvh,920px)] sm:rounded-2xl sm:border sm:border-hair"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 p-5 border-b border-hair-soft">
-              <div className="min-w-0">
-                <h2 className="text-xl font-bold text-fg truncate">{detailCustomer.name}</h2>
-                {detailCustomer.phone && <p className="text-fg-muted text-sm">{detailCustomer.phone}</p>}
-                <div className="mt-2">
-                  {Number(detailCustomer.balance) > 0 ? (
-                    <>
-                      <span className="text-xs uppercase tracking-wide text-fg-faint">Debe</span>
-                      <p className="font-mono text-3xl font-bold tabular-nums text-warn">
-                        {formatMoney(detailCustomer.balance)}
-                      </p>
-                    </>
-                  ) : Number(detailCustomer.balance) < 0 ? (
-                    <>
-                      <span className="text-xs uppercase tracking-wide text-fg-faint">Saldo a favor</span>
-                      <p className="font-mono text-3xl font-bold tabular-nums text-ok">
-                        {formatMoney(Math.abs(Number(detailCustomer.balance)))}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-2xl font-bold text-fg-muted">Al día</p>
-                  )}
+            {/* Cabecera */}
+            <div className="shrink-0 border-b border-hair-soft px-4 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wide text-fg-faint">Cuenta corriente</p>
+                  <h2 className="truncate text-2xl font-bold text-fg">{detailCustomer.name}</h2>
+                  {detailCustomer.phone && <p className="text-sm text-fg-muted">{detailCustomer.phone}</p>}
                 </div>
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => void handleShareLink(false)}
-                  disabled={busyAction === 'share'}
-                  className="rounded-lg border border-hair px-3 py-1.5 text-sm font-medium text-fg hover:bg-raised disabled:opacity-50"
+                  onClick={() => setDetailCustomer(null)}
+                  className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:bg-raised"
                 >
-                  Compartir link
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-warn/30 bg-[var(--warn-soft)] px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-warn/80">Saldo actual</p>
+                  <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-warn">
+                    {Number(detailCustomer.balance) === 0
+                      ? 'Al día'
+                      : formatMoney(Math.abs(Number(detailCustomer.balance)))}
+                  </p>
+                  <p className="mt-1 text-xs text-fg-muted">
+                    {Number(detailCustomer.balance) > 0
+                      ? 'Lo que debe el cliente'
+                      : Number(detailCustomer.balance) < 0
+                        ? 'Saldo a favor del cliente'
+                        : 'Sin deuda'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-hair-soft bg-raised px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-fg-faint">Ventas a cuenta</p>
+                  <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-fg">{formatMoney(fiadoTotal)}</p>
+                  <p className="mt-1 text-xs text-fg-muted">{fiadoSales.length} venta{fiadoSales.length === 1 ? '' : 's'}</p>
+                </div>
+                <div className="rounded-xl border border-hair-soft bg-raised px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-fg-faint">Pagos recibidos</p>
+                  <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-ok">{formatMoney(pagosTotal)}</p>
+                  <p className="mt-1 text-xs text-fg-muted">{detailPayments.length} pago{detailPayments.length === 1 ? '' : 's'}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentFor(detailCustomer.id)}
+                  className="rounded-lg bg-[var(--ok-soft)] px-4 py-2.5 text-sm font-semibold text-ok hover:brightness-110"
+                >
+                  Registrar pago
                 </button>
                 {pendingFacturaSales.length > 0 && (
                   <button
                     type="button"
                     onClick={() => void handleFacturarPendientes()}
                     disabled={busyAction === 'fac-all'}
-                    className="rounded-lg border border-ok/40 bg-[var(--ok-soft)] px-3 py-1.5 text-sm font-medium text-ok disabled:opacity-50"
+                    className="rounded-lg border border-ok/40 bg-surface px-4 py-2.5 text-sm font-semibold text-ok disabled:opacity-50"
                   >
                     Facturar pendientes ({pendingFacturaSales.length})
                   </button>
                 )}
                 <button
                   type="button"
-                  onClick={() => {
-                    setPaymentFor(detailCustomer.id);
-                  }}
-                  className="rounded-lg bg-[var(--ok-soft)] px-3 py-1.5 text-sm font-medium text-ok hover:brightness-110"
+                  onClick={() => void handleShareLink(false)}
+                  disabled={busyAction === 'share'}
+                  className="rounded-lg btn-brand px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
                 >
-                  Registrar pago
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDetailCustomer(null)}
-                  className="px-1 text-xl text-fg-muted hover:text-fg"
-                >
-                  ×
+                  {busyAction === 'share' ? 'Generando…' : 'Compartir link con el cliente'}
                 </button>
               </div>
-            </div>
 
-            {(shareUrl || shareMsg) && (
-              <div className="border-b border-hair-soft bg-raised/60 px-5 py-3 space-y-2">
-                {shareMsg && <p className="text-sm text-ok">{shareMsg}</p>}
+              <div className="mt-3 rounded-xl border border-hair-soft bg-raised/70 px-4 py-3">
+                <p className="text-sm font-medium text-fg">Link para que el cliente vea su cuenta</p>
+                <p className="mt-1 text-xs text-fg-muted">
+                  Solo lectura, sin vencimiento. Ideal para mandar por WhatsApp.
+                </p>
+                {shareMsg && <p className="mt-2 text-sm text-ok">{shareMsg}</p>}
+                {shareErr && <p className="mt-2 text-sm text-crit">{shareErr}</p>}
                 {shareUrl && (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <input
                       readOnly
                       value={shareUrl}
@@ -557,14 +589,22 @@ export default function ClientesPage() {
                     />
                     <button
                       type="button"
-                      className="rounded-lg border border-hair px-3 py-2 text-xs text-fg-muted hover:bg-raised"
+                      className="rounded-lg border border-hair px-3 py-2 text-xs text-fg hover:bg-raised2"
                       onClick={() => void navigator.clipboard.writeText(shareUrl)}
                     >
                       Copiar
                     </button>
+                    <a
+                      href={shareUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-hair px-3 py-2 text-xs text-brand hover:bg-raised2"
+                    >
+                      Abrir
+                    </a>
                     <button
                       type="button"
-                      className="rounded-lg border border-hair px-3 py-2 text-xs text-warn hover:bg-raised"
+                      className="rounded-lg border border-hair px-3 py-2 text-xs text-warn hover:bg-raised2"
                       onClick={() => void handleShareLink(true)}
                     >
                       Regenerar
@@ -572,123 +612,183 @@ export default function ClientesPage() {
                   </div>
                 )}
               </div>
-            )}
-
-            <div className="border-b border-hair-soft px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-fg-faint">
-              Movimientos · también figuran en Historial de ventas y estadísticas
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
+
+            {/* Tabs */}
+            <div className="flex shrink-0 gap-1 border-b border-hair-soft px-4 pt-3 sm:px-6">
+              {(
+                [
+                  ['ventas', `Ventas a cuenta (${fiadoSales.length})`],
+                  ['pagos', `Pagos (${detailPayments.length})`],
+                  ['todo', 'Historimiento'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setDetailTab(id)}
+                  className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
+                    detailTab === id
+                      ? 'bg-raised text-fg border border-b-0 border-hair-soft'
+                      : 'text-fg-muted hover:text-fg'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
               {detailLoading ? (
                 <Loader size="sm" />
-              ) : movements.length === 0 ? (
-                <p className="p-4 text-center text-sm text-fg-faint">Sin movimientos en la cuenta corriente.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {movements.map((m) => {
-                    if (m.kind === 'pago') {
+              ) : detailTab === 'ventas' ? (
+                fiadoSales.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-fg-faint">Todavía no hay ventas a cuenta corriente.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {fiadoSales.map((sale) => {
+                      const isOpen = expandedSaleId === sale.id;
+                      const facturable = canFacturar(sale);
+                      const preview = sale.items.slice(0, isOpen ? sale.items.length : 3);
                       return (
-                        <li
-                          key={m.id}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--ok)]/25 bg-[var(--ok-soft)] px-4 py-3"
-                        >
-                          <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="text-sm font-medium text-fg">Pago recibido</span>
-                            <span className="text-xs text-fg-faint">
-                              {formatDate(m.date)}
-                              {m.payment.note ? ` · ${m.payment.note}` : ''}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 flex-col items-end">
-                            <span className="font-mono font-semibold tabular-nums text-ok">
-                              −{formatMoney(m.amount)}
-                            </span>
-                            <span className="font-mono text-xs text-fg-faint">
-                              Saldo {formatMoney(m.balanceAfter)}
-                            </span>
-                          </span>
+                        <li key={sale.id} className="rounded-xl border border-hair-soft bg-raised overflow-hidden">
+                          <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-fg">
+                                Venta · {formatDate(sale.createdAt)}
+                              </p>
+                              <p className="mt-0.5 text-xs text-fg-faint">
+                                {sale.items.length} ítem{sale.items.length === 1 ? '' : 's'}
+                                {Number(sale.discount) > 0 ? ` · Desc. ${formatMoney(sale.discount)}` : ''}
+                                {` · ${invoiceLabel(sale.fiscalDocument)}`}
+                              </p>
+                            </div>
+                            <p className="font-mono text-xl font-bold tabular-nums text-warn">
+                              {formatMoney(sale.totalFinal)}
+                            </p>
+                          </div>
+
+                          <ul className="border-t border-hair-soft divide-y divide-hair-soft/60 bg-surface/40">
+                            {preview.map((item) => (
+                              <li key={item.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                                <span className="min-w-0 flex-1 truncate text-fg">{itemName(item)}</span>
+                                <span className="shrink-0 text-fg-faint">×{item.qty}</span>
+                                <span className="shrink-0 font-mono tabular-nums text-fg-muted w-20 text-right">
+                                  {formatMoney(item.subtotal)}
+                                </span>
+                              </li>
+                            ))}
+                            {!isOpen && sale.items.length > 3 && (
+                              <li className="px-4 py-2 text-xs text-fg-faint">
+                                +{sale.items.length - 3} ítems más…
+                              </li>
+                            )}
+                          </ul>
+
+                          <div className="flex flex-wrap items-center gap-2 border-t border-hair-soft px-4 py-3">
+                            {sale.items.length > 3 && (
+                              <button
+                                type="button"
+                                className="rounded-md border border-hair px-2.5 py-1.5 text-xs text-fg-muted hover:bg-raised2"
+                                onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
+                              >
+                                {isOpen ? 'Ver menos' : 'Ver todos los ítems'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="rounded-md border border-hair px-2.5 py-1.5 text-xs text-fg hover:bg-raised2"
+                              onClick={() => {
+                                setEditSale(sale);
+                                setEditDiscount(String(Number(sale.discount) || 0));
+                              }}
+                            >
+                              Editar
+                            </button>
+                            {facturable && (
+                              <button
+                                type="button"
+                                disabled={busyAction === `fac-${sale.id}`}
+                                className="rounded-md border border-ok/40 bg-[var(--ok-soft)] px-2.5 py-1.5 text-xs text-ok disabled:opacity-50"
+                                onClick={() => void handleFacturarSale(sale)}
+                              >
+                                Facturar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={busyAction === `del-${sale.id}`}
+                              className="rounded-md border border-crit/30 px-2.5 py-1.5 text-xs text-crit disabled:opacity-50"
+                              onClick={() => void handleDeleteSale(sale)}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
                         </li>
                       );
-                    }
-                    const sale = m.sale;
-                    const isOpen = expandedSaleId === sale.id;
-                    const facturable = canFacturar(sale);
-                    return (
-                      <li key={m.id} className="overflow-hidden rounded-lg border border-hair-soft bg-raised">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedSaleId(isOpen ? null : sale.id)}
-                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-raised2"
+                    })}
+                  </ul>
+                )
+              ) : detailTab === 'pagos' ? (
+                detailPayments.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-fg-faint">Todavía no hay pagos registrados.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {[...detailPayments]
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map((p) => (
+                        <li
+                          key={p.id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--ok)]/25 bg-[var(--ok-soft)] px-4 py-3"
                         >
-                          <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="text-sm font-medium text-fg">
-                              Venta a cuenta
-                              {sale.items.length
-                                ? ` · ${sale.items.length} ${sale.items.length === 1 ? 'ítem' : 'ítems'}`
-                                : ''}
-                            </span>
+                          <span>
+                            <span className="block text-sm font-medium text-fg">Pago recibido</span>
                             <span className="text-xs text-fg-faint">
-                              {formatDate(m.date)}
-                              {Number(sale.discount) > 0 ? ` · Desc. ${formatMoney(sale.discount)}` : ''}
-                              {` · ${invoiceLabel(sale.fiscalDocument)}`}
+                              {formatDate(p.createdAt)}
+                              {p.note ? ` · ${p.note}` : ''}
                             </span>
                           </span>
-                          <span className="flex shrink-0 flex-col items-end">
-                            <span className="font-mono font-semibold tabular-nums text-warn">
-                              +{formatMoney(m.amount)}
-                            </span>
-                            <span className="font-mono text-xs text-fg-faint">
-                              Saldo {formatMoney(m.balanceAfter)} {isOpen ? '▲' : '▼'}
-                            </span>
+                          <span className="font-mono text-lg font-semibold tabular-nums text-ok">
+                            −{formatMoney(p.amount)}
                           </span>
-                        </button>
-                        {isOpen && (
-                          <div className="border-t border-hair-soft">
-                            <ul className="divide-y divide-hair-soft/50">
-                              {sale.items.map((item) => (
-                                <li key={item.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                                  <span className="min-w-0 flex-1 truncate text-fg-muted">{itemName(item)}</span>
-                                  <span className="mx-3 shrink-0 text-fg-faint">
-                                    ×{item.qty} · {formatMoney(item.unitPrice)}
-                                  </span>
-                                  <span className="shrink-0 text-fg-muted">{formatMoney(item.subtotal)}</span>
-                                </li>
-                              ))}
-                            </ul>
-                            <div className="flex flex-wrap gap-2 border-t border-hair-soft px-4 py-3">
-                              <button
-                                type="button"
-                                className="rounded-md border border-hair px-2.5 py-1 text-xs text-fg hover:bg-raised2"
-                                onClick={() => {
-                                  setEditSale(sale);
-                                  setEditDiscount(String(Number(sale.discount) || 0));
-                                }}
-                              >
-                                Editar
-                              </button>
-                              {facturable && (
-                                <button
-                                  type="button"
-                                  disabled={busyAction === `fac-${sale.id}`}
-                                  className="rounded-md border border-ok/40 bg-[var(--ok-soft)] px-2.5 py-1 text-xs text-ok disabled:opacity-50"
-                                  onClick={() => void handleFacturarSale(sale)}
-                                >
-                                  Facturar
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={busyAction === `del-${sale.id}`}
-                                className="rounded-md border border-crit/30 px-2.5 py-1 text-xs text-crit disabled:opacity-50"
-                                onClick={() => void handleDeleteSale(sale)}
-                              >
-                                Eliminar
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        </li>
+                      ))}
+                  </ul>
+                )
+              ) : movements.length === 0 ? (
+                <p className="py-10 text-center text-sm text-fg-faint">Sin movimientos.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {movements.map((m) =>
+                    m.kind === 'pago' ? (
+                      <li
+                        key={m.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--ok)]/25 bg-[var(--ok-soft)] px-4 py-3"
+                      >
+                        <span className="text-sm text-fg">
+                          Pago · {formatDate(m.date)}
+                          {m.payment.note ? ` · ${m.payment.note}` : ''}
+                        </span>
+                        <span className="text-right">
+                          <span className="block font-mono font-semibold text-ok">−{formatMoney(m.amount)}</span>
+                          <span className="font-mono text-xs text-fg-faint">Saldo {formatMoney(m.balanceAfter)}</span>
+                        </span>
                       </li>
-                    );
-                  })}
+                    ) : (
+                      <li
+                        key={m.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-hair-soft bg-raised px-4 py-3"
+                      >
+                        <span className="text-sm text-fg">
+                          Venta · {formatDate(m.date)} · {m.sale.items.length} ítems · {invoiceLabel(m.sale.fiscalDocument)}
+                        </span>
+                        <span className="text-right">
+                          <span className="block font-mono font-semibold text-warn">+{formatMoney(m.amount)}</span>
+                          <span className="font-mono text-xs text-fg-faint">Saldo {formatMoney(m.balanceAfter)}</span>
+                        </span>
+                      </li>
+                    ),
+                  )}
                 </ul>
               )}
             </div>
@@ -734,7 +834,7 @@ export default function ClientesPage() {
                         onClick={() => openDetail(c)}
                         className="text-fg-muted hover:text-fg text-xs"
                       >
-                        Ver detalle
+                        Ver cuenta
                       </button>
                       {Number(c.balance) > 0 && (
                         <button
@@ -773,7 +873,7 @@ export default function ClientesPage() {
                 <p className="mt-1 text-sm text-fg-muted">{customer.phone || 'Sin teléfono'}</p>
                 <div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3">
                   <button type="button" onClick={() => openDetail(customer)} className="text-sm text-brand">
-                    Ver detalle
+                    Ver cuenta
                   </button>
                   {Number(customer.balance) > 0 && (
                     <button
