@@ -79,7 +79,7 @@ const SHORTCUTS = [
   { key: '↑ / ↓', desc: 'Navegar resultados de búsqueda' },
   { key: 'ENTER', desc: 'Con resultados: agregar. Código de barras completo: se agrega solo. Sin búsqueda: doble ENTER para cobrar' },
   { key: 'F4', desc: 'Aplicar descuento' },
-  { key: 'F5', desc: 'Cobrar' },
+  { key: 'F5', desc: 'Cobrar / Confirmar cuenta corriente' },
   { key: '1-6', desc: 'En cobro: elegir forma de pago' },
   { key: 'F6', desc: 'Pausar venta / Nueva venta' },
   { key: 'ESC', desc: 'Cerrar modal' },
@@ -385,7 +385,8 @@ export default function POSPage() {
       setShowOpenCaja(false);
       if (pendingPaymentAfterOpenRef.current && cart.length > 0) {
         pendingPaymentAfterOpenRef.current = false;
-        setShowPayment(true);
+        if (selectedCustomer) void handleCobrar('fiado');
+        else setShowPayment(true);
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al abrir caja');
@@ -401,6 +402,11 @@ export default function POSPage() {
     if (!openCashRegisterId) {
       pendingPaymentAfterOpenRef.current = true;
       setShowOpenCaja(true);
+      return;
+    }
+    // Cliente seleccionado = cuenta corriente: confirmar directo, sin modal ni ticket.
+    if (selectedCustomer) {
+      void handleCobrar('fiado');
       return;
     }
     setShowPayment(true);
@@ -648,9 +654,140 @@ export default function POSPage() {
     };
   }, [search, addToCart, hiddenCategoryIds]);
 
-  const handleCobrar=useCallback(async(paymentMethod:string)=>{if(!cart.length||isSubmittingRef.current)return;const token=getToken();if(!token)return;const total=Math.max(0,cart.reduce((n,i)=>n+i.subtotal,0)-discountTotal);if(fiscalMode==='factura_c'){const ok=await confirmInvoiceAlertIfNeeded(total);if(!ok)return}const popup=printEnabled?window.open('','_blank','width=420,height=720'):null;isSubmittingRef.current=true;setCobrandoBusy(true);try{const crId=await refreshOpenCashRegister();if(!crId){popup?.close();alert('Tenés que abrir la caja antes de registrar ventas.');return}const res=await fetch(getApiBaseUrl()+'/sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart.map(i=>i.productId.startsWith('manual-')?{name:i.name,qty:i.qty,unitPrice:i.unitPrice}:{productId:i.productId,qty:i.qty,unitPrice:i.unitPrice,silentTicket:Boolean(i.silentTicket)}),discount:discountTotal,customerId:selectedCustomer?.id,paymentMethod,cashRegisterId:crId,fiscalMode,sellerId:activeSeller?.id??null})});if(!res.ok){const e=await res.json().catch(()=>({}));throw Error(e.message||'Error al registrar venta')}const sale=await res.json(),receipt=await api<any>('/fiscal/sales/'+sale.id+'/receipt'+(silentMode?'':'?reveal=1')),fiscalError=receipt?.fiscalDocument?.status==='ERROR';if(fiscalError){popup?.close();setReceipt(receipt)}const paymentLabel=PAYMENT_METHODS.find(i=>i.id===paymentMethod)?.label??paymentMethod;broadcastCustomerDisplay({kind:'success',total,paymentMethod,paymentLabel});setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setSearch('');setPaymentMethodPending(null);setShowPayment(false);searchRef.current?.focus();if(!fiscalError&&printEnabled)await printFiscalReceipt(receipt,popup);else if(!fiscalError)popup?.close()}catch(e){popup?.close();alert(e instanceof Error?e.message:'Error')}finally{isSubmittingRef.current=false;setCobrandoBusy(false)}},[cart,discountTotal,selectedCustomer?.id,refreshOpenCashRegister,fiscalMode,printEnabled,silentMode,activeSeller?.id]);
-  const pickPaymentMethod=useCallback((id:string)=>{if(!openCashRegisterId)return;if(id==='fiado'&&!selectedCustomer){setCustomerSearch('');setShowCustomer(true);return}if(id==='efectivo'){setCashPaid(null);setPaymentMethodPending('efectivo');return}paymentNeedsCustomerConfirmStep(id)?setPaymentMethodPending(id):void handleCobrar(id)},[openCashRegisterId,handleCobrar,selectedCustomer]);
-  const confirmPendingPayment=useCallback(()=>{if(paymentMethodPending&&openCashRegisterId)void handleCobrar(paymentMethodPending)},[paymentMethodPending,openCashRegisterId,handleCobrar]);
+  const handleCobrar = useCallback(
+    async (paymentMethod: string) => {
+      if (!cart.length || isSubmittingRef.current) return;
+      const token = getToken();
+      if (!token) return;
+      const total = Math.max(0, cart.reduce((n, i) => n + i.subtotal, 0) - discountTotal);
+      const isFiado = paymentMethod === 'fiado';
+      if (isFiado && !selectedCustomer?.id) {
+        setCustomerSearch('');
+        setShowCustomer(true);
+        return;
+      }
+      if (fiscalMode === 'factura_c' && !isFiado) {
+        const ok = await confirmInvoiceAlertIfNeeded(total);
+        if (!ok) return;
+      }
+      // Cuenta corriente: nunca abrir ventana de ticket (aunque la impresión esté activada).
+      const shouldPrint = printEnabled && !isFiado;
+      const popup = shouldPrint ? window.open('', '_blank', 'width=420,height=720') : null;
+      isSubmittingRef.current = true;
+      setCobrandoBusy(true);
+      let saleSaved = false;
+      try {
+        const crId = await refreshOpenCashRegister();
+        if (!crId) {
+          popup?.close();
+          alert('Tenés que abrir la caja antes de registrar ventas.');
+          return;
+        }
+        const res = await fetch(getApiBaseUrl() + '/sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({
+            items: cart.map((i) =>
+              i.productId.startsWith('manual-')
+                ? { name: i.name, qty: i.qty, unitPrice: i.unitPrice }
+                : {
+                    productId: i.productId,
+                    qty: i.qty,
+                    unitPrice: i.unitPrice,
+                    silentTicket: Boolean(i.silentTicket),
+                  },
+            ),
+            discount: discountTotal,
+            customerId: selectedCustomer?.id,
+            paymentMethod,
+            cashRegisterId: crId,
+            // En fiado preferimos interno: se factura después desde Clientes / Ventas.
+            fiscalMode: isFiado ? 'internal' : fiscalMode,
+            sellerId: activeSeller?.id ?? null,
+          }),
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          const rawMsg = (e as { message?: unknown }).message;
+          const msg = Array.isArray(rawMsg) ? rawMsg.join(' · ') : typeof rawMsg === 'string' ? rawMsg : null;
+          throw Error(msg || 'Error al registrar venta');
+        }
+        const sale = await res.json();
+        saleSaved = true;
+        const paymentLabel = PAYMENT_METHODS.find((i) => i.id === paymentMethod)?.label ?? paymentMethod;
+        broadcastCustomerDisplay({ kind: 'success', total, paymentMethod, paymentLabel });
+        setCart([]);
+        setDiscountTotal(0);
+        setSelectedCustomer(null);
+        setSearch('');
+        setPaymentMethodPending(null);
+        setShowPayment(false);
+        setShowMobileCart(false);
+        searchRef.current?.focus();
+
+        if (isFiado) {
+          popup?.close();
+          return;
+        }
+
+        try {
+          const receipt = await api<any>(
+            '/fiscal/sales/' + sale.id + '/receipt' + (silentMode ? '' : '?reveal=1'),
+          );
+          const fiscalError = receipt?.fiscalDocument?.status === 'ERROR';
+          if (fiscalError) {
+            popup?.close();
+            setReceipt(receipt);
+          } else if (shouldPrint) {
+            await printFiscalReceipt(receipt, popup);
+          } else {
+            popup?.close();
+          }
+        } catch {
+          popup?.close();
+          // La venta ya se guardó: no asustar con "server error".
+        }
+      } catch (e) {
+        popup?.close();
+        if (!saleSaved) {
+          alert(e instanceof Error ? e.message : 'Error');
+        }
+      } finally {
+        isSubmittingRef.current = false;
+        setCobrandoBusy(false);
+      }
+    },
+    [
+      cart,
+      discountTotal,
+      selectedCustomer?.id,
+      refreshOpenCashRegister,
+      fiscalMode,
+      printEnabled,
+      silentMode,
+      activeSeller?.id,
+    ],
+  );
+  const pickPaymentMethod = useCallback(
+    (id: string) => {
+      if (!openCashRegisterId) return;
+      if (id === 'fiado' && !selectedCustomer) {
+        setCustomerSearch('');
+        setShowCustomer(true);
+        return;
+      }
+      if (id === 'efectivo') {
+        setCashPaid(null);
+        setPaymentMethodPending('efectivo');
+        return;
+      }
+      paymentNeedsCustomerConfirmStep(id) ? setPaymentMethodPending(id) : void handleCobrar(id);
+    },
+    [openCashRegisterId, handleCobrar, selectedCustomer],
+  );
+  const confirmPendingPayment = useCallback(() => {
+    if (paymentMethodPending && openCashRegisterId) void handleCobrar(paymentMethodPending);
+  }, [paymentMethodPending, openCashRegisterId, handleCobrar]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
@@ -713,6 +850,10 @@ export default function POSPage() {
           setShowOpenCaja(true);
           return;
         }
+        if (selectedCustomer) {
+          void handleCobrar('fiado');
+          return;
+        }
         setShowPayment(true);
         return;
       }
@@ -758,7 +899,8 @@ export default function POSPage() {
         const now = Date.now();
         if (now - lastEnterForCobrarRef.current <= DOUBLE_ENTER_MS) {
           lastEnterForCobrarRef.current = 0;
-          setShowPayment(true);
+          if (selectedCustomer) void handleCobrar('fiado');
+          else setShowPayment(true);
         } else {
           lastEnterForCobrarRef.current = now;
         }
@@ -791,6 +933,8 @@ export default function POSPage() {
     paymentMethodPending,
     openCashRegisterId,
     addToCart,
+    selectedCustomer,
+    handleCobrar,
   ]);
 
   const updateQty = useCallback((productId: string, delta: number) => {
@@ -1208,11 +1352,15 @@ export default function POSPage() {
               <button
                 type="button"
                 onClick={openPayment}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || cobrandoBusy}
                 data-tour="pos-cobrar"
-                className="flex-1 py-3 rounded-lg bg-green-600 text-fg font-bold hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex-1 py-3 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed ${
+                  selectedCustomer
+                    ? 'bg-[var(--warn-soft)] text-warn hover:brightness-110'
+                    : 'bg-green-600 text-fg hover:bg-green-500'
+                }`}
               >
-                Cobrar (F5)
+                {selectedCustomer ? 'Confirmar (F5)' : 'Cobrar (F5)'}
               </button>
             </div>
           </div>
@@ -1222,7 +1370,7 @@ export default function POSPage() {
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-hair-soft bg-surface px-3 py-2 shadow-2xl lg:hidden">
         <button type="button" onClick={() => setShowMobileCart(true)} aria-label="Abrir carrito" className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-hair bg-raised text-fg"><ShoppingCart className="h-5 w-5" />{cart.length > 0 && <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--brand-accent)] px-1 font-mono text-[10px] font-bold text-white">{cart.reduce((sum, item) => sum + item.qty, 0)}</span>}</button>
         <div className="min-w-0 flex-1"><span className="block text-[10px] uppercase tracking-wide text-fg-faint">Total</span><strong className="block truncate font-mono text-xl tabular-nums text-fg">${total.toFixed(0)}</strong></div>
-        <button type="button" onClick={openPayment} disabled={cart.length === 0} className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-50">Cobrar</button>
+        <button type="button" onClick={openPayment} disabled={cart.length === 0 || cobrandoBusy} className={`rounded-xl px-5 py-3 font-bold disabled:opacity-50 ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-green-600 text-white'}`}>{selectedCustomer ? 'Confirmar' : 'Cobrar'}</button>
       </div>
 
       {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} onSilent={() => setSilentPrompt({ productId: item.productId, name: item.name, from: 'cart' })} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div><button type="button" onClick={() => { setCustomerSearch(''); setShowCustomer(true); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised2 text-fg'}`}><span className="truncate">👤 {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}</span><span className="shrink-0 text-xs">{selectedCustomer ? (selectedCustomer.balance != null && selectedCustomer.balance > 0 ? `Debe $${Number(selectedCustomer.balance).toFixed(0)}` : 'Cambiar') : 'Elegir'}</span></button><div className="grid grid-cols-2 gap-2"><button type="button" disabled={cart.length === 0} onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { setShowMobileCart(false); void handleCobrar('fiado'); } }} className="rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn disabled:opacity-50">A cuenta corriente</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}

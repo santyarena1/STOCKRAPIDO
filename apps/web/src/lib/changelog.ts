@@ -22,6 +22,33 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.11',
+    date: '2026-08-25',
+    summary: 'Cuenta corriente más simple en el POS, gestión completa y link para el cliente.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'POS: Confirmar cuenta corriente',
+        desc: 'Si elegís un cliente, Cobrar pasa a Confirmar y carga directo a la cuenta. No imprime ticket aunque la impresión esté activa.',
+      },
+      {
+        tag: 'FIX',
+        title: 'Confirmar sin error fantasma',
+        desc: 'Si la venta a cuenta ya se guardó, ya no aparece un “server error” engañoso por un paso posterior (ticket o fiscal).',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Clientes: editar, eliminar y facturar',
+        desc: 'En el detalle de la cuenta corriente podés ver cada venta con ítems, editar el descuento, eliminarla (revierte saldo y stock) y facturar una o todas las pendientes. Sigue contando en historial, facturas y estadísticas.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Link de cuenta para el cliente',
+        desc: 'Por cada cliente generás un link permanente de solo lectura para que vea su saldo y movimientos, con la estética del comercio. No vence.',
+      },
+    ],
+  },
+  {
     version: 'v1.10',
     date: '2026-08-21',
     summary: 'Módulo Facturas en el historial y aviso de tope facturado.',
