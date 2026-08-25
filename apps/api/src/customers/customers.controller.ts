@@ -73,4 +73,9 @@ export class CustomerPublicController {
   getAccount(@Param('token') token: string) {
     return this.customers.getPublicAccountByToken(token);
   }
+
+  @Get(':token/sales/:saleId/receipt')
+  getReceipt(@Param('token') token: string, @Param('saleId') saleId: string) {
+    return this.customers.getPublicReceipt(token, saleId);
+  }
 }

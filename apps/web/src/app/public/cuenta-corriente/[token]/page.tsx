@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { publicApi } from '@/lib/api';
+import { StockRapidoLogo } from '@/components/brand/StockRapidoLogo';
+import {
+  downloadFiscalReceipt,
+  paymentMethodLabel,
+  printFiscalReceipt,
+  type FiscalReceiptLike,
+} from '@/lib/fiscal-receipt';
 
 type PublicAccount = {
   business: {
@@ -19,8 +26,10 @@ type PublicAccount = {
     date: string;
     amount: number;
     note?: string | null;
+    saleId?: string;
     items?: Array<{ name: string; qty: number; unitPrice: number; subtotal: number }>;
     invoiceLabel?: string | null;
+    docKind?: string | null;
     balanceAfter: number;
   }>;
   generatedAt: string;
@@ -35,16 +44,26 @@ function money(n: number) {
   }).format(n);
 }
 
-function dateLabel(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+function moneyExact(n: number) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
-function timeLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+function dateTime(iso: string) {
+  return new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function dateLong(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 export default function PublicCuentaCorrientePage() {
@@ -54,6 +73,7 @@ export default function PublicCuentaCorrientePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState<string>('');
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -74,243 +94,318 @@ export default function PublicCuentaCorrientePage() {
     void load();
   }, [load]);
 
-  const accent = data?.business.accentColor || '#DC2626';
-  const balance = data?.customer.balance ?? 0;
-  const balanceTone =
-    balance > 0 ? 'debe' : balance < 0 ? 'favor' : 'aldia';
+  useEffect(() => {
+    if (!data?.business.accentColor) return;
+    document.documentElement.style.setProperty('--brand-accent', data.business.accentColor);
+    document.documentElement.style.setProperty('--brand-primary-btn', data.business.accentColor);
+  }, [data?.business.accentColor]);
 
+  const balance = data?.customer.balance ?? 0;
   const summary = useMemo(() => {
-    if (!data) return { cargos: 0, pagos: 0, count: 0 };
+    if (!data) return { cargos: 0, pagos: 0, ventas: 0, items: 0 };
     let cargos = 0;
     let pagos = 0;
+    let ventas = 0;
+    let items = 0;
     for (const m of data.movements) {
-      if (m.kind === 'cargo') cargos += m.amount;
-      else pagos += m.amount;
+      if (m.kind === 'cargo') {
+        cargos += m.amount;
+        ventas += 1;
+        items += m.items?.length ?? 0;
+      } else {
+        pagos += m.amount;
+      }
     }
-    return { cargos, pagos, count: data.movements.length };
+    return { cargos, pagos, ventas, items };
   }, [data]);
+
+  const fetchReceipt = async (saleId: string) => {
+    return publicApi<FiscalReceiptLike>(`/public/cuenta-corriente/${token}/sales/${saleId}/receipt`);
+  };
+
+  const handlePrint = async (saleId: string) => {
+    setReceiptBusy(`print-${saleId}`);
+    try {
+      const receipt = await fetchReceipt(saleId);
+      await printFiscalReceipt(receipt);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo abrir el comprobante');
+    } finally {
+      setReceiptBusy('');
+    }
+  };
+
+  const handleDownload = async (saleId: string) => {
+    setReceiptBusy(`dl-${saleId}`);
+    try {
+      const receipt = await fetchReceipt(saleId);
+      await downloadFiscalReceipt(receipt);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo descargar el comprobante');
+    } finally {
+      setReceiptBusy('');
+    }
+  };
 
   if (loading) {
     return (
-      <div className="cc-public min-h-dvh flex items-center justify-center" style={{ ['--cc-accent' as string]: accent }}>
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-[color:var(--cc-accent)] border-t-transparent" />
-        <style>{`
-          .cc-public {
-            background: radial-gradient(1200px 600px at 10% -10%, color-mix(in srgb, var(--cc-accent) 16%, #0c0c0f), transparent 55%),
-              radial-gradient(900px 500px at 100% 0%, rgba(255, 255, 255, 0.04), transparent 50%), #0c0c0f;
-            color: #f3f1ec;
-          }
-        `}</style>
+      <div className="flex min-h-dvh items-center justify-center bg-app text-fg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-hair border-t-[color:var(--brand-accent,#DC2626)]" />
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="cc-public min-h-dvh flex items-center justify-center px-6">
-        <div className="max-w-md text-center">
-          <p className="text-3xl text-[#f3f1ec]" style={{ fontFamily: 'var(--font-display), Georgia, serif' }}>
-            Link no disponible
+      <div className="flex min-h-dvh items-center justify-center bg-app px-6 text-fg">
+        <div className="max-w-md rounded-xl border border-hair bg-surface p-6 text-center">
+          <p className="text-lg font-bold">Link no disponible</p>
+          <p className="mt-2 text-sm text-fg-muted">
+            {error || 'Pedile al comercio que te comparta el acceso nuevamente.'}
           </p>
-          <p className="mt-3 text-[#9a968c]">{error || 'Pedile al comercio que te comparta el acceso nuevamente.'}</p>
         </div>
-        <style>{`.cc-public { background: #0c0c0f; }`}</style>
       </div>
     );
   }
 
+  const logoOk =
+    data.business.logoUrl &&
+    (data.business.logoUrl.startsWith('data:') ||
+      data.business.logoUrl.startsWith('http://') ||
+      data.business.logoUrl.startsWith('https://'));
+
   return (
-    <div className="cc-public min-h-dvh" style={{ ['--cc-accent' as string]: accent }}>
-      <style>{`
-        .cc-public {
-          --cc-ink: #f3f1ec;
-          --cc-muted: #9a968c;
-          --cc-line: rgba(243, 241, 236, 0.1);
-          --cc-panel: rgba(20, 20, 24, 0.72);
-          color: var(--cc-ink);
-          background:
-            radial-gradient(1100px 520px at 8% -8%, color-mix(in srgb, var(--cc-accent) 22%, transparent), transparent 58%),
-            radial-gradient(800px 420px at 92% 8%, rgba(255, 255, 255, 0.05), transparent 48%),
-            linear-gradient(180deg, #101014 0%, #0c0c0f 48%, #0a0a0c 100%);
-          font-family: var(--font-landing), var(--font-sans), system-ui, sans-serif;
-        }
-        .cc-public .cc-display {
-          font-family: var(--font-display), Georgia, serif;
-          letter-spacing: -0.02em;
-        }
-        .cc-public .cc-rise {
-          animation: ccrise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-        }
-        .cc-public .cc-rise-delay {
-          animation: ccrise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
-        }
-        .cc-public .cc-rise-delay-2 {
-          animation: ccrise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both;
-        }
-        @keyframes ccrise {
-          from { opacity: 0; transform: translateY(14px); }
-          to { opacity: 1; transform: none; }
-        }
-        .cc-public .cc-balance {
-          animation: ccglow 3.2s ease-in-out infinite;
-        }
-        @keyframes ccglow {
-          0%, 100% { text-shadow: 0 0 0 transparent; }
-          50% { text-shadow: 0 0 28px color-mix(in srgb, var(--cc-accent) 35%, transparent); }
-        }
-        .cc-public .cc-row { transition: background 0.2s ease, border-color 0.2s ease; }
-        .cc-public .cc-row:hover { background: rgba(255, 255, 255, 0.03); }
-      `}</style>
-
-      <header className="cc-rise relative overflow-hidden px-5 pb-10 pt-10 sm:px-8 sm:pt-14">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--cc-accent)] to-transparent opacity-70"
-        />
-        <div className="mx-auto flex max-w-3xl flex-col gap-8">
-          <div className="flex items-end justify-between gap-4">
-            <div className="min-w-0">
-              {data.business.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={data.business.logoUrl}
-                  alt=""
-                  className="mb-4 h-11 w-auto max-w-[180px] object-contain"
-                />
-              ) : null}
-              <p className="cc-display text-4xl leading-none text-[color:var(--cc-ink)] sm:text-5xl">
-                {data.business.name}
-              </p>
-              <p className="mt-3 text-sm text-[color:var(--cc-muted)]">
-                Estado de cuenta · solo lectura
-                {data.business.address ? ` · ${data.business.address}` : ''}
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full border border-[color:var(--cc-line)] px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-[color:var(--cc-muted)]">
-              Permanente
-            </span>
-          </div>
-
-          <div className="cc-rise-delay grid gap-1">
-            <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--cc-muted)]">Cliente</p>
-            <p className="text-xl font-semibold text-[color:var(--cc-ink)]">{data.customer.name}</p>
-          </div>
-
-          <div className="cc-rise-delay-2">
-            <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--cc-muted)]">
-              {balanceTone === 'debe' ? 'Saldo pendiente' : balanceTone === 'favor' ? 'Saldo a favor' : 'Situación'}
-            </p>
-            <p
-              className={`cc-display cc-balance mt-2 text-5xl tabular-nums sm:text-6xl ${
-                balanceTone === 'debe'
-                  ? 'text-[color:var(--cc-accent)]'
-                  : balanceTone === 'favor'
-                    ? 'text-emerald-400'
-                    : 'text-[color:var(--cc-ink)]'
-              }`}
-            >
-              {balanceTone === 'aldia' ? 'Al día' : money(Math.abs(balance))}
-            </p>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-[color:var(--cc-muted)]">
-              {balanceTone === 'debe'
-                ? 'Este es el monto que aún figura a tu nombre en la cuenta corriente del comercio.'
-                : balanceTone === 'favor'
-                  ? 'Tenés saldo a favor. El comercio lo descontará en próximas compras.'
-                  : 'No hay saldo pendiente en este momento.'}
-            </p>
+    <div className="min-h-dvh bg-app text-fg">
+      <header className="border-b border-hair-soft bg-surface">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
+          {logoOk ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.business.logoUrl!}
+              alt=""
+              className="h-10 w-10 shrink-0 bg-transparent object-contain"
+            />
+          ) : (
+            <StockRapidoLogo variant="icon" size="sm" href={null} className="shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold tracking-tight">{data.business.name}</p>
+            <p className="text-xs text-fg-faint">Estado de cuenta · solo lectura</p>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-5 pb-16 sm:px-8">
-        <section className="mb-8 grid grid-cols-3 gap-3 border-y border-[color:var(--cc-line)] py-5 text-center">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--cc-muted)]">Cargos</p>
-            <p className="mt-1 font-mono text-sm tabular-nums text-[color:var(--cc-ink)]">{money(summary.cargos)}</p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--cc-muted)]">Pagos</p>
-            <p className="mt-1 font-mono text-sm tabular-nums text-emerald-400">{money(summary.pagos)}</p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--cc-muted)]">Movimientos</p>
-            <p className="mt-1 font-mono text-sm tabular-nums text-[color:var(--cc-ink)]">{summary.count}</p>
+      <main className="mx-auto max-w-3xl space-y-5 px-4 py-6 sm:px-6">
+        <section className="rounded-xl border border-hair-soft bg-surface p-5">
+          <p className="text-xs uppercase tracking-wide text-fg-faint">Cliente</p>
+          <h1 className="mt-1 text-2xl font-bold">{data.customer.name}</h1>
+          {data.business.address && (
+            <p className="mt-1 text-sm text-fg-muted">{data.business.address}</p>
+          )}
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                balance > 0
+                  ? 'border-warn/30 bg-[var(--warn-soft)]'
+                  : balance < 0
+                    ? 'border-ok/30 bg-[var(--ok-soft)]'
+                    : 'border-hair-soft bg-raised'
+              }`}
+            >
+              <p className="text-xs uppercase tracking-wide text-fg-faint">
+                {balance > 0 ? 'Saldo pendiente' : balance < 0 ? 'Saldo a favor' : 'Situación'}
+              </p>
+              <p
+                className={`mt-1 font-mono text-3xl font-bold tabular-nums ${
+                  balance > 0 ? 'text-warn' : balance < 0 ? 'text-ok' : 'text-fg'
+                }`}
+              >
+                {balance === 0 ? 'Al día' : money(Math.abs(balance))}
+              </p>
+            </div>
+            <div className="rounded-xl border border-hair-soft bg-raised px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-fg-faint">Compras a cuenta</p>
+              <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{money(summary.cargos)}</p>
+              <p className="mt-1 text-xs text-fg-muted">
+                {summary.ventas} venta{summary.ventas === 1 ? '' : 's'} · {summary.items} ítems
+              </p>
+            </div>
+            <div className="rounded-xl border border-hair-soft bg-raised px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-fg-faint">Pagos registrados</p>
+              <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-ok">
+                {money(summary.pagos)}
+              </p>
+              <p className="mt-1 text-xs text-fg-muted">
+                {data.movements.filter((m) => m.kind === 'pago').length} movimiento
+                {data.movements.filter((m) => m.kind === 'pago').length === 1 ? '' : 's'}
+              </p>
+            </div>
           </div>
         </section>
 
-        <h2 className="mb-4 text-xs uppercase tracking-[0.18em] text-[color:var(--cc-muted)]">Detalle</h2>
+        <section>
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Detalle de la cuenta</h2>
+              <p className="text-sm text-fg-muted">
+                Cada compra muestra productos, montos y comprobante. Podés imprimir o descargar.
+              </p>
+            </div>
+          </div>
 
-        {data.movements.length === 0 ? (
-          <p className="rounded-2xl border border-[color:var(--cc-line)] bg-[color:var(--cc-panel)] px-5 py-10 text-center text-sm text-[color:var(--cc-muted)]">
-            Todavía no hay movimientos en esta cuenta.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {data.movements.map((m) => {
-              const open = openId === m.id;
-              const isCargo = m.kind === 'cargo';
-              return (
-                <li
-                  key={m.id}
-                  className="cc-row overflow-hidden rounded-2xl border border-[color:var(--cc-line)] bg-[color:var(--cc-panel)] backdrop-blur"
-                >
-                  <button
-                    type="button"
-                    className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left sm:px-5"
-                    onClick={() => setOpenId(open ? null : m.id)}
-                    disabled={!isCargo || !m.items?.length}
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-[color:var(--cc-ink)]">
-                        {isCargo ? 'Compra a cuenta' : 'Pago registrado'}
-                      </span>
-                      <span className="mt-1 block text-xs text-[color:var(--cc-muted)]">
-                        {dateLabel(m.date)} · {timeLabel(m.date)}
-                        {m.invoiceLabel ? ` · ${m.invoiceLabel}` : ''}
-                        {m.note ? ` · ${m.note}` : ''}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span
-                        className={`block font-mono text-sm font-semibold tabular-nums ${
-                          isCargo ? 'text-[color:var(--cc-accent)]' : 'text-emerald-400'
-                        }`}
-                      >
-                        {isCargo ? '+' : '−'}
-                        {money(m.amount)}
-                      </span>
-                      <span className="mt-1 block font-mono text-[11px] text-[color:var(--cc-muted)]">
-                        Saldo {money(m.balanceAfter)}
-                      </span>
-                    </span>
-                  </button>
-                  {open && m.items && m.items.length > 0 && (
-                    <ul className="border-t border-[color:var(--cc-line)] px-4 py-2 sm:px-5">
-                      {m.items.map((it, idx) => (
-                        <li
-                          key={`${m.id}-${idx}`}
-                          className="flex items-center justify-between gap-3 border-b border-[color:var(--cc-line)] py-2.5 last:border-0"
+          {data.movements.length === 0 ? (
+            <div className="rounded-xl border border-hair-soft bg-surface px-5 py-10 text-center text-sm text-fg-faint">
+              Todavía no hay movimientos en esta cuenta.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {data.movements.map((m) => {
+                if (m.kind === 'pago') {
+                  return (
+                    <li
+                      key={m.id}
+                      className="rounded-xl border border-[color:var(--ok)]/25 bg-[var(--ok-soft)] px-4 py-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-ok/80">Pago recibido</p>
+                          <p className="mt-1 font-semibold text-fg">Abono a cuenta corriente</p>
+                          <p className="mt-1 text-sm text-fg-muted">
+                            {dateLong(m.date)} · {dateTime(m.date)}
+                          </p>
+                          {m.note && <p className="mt-1 text-sm text-fg-muted">Nota: {m.note}</p>}
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-xl font-bold tabular-nums text-ok">
+                            −{moneyExact(m.amount)}
+                          </p>
+                          <p className="mt-1 font-mono text-xs text-fg-faint">
+                            Saldo {moneyExact(m.balanceAfter)}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                }
+
+                const open = openId === m.id;
+                const items = m.items || [];
+                const isFactura = m.docKind === 'FACTURA_C';
+                return (
+                  <li key={m.id} className="overflow-hidden rounded-xl border border-hair-soft bg-surface">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-hair-soft px-4 py-4">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-wide text-fg-faint">
+                          {isFactura ? 'Factura C' : 'Comprobante interno'} · cuenta corriente
+                        </p>
+                        <p className="mt-1 text-base font-semibold text-fg">
+                          Compra del {dateLong(m.date)}
+                        </p>
+                        <p className="mt-1 text-sm text-fg-muted">
+                          {dateTime(m.date)}
+                          {items.length ? ` · ${items.length} producto${items.length === 1 ? '' : 's'}` : ''}
+                          {m.invoiceLabel ? ` · ${m.invoiceLabel}` : ''}
+                          {m.note ? ` · ${m.note}` : ''}
+                        </p>
+                        <p className="mt-1 text-xs text-fg-faint">
+                          Medio: {paymentMethodLabel('fiado')}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-xl font-bold tabular-nums text-warn">
+                          +{moneyExact(m.amount)}
+                        </p>
+                        <p className="mt-1 font-mono text-xs text-fg-faint">
+                          Saldo {moneyExact(m.balanceAfter)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {items.length > 0 && (
+                      <div className="border-b border-hair-soft">
+                        <div className="flex items-center justify-between px-4 py-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-fg-faint">
+                            Productos
+                          </p>
+                          {items.length > 4 && (
+                            <button
+                              type="button"
+                              className="text-xs text-brand"
+                              onClick={() => setOpenId(open ? null : m.id)}
+                            >
+                              {open ? 'Ver menos' : `Ver los ${items.length}`}
+                            </button>
+                          )}
+                        </div>
+                        <ul className="divide-y divide-hair-soft/60">
+                          {(open ? items : items.slice(0, 4)).map((it, idx) => (
+                            <li
+                              key={`${m.id}-${idx}`}
+                              className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium text-fg">{it.name}</span>
+                                <span className="text-xs text-fg-faint">
+                                  {it.qty} × {moneyExact(it.unitPrice)}
+                                </span>
+                              </span>
+                              <span className="shrink-0 font-mono tabular-nums text-fg-muted">
+                                {moneyExact(it.subtotal)}
+                              </span>
+                            </li>
+                          ))}
+                          {!open && items.length > 4 && (
+                            <li className="px-4 py-2 text-xs text-fg-faint">
+                              +{items.length - 4} productos más…
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                    {m.saleId && (
+                      <div className="flex flex-wrap gap-2 px-4 py-3">
+                        <button
+                          type="button"
+                          disabled={receiptBusy === `print-${m.saleId}`}
+                          onClick={() => void handlePrint(m.saleId!)}
+                          className="rounded-lg btn-brand px-3 py-2 text-sm font-semibold disabled:opacity-50"
                         >
-                          <span className="min-w-0 truncate text-sm text-[color:var(--cc-ink)]/90">{it.name}</span>
-                          <span className="shrink-0 font-mono text-xs text-[color:var(--cc-muted)]">
-                            ×{it.qty} · {money(it.subtotal)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                          {receiptBusy === `print-${m.saleId}` ? 'Abriendo…' : 'Imprimir comprobante'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={receiptBusy === `dl-${m.saleId}`}
+                          onClick={() => void handleDownload(m.saleId!)}
+                          className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50"
+                        >
+                          {receiptBusy === `dl-${m.saleId}` ? 'Descargando…' : 'Descargar'}
+                        </button>
+                        <span className="self-center text-xs text-fg-faint">
+                          {isFactura ? 'Factura C' : 'Comprobante interno'}
+                        </span>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
 
-        <footer className="mt-12 border-t border-[color:var(--cc-line)] pt-6 text-center text-xs text-[color:var(--cc-muted)]">
+        <footer className="border-t border-hair-soft pt-5 pb-10 text-center text-xs text-fg-faint">
           <p>
-            Actualizado {new Date(data.generatedAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
+            Actualizado{' '}
+            {new Date(data.generatedAt).toLocaleString('es-AR', {
+              dateStyle: 'short',
+              timeStyle: 'short',
+            })}
           </p>
           <p className="mt-1">Vista de solo lectura · no podés modificar esta cuenta desde acá</p>
-          <p className="mt-4 tracking-[0.12em] text-[color:var(--cc-muted)]/70">STOCKRÁPIDO</p>
+          <div className="mt-4 flex justify-center opacity-70">
+            <StockRapidoLogo variant="system" size="sm" href={null} />
+          </div>
         </footer>
       </main>
     </div>
