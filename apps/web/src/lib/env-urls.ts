@@ -32,3 +32,10 @@ export function getPublicFiguritasCatalogUrl(token: string): string {
   if (!base) return `/public/figuritas/${token}`;
   return `${base}/public/figuritas/${token}`;
 }
+
+/** Link permanente de solo lectura de la cuenta corriente de un cliente. */
+export function getPublicCuentaCorrienteUrl(token: string): string {
+  const base = getPublicAppUrl();
+  if (!base) return `/public/cuenta-corriente/${token}`;
+  return `${base}/public/cuenta-corriente/${token}`;
+}

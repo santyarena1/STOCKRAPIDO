@@ -48,4 +48,29 @@ export class CustomersController {
   getPayments(@CurrentUser() user: User, @Param('id') id: string, @Query('limit') limit?: string) {
     return this.customers.getPayments(id, user.businessId, limit ? parseInt(limit, 10) : 50);
   }
+
+  @Post(':id/share-link')
+  ensureShareLink(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body?: { regenerate?: boolean },
+  ) {
+    return this.customers.ensureShareToken(id, user.businessId, !!body?.regenerate);
+  }
+
+  @Post(':id/share-link/revoke')
+  revokeShareLink(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.customers.revokeShareToken(id, user.businessId);
+  }
+}
+
+/** Estado de cuenta corriente público (solo lectura, sin auth). */
+@Controller('public/cuenta-corriente')
+export class CustomerPublicController {
+  constructor(private customers: CustomersService) {}
+
+  @Get(':token')
+  getAccount(@Param('token') token: string) {
+    return this.customers.getPublicAccountByToken(token);
+  }
 }

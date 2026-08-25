@@ -95,37 +95,62 @@ export class SalesService {
       include: { items: { include: { product: true } }, customer: true },
     });
 
-    for (const item of items) {
-      const isManual = !item.productId || String(item.productId).startsWith('manual-');
-      if (!isManual && item.productId) {
-        await this.products.deductStockFromBatches(item.productId, businessId, item.qty);
-        await this.prisma.stockMove.create({
-          data: {
-            productId: item.productId,
-            qty: -item.qty,
-            reason: 'venta',
-            reference: sale.id,
-          },
+    // Todo lo que sigue es post-persistencia: si falla, la venta YA existe.
+    // Nunca devolvemos 500 después de crear la venta (evita “error” fantasma en el POS).
+    try {
+      for (const item of items) {
+        const isManual = !item.productId || String(item.productId).startsWith('manual-');
+        if (!isManual && item.productId) {
+          await this.products.deductStockFromBatches(item.productId, businessId, item.qty);
+          await this.prisma.stockMove.create({
+            data: {
+              productId: item.productId,
+              qty: -item.qty,
+              reason: 'venta',
+              reference: sale.id,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[sales.create] stock post-venta', sale.id, err);
+    }
+
+    try {
+      if (options?.customerId && options?.paymentMethod === 'fiado') {
+        await this.prisma.customer.update({
+          where: { id: options.customerId },
+          data: { balance: { increment: totalFinal } },
         });
       }
+    } catch (err) {
+      console.error('[sales.create] fiado balance', sale.id, err);
     }
 
-    if (options?.customerId && options?.paymentMethod === 'fiado') {
-      await this.prisma.customer.update({
-        where: { id: options.customerId },
-        data: { balance: { increment: totalFinal } },
-      });
+    try {
+      await this.consignment.recordSaleDebts(
+        businessId,
+        sale.id,
+        sale.items.map((it) => ({ id: it.id, productId: it.productId, qty: it.qty })),
+      );
+    } catch (err) {
+      console.error('[sales.create] consignment', sale.id, err);
     }
 
-    await this.consignment.recordSaleDebts(
-      businessId,
-      sale.id,
-      sale.items.map((it) => ({ id: it.id, productId: it.productId, qty: it.qty })),
-    );
-
-    const fiscalDocument = options?.fiscalMode === 'factura_c'
-      ? await this.fiscal.issueFacturaC(businessId, sale.id)
-      : await this.fiscal.createInternal(businessId, sale.id);
+    let fiscalDocument = null;
+    try {
+      fiscalDocument =
+        options?.fiscalMode === 'factura_c'
+          ? await this.fiscal.issueFacturaC(businessId, sale.id)
+          : await this.fiscal.createInternal(businessId, sale.id);
+    } catch (err) {
+      console.error('[sales.create] fiscal', sale.id, err);
+      try {
+        fiscalDocument = await this.fiscal.createInternal(businessId, sale.id);
+      } catch {
+        fiscalDocument = null;
+      }
+    }
 
     return { ...sale, fiscalDocument };
   }
