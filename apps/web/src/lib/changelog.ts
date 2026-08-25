@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.12',
+    date: '2026-08-25',
+    summary: 'Link de cuenta corriente operativo y detalle más claro.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'API: share-link de clientes',
+        desc: 'Corregimos el build de la API que impedía generar el link único de cuenta corriente (Cannot POST /share-link).',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Detalle de cuenta corriente más claro',
+        desc: 'Saldo, ventas y pagos se ven de entrada. Cada venta muestra ítems y botones de editar/facturar/eliminar sin tener que buscar. Link para el cliente bien visible.',
+      },
+    ],
+  },
+  {
     version: 'v1.11',
     date: '2026-08-25',
     summary: 'Cuenta corriente más simple en el POS, gestión completa y link para el cliente.',

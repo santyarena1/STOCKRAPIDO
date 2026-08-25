@@ -137,7 +137,7 @@ export class SalesService {
       console.error('[sales.create] consignment', sale.id, err);
     }
 
-    let fiscalDocument = null;
+    let fiscalDocument: Awaited<ReturnType<FiscalService['createInternal']>> | null = null;
     try {
       fiscalDocument =
         options?.fiscalMode === 'factura_c'

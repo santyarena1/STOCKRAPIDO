@@ -31,7 +31,7 @@ async function bootstrap() {
   app.getHttpAdapter().get('/health', (_req: any, res: any) =>
     res.json({
       status: 'ok',
-      v: 4,
+      v: 5,
       sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || 'dev',
     }),
   );
