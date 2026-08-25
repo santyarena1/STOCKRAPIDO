@@ -3,10 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { assertPlanFeature } from '../billing/plan-guard';
 import { randomBytes } from 'node:crypto';
+import { FiscalService } from '../fiscal/fiscal.service';
 
 @Injectable()
 export class CustomersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private fiscal: FiscalService,
+  ) {}
 
   async list(businessId: string, withBalance?: boolean) {
     const where: Record<string, unknown> = { businessId };
@@ -162,8 +166,10 @@ export class CustomersService {
       date: string;
       amount: number;
       note?: string | null;
+      saleId?: string;
       items?: Array<{ name: string; qty: number; unitPrice: number; subtotal: number }>;
       invoiceLabel?: string | null;
+      docKind?: string | null;
       balanceAfter: number;
     };
 
@@ -173,6 +179,7 @@ export class CustomersService {
         kind: 'cargo' as const,
         date: s.createdAt.toISOString(),
         amount: Number(s.totalFinal),
+        saleId: s.id,
         note: Number(s.discount) > 0 ? `Descuento $${Number(s.discount).toFixed(0)}` : null,
         items: s.items.map((it) => ({
           name: it.product?.name || it.productName || 'Producto',
@@ -183,7 +190,13 @@ export class CustomersService {
         invoiceLabel:
           s.fiscalDocument?.kind === 'FACTURA_C' && s.fiscalDocument.status === 'AUTHORIZED'
             ? `Factura C ${s.fiscalDocument.pointOfSale ?? ''}-${s.fiscalDocument.receiptNumber ?? ''}`
-            : null,
+            : s.fiscalDocument?.kind === 'INTERNAL'
+              ? 'Comprobante interno'
+              : 'Comprobante',
+        docKind:
+          s.fiscalDocument?.kind === 'FACTURA_C' && s.fiscalDocument.status === 'AUTHORIZED'
+            ? 'FACTURA_C'
+            : 'INTERNAL',
       })),
       ...payments.map((p) => ({
         id: `pay-${p.id}`,
@@ -200,20 +213,17 @@ export class CustomersService {
       return { ...m, balanceAfter: run };
     });
 
-    const fantasyName =
-      (typeof branding.receiptName === 'string' && branding.receiptName.trim()) ||
-      (typeof branding.appTitle === 'string' && branding.appTitle.trim()) ||
-      business.name;
+    // Logo del sidebar (branding.logoUrl), no el del ticket.
+    const displayName =
+      (typeof branding.appTitle === 'string' && branding.appTitle.trim()) || business.name;
     const logoUrl =
-      (typeof branding.ticketLogoUrl === 'string' && branding.ticketLogoUrl.trim()) ||
-      (typeof branding.logoUrl === 'string' && branding.logoUrl.trim()) ||
-      null;
+      (typeof branding.logoUrl === 'string' && branding.logoUrl.trim()) || null;
     const accent =
       (typeof branding.accentColor === 'string' && branding.accentColor.trim()) || '#DC2626';
 
     return {
       business: {
-        name: fantasyName,
+        name: displayName,
         legalName: business.name,
         address: business.address,
         logoUrl,
@@ -226,6 +236,57 @@ export class CustomersService {
       movements: movements.reverse(),
       generatedAt: new Date().toISOString(),
       readOnly: true as const,
+    };
+  }
+
+  /** Comprobante (interno o factura) de una venta de la cuenta, vía link público. */
+  async getPublicReceipt(token: string, saleId: string) {
+    const clean = token?.trim();
+    const sid = saleId?.trim();
+    if (!clean || clean.length < 16 || !sid) throw new NotFoundException('No encontrado');
+
+    const customer = await this.prisma.customer.findFirst({ where: { shareToken: clean } });
+    if (!customer) throw new NotFoundException('Cuenta no disponible');
+
+    const sale = await this.prisma.sale.findFirst({
+      where: {
+        id: sid,
+        businessId: customer.businessId,
+        customerId: customer.id,
+        paymentMethod: 'fiado',
+        status: { not: 'voided' },
+      },
+      select: { id: true },
+    });
+    if (!sale) throw new NotFoundException('Comprobante no disponible');
+
+    const receipt = await this.fiscal.receipt(customer.businessId, sale.id, true);
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: customer.businessId },
+      select: { posConfig: true },
+    });
+    const posConfig =
+      business?.posConfig && typeof business.posConfig === 'object'
+        ? (business.posConfig as Record<string, unknown>)
+        : {};
+    const branding =
+      posConfig.branding && typeof posConfig.branding === 'object'
+        ? (posConfig.branding as Record<string, unknown>)
+        : {};
+    const sidebarLogo =
+      (typeof branding.logoUrl === 'string' && branding.logoUrl.trim()) || null;
+    const appTitle =
+      (typeof branding.appTitle === 'string' && branding.appTitle.trim()) || null;
+
+    return {
+      ...receipt,
+      ticket: {
+        ...(receipt.ticket || {}),
+        // Preferir logo del sidebar; nombre de app del sistema.
+        logoUrl: sidebarLogo,
+        fantasyName: appTitle || receipt.ticket?.fantasyName || receipt.business?.name,
+      },
     };
   }
 }

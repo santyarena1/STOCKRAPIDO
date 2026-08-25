@@ -22,6 +22,28 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.13',
+    date: '2026-08-25',
+    summary: 'Link de cuenta para el cliente con estética del sistema y comprobantes.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Link público con look del sistema',
+        desc: 'La cuenta del cliente usa la misma tipografía y colores del sistema, con el logo del sidebar (no el del ticket).',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Detalle profesional de cada compra',
+        desc: 'Cada movimiento muestra fecha completa, tipo de comprobante, productos con cantidad y precio, y saldo corrido.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Imprimir o descargar comprobante',
+        desc: 'Desde el link, el cliente puede imprimir o descargar el comprobante interno o la Factura C de cada venta a cuenta.',
+      },
+    ],
+  },
+  {
     version: 'v1.12',
     date: '2026-08-25',
     summary: 'Link de cuenta corriente operativo y detalle más claro.',
