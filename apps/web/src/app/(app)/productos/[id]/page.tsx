@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CategorySelector } from '@/components/CategorySelector';
@@ -98,6 +98,7 @@ function SupplierRawData({ raw }: { raw: unknown }) {
 
 export default function EditarProductoPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -328,8 +329,11 @@ export default function EditarProductoPage() {
         }),
       });
       setProduct((current) => current ? { ...current, ...updated, category: updated.category ?? categories.find((c) => c.id === form.categoryId) ?? current.category } : updated);
-      setSaveMsg('Guardado');
-      window.setTimeout(() => setSaveMsg(''), 2000);
+      if (typeof window !== 'undefined' && window.history.length > 1) {
+        router.back();
+      } else {
+        router.push('/productos');
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
     } finally {

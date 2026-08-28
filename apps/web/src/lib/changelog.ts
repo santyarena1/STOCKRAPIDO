@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.14',
+    date: '2026-08-28',
+    summary: 'Guardar producto vuelve a la lista y el POS recuerda el carrito.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Editar producto: volver al guardar',
+        desc: 'Al guardar cambios en un producto volvés a la pantalla anterior (por ejemplo la lista de productos).',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'POS: carrito persistente',
+        desc: 'Lo que cargaste en el mostrador se mantiene aunque cambies de pantalla dentro del sistema. Solo en este dispositivo y mientras trabajás; al cobrar o pausar la venta se limpia.',
+      },
+    ],
+  },
+  {
     version: 'v1.13',
     date: '2026-08-25',
     summary: 'Link de cuenta para el cliente con estética del sistema y comprobantes.',

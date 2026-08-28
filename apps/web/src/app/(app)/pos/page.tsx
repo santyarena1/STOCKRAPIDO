@@ -14,6 +14,7 @@ import { Search, ShoppingCart } from 'lucide-react';
 import { Loader } from '@/components/ui/Loader';
 import { SerperImagePicker } from '@/components/SerperImagePicker';
 import { confirmInvoiceAlertIfNeeded, fetchInvoiceAlert } from '@/lib/invoice-alert';
+import { clearPosSession, readPosSession, writePosSession } from '@/lib/pos-session-cache';
 
 type CartItem = {
   productId: string;
@@ -236,6 +237,7 @@ export default function POSPage() {
   /** Modo silencioso: los productos marcados como "silenciosos" se imprimen con el texto configurado. ON por defecto. */
   const [silentMode,setSilentMode]=useState(true);
   const [preferencesLoaded,setPreferencesLoaded]=useState(false);
+  const [posSessionLoaded,setPosSessionLoaded]=useState(false);
   const [receipt, setReceipt] = useState<any | null>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; balance: string | number }[]>([]);
@@ -271,6 +273,19 @@ export default function POSPage() {
   const [cobrandoBusy, setCobrandoBusy] = useState(false);
   useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('stockrapido:pos-preferences')||'{}');if(v.fiscalMode==='internal'||v.fiscalMode==='factura_c')setFiscalMode(v.fiscalMode);if(typeof v.printEnabled==='boolean')setPrintEnabled(v.printEnabled);if(typeof v.silentMode==='boolean')setSilentMode(v.silentMode)}catch{}setPreferencesLoaded(true)},[]);
   useEffect(()=>{if(preferencesLoaded)localStorage.setItem('stockrapido:pos-preferences',JSON.stringify({fiscalMode,printEnabled,silentMode}))},[fiscalMode,printEnabled,silentMode,preferencesLoaded]);
+  useEffect(()=>{
+    const saved=readPosSession();
+    if(saved){
+      setCart(saved.cart);
+      setDiscountTotal(saved.discountTotal);
+      setSelectedCustomer(saved.selectedCustomer);
+    }
+    setPosSessionLoaded(true);
+  },[]);
+  useEffect(()=>{
+    if(!posSessionLoaded)return;
+    writePosSession({cart,discountTotal,selectedCustomer});
+  },[cart,discountTotal,selectedCustomer,posSessionLoaded]);
   useEffect(()=>{
     if(fiscalMode!=='factura_c'){setInvoiceAlertBanner(null);return}
     let cancelled=false;
@@ -716,6 +731,7 @@ export default function POSPage() {
         saleSaved = true;
         const paymentLabel = PAYMENT_METHODS.find((i) => i.id === paymentMethod)?.label ?? paymentMethod;
         broadcastCustomerDisplay({ kind: 'success', total, paymentMethod, paymentLabel });
+        clearPosSession();
         setCart([]);
         setDiscountTotal(0);
         setSelectedCustomer(null);
@@ -1000,7 +1016,7 @@ export default function POSPage() {
     setDiscountInput('');
   };
 
-  const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status})});if(!r.ok)throw Error();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
+  const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status})});if(!r.ok)throw Error();clearPosSession();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
   const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);setShowPayment(true)}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
 
   const addManualProduct = () => {
