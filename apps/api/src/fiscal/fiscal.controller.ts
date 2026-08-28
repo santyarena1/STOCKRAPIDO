@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { saleDateRangeFromQuery } from '../common/argentina-date-range';
@@ -61,6 +61,29 @@ export class FiscalController {
   @Post('invoices/batch')
   batchFactura(@CurrentUser() u: User, @Body() body: { saleIds?: string[] }) {
     return this.fiscal.issueFacturaCBatch(u.businessId, body?.saleIds || []);
+  }
+  @Get('external-invoices')
+  externalInvoices(
+    @CurrentUser() u: User,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const lim = limit ? parseInt(limit, 10) : 100;
+    const { from: fromD, to: toD } = saleDateRangeFromQuery(from, to);
+    return this.fiscal.listExternalInvoices(u.businessId, {
+      from: fromD,
+      to: toD,
+      limit: Number.isFinite(lim) && lim > 0 ? lim : 100,
+    });
+  }
+  @Post('external-invoices')
+  createExternalInvoice(@CurrentUser() u: User, @Body() body: { amount?: number; note?: string; invoicedAt?: string }) {
+    return this.fiscal.createExternalInvoice(u.businessId, body ?? {});
+  }
+  @Delete('external-invoices/:id')
+  deleteExternalInvoice(@CurrentUser() u: User, @Param('id') id: string) {
+    return this.fiscal.deleteExternalInvoice(u.businessId, id);
   }
   @Post('test') test(@CurrentUser() u: User) { return this.fiscal.testConnection(u.businessId); }
   @Get('sales/:saleId/receipt') receipt(@CurrentUser() u: User, @Param('saleId') saleId: string, @Query('reveal') reveal?: string) { return this.fiscal.receipt(u.businessId, saleId, reveal === '1' || reveal === 'true'); }

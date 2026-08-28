@@ -54,6 +54,7 @@ model Business {
   stickerOrders       StickerOrder[]
   fiscalConfig        FiscalConfig?
   fiscalDocuments     FiscalDocument[]
+  externalFiscalEntries ExternalFiscalEntry[]
   vendedores          Vendedor[]
   vendedorSessions    VendedorSession[]
   dataBackups          DataBackup[]
@@ -382,6 +383,21 @@ model FiscalDocument {
 
   @@index([businessId, createdAt])
   @@unique([businessId, pointOfSale, receiptType, receiptNumber])
+}
+
+/** Monto facturado fuera del sistema; cuenta para topes/avisos fiscales. */
+model ExternalFiscalEntry {
+  id         String   @id @default(cuid())
+  businessId String
+  amount     Decimal
+  note       String?
+  invoicedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, invoicedAt])
 }
 
 model SaleItem {

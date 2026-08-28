@@ -300,20 +300,32 @@ export class FiscalService {
     const saleCreatedAt: Record<string, Date> = {};
     if (from) saleCreatedAt.gte = from;
     if (to) saleCreatedAt.lte = to;
-    const docs = await this.prisma.fiscalDocument.findMany({
-      where: {
-        businessId,
-        kind: 'FACTURA_C',
-        status: 'AUTHORIZED',
-        ...(from || to
-          ? { sale: { createdAt: saleCreatedAt } }
-          : {}),
-      },
-      select: {
-        creditNoteNumber: true,
-        sale: { select: { totalFinal: true } },
-      },
-    });
+    const invoicedAt: Record<string, Date> = {};
+    if (from) invoicedAt.gte = from;
+    if (to) invoicedAt.lte = to;
+    const [docs, externalEntries] = await Promise.all([
+      this.prisma.fiscalDocument.findMany({
+        where: {
+          businessId,
+          kind: 'FACTURA_C',
+          status: 'AUTHORIZED',
+          ...(from || to
+            ? { sale: { createdAt: saleCreatedAt } }
+            : {}),
+        },
+        select: {
+          creditNoteNumber: true,
+          sale: { select: { totalFinal: true } },
+        },
+      }),
+      this.prisma.externalFiscalEntry.findMany({
+        where: {
+          businessId,
+          ...(from || to ? { invoicedAt } : {}),
+        },
+        select: { amount: true },
+      }),
+    ]);
     let invoicedGross = 0;
     let creditNotes = 0;
     let invoiceCount = 0;
@@ -327,15 +339,20 @@ export class FiscalService {
         voidedCount += 1;
       }
     }
+    const externalTotal = externalEntries.reduce((sum, row) => sum + Number(row.amount), 0);
+    const externalCount = externalEntries.length;
+    const systemNet = invoicedGross - creditNotes;
     return {
       invoiceCount,
       voidedCount,
       activeCount: invoiceCount - voidedCount,
       invoicedGross,
       creditNotes,
-      // Total facturado activo (sin NC). Net = bruto − NC.
-      invoicedActive: invoicedGross - creditNotes,
-      invoicedNet: invoicedGross - creditNotes,
+      externalCount,
+      externalTotal,
+      // Total facturado activo (sistema + externo, sin NC).
+      invoicedActive: systemNet + externalTotal,
+      invoicedNet: systemNet + externalTotal,
     };
   }
 
@@ -390,7 +407,19 @@ export class FiscalService {
 
     const pendingCount = pending.length;
     const pendingTotal = pending.reduce((sum, s) => sum + Number(s.totalFinal), 0);
-    const totalFacturado = invoicedGross - creditNotes;
+    const invoicedAt: Record<string, Date> = {};
+    if (from) invoicedAt.gte = from;
+    if (to) invoicedAt.lte = to;
+    const externalEntries = await this.prisma.externalFiscalEntry.findMany({
+      where: {
+        businessId,
+        ...(from || to ? { invoicedAt } : {}),
+      },
+      select: { amount: true },
+    });
+    const externalTotal = externalEntries.reduce((sum, row) => sum + Number(row.amount), 0);
+    const externalCount = externalEntries.length;
+    const totalFacturado = invoicedGross - creditNotes + externalTotal;
 
     return {
       from: from?.toISOString() ?? null,
@@ -400,10 +429,73 @@ export class FiscalService {
       voidedCount,
       invoicedGross,
       creditNotes,
+      externalCount,
+      externalTotal,
       totalFacturado,
       pendingCount,
       pendingTotal,
     };
+  }
+
+  async listExternalInvoices(
+    businessId: string,
+    opts?: { from?: Date; to?: Date; limit?: number },
+  ) {
+    const limit = opts?.limit && opts.limit > 0 ? Math.min(opts.limit, 500) : 100;
+    const invoicedAt: Record<string, Date> = {};
+    if (opts?.from) invoicedAt.gte = opts.from;
+    if (opts?.to) invoicedAt.lte = opts.to;
+    const rows = await this.prisma.externalFiscalEntry.findMany({
+      where: {
+        businessId,
+        ...(opts?.from || opts?.to ? { invoicedAt } : {}),
+      },
+      orderBy: { invoicedAt: 'desc' },
+      take: limit,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      amount: Number(row.amount),
+      note: row.note,
+      invoicedAt: row.invoicedAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async createExternalInvoice(
+    businessId: string,
+    dto: { amount?: number; note?: string; invoicedAt?: string },
+  ) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
+    const amount = Number(dto.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('El monto debe ser mayor a 0.');
+    }
+    const note = dto.note?.trim() || null;
+    let invoicedAt = new Date();
+    if (dto.invoicedAt?.trim()) {
+      const parsed = parseArgentinaDayEnd(dto.invoicedAt.trim());
+      if (!parsed) throw new BadRequestException('La fecha es inválida.');
+      invoicedAt = parsed;
+    }
+    const row = await this.prisma.externalFiscalEntry.create({
+      data: { businessId, amount, note, invoicedAt },
+    });
+    return {
+      id: row.id,
+      amount: Number(row.amount),
+      note: row.note,
+      invoicedAt: row.invoicedAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  async deleteExternalInvoice(businessId: string, id: string) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
+    const row = await this.prisma.externalFiscalEntry.findFirst({ where: { id, businessId } });
+    if (!row) throw new NotFoundException('Registro no encontrado.');
+    await this.prisma.externalFiscalEntry.delete({ where: { id } });
+    return { ok: true };
   }
 
   async listInvoices(

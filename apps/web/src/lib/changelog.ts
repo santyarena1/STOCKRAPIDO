@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.15',
+    date: '2026-08-28',
+    summary: 'Registrar montos facturados fuera del sistema para el tope fiscal.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Facturas externas por monto',
+        desc: 'En Ventas → Facturas podés cargar un monto que facturaste por fuera del sistema. Suma al total facturado y a los topes mensual/anual, sin emitir comprobante desde StockRápido.',
+      },
+    ],
+  },
+  {
     version: 'v1.14',
     date: '2026-08-28',
     summary: 'Guardar producto vuelve a la lista y el POS recuerda el carrito.',

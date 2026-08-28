@@ -54,6 +54,14 @@ type Customer = { id: string; name: string; balance?: string | number };
 
 type ProductHit = { id: string; name: string; barcode?: string | null };
 
+type ExternalFiscalEntry = {
+  id: string;
+  amount: number;
+  note: string | null;
+  invoicedAt: string;
+  createdAt: string;
+};
+
 const PAYMENT_LABELS: Record<string, string> = {
   efectivo: 'Efectivo',
   tarjeta_debito: 'Tarjeta débito',
@@ -193,7 +201,13 @@ export default function VentasPage() {
     voidedCount: number;
     creditNotes: number;
     invoicedGross: number;
+    externalCount?: number;
+    externalTotal?: number;
   } | null>(null);
+  const [externalEntries, setExternalEntries] = useState<ExternalFiscalEntry[]>([]);
+  const [externalAmount, setExternalAmount] = useState('');
+  const [externalNote, setExternalNote] = useState('');
+  const [externalBusy, setExternalBusy] = useState(false);
   const [invoiceAlert, setInvoiceAlert] = useState<InvoiceAlertStatus | null>(null);
   const [alertForm, setAlertForm] = useState({
     monthEnabled: false,
@@ -304,7 +318,7 @@ export default function VentasPage() {
           facturasView === 'pendientes' ? '/fiscal/invoices/pending' : '/fiscal/invoices';
         const listParams = facturasView === 'pendientes' ? pendingParams : invParams;
 
-        const [salesRes, alertRes, summaryRes] = await Promise.allSettled([
+        const [salesRes, alertRes, summaryRes, externalRes] = await Promise.allSettled([
           api<Sale[]>(listUrl, { params: listParams }),
           fetchInvoiceAlert(0),
           api<{
@@ -315,7 +329,10 @@ export default function VentasPage() {
             voidedCount: number;
             creditNotes: number;
             invoicedGross: number;
+            externalCount?: number;
+            externalTotal?: number;
           }>('/fiscal/invoices/summary', { params: summaryParams }),
+          api<ExternalFiscalEntry[]>('/fiscal/external-invoices', { params: summaryParams }),
         ]);
         const listed =
           salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : [];
@@ -328,6 +345,12 @@ export default function VentasPage() {
         } else {
           setInvoiceSummary(null);
         }
+
+        setExternalEntries(
+          externalRes.status === 'fulfilled' && Array.isArray(externalRes.value)
+            ? externalRes.value
+            : [],
+        );
 
         if (alertRes.status === 'fulfilled') {
           const a = alertRes.value;
@@ -456,6 +479,44 @@ export default function VentasPage() {
       alert(e instanceof Error ? e.message : 'No se pudo facturar el lote.');
     } finally {
       setBatchBusy(false);
+    }
+  };
+
+  const handleAddExternalInvoice = async () => {
+    const amount = parseMoneyInputArs(externalAmount);
+    if (!amount || amount <= 0) {
+      alert('Ingresá un monto mayor a 0.');
+      return;
+    }
+    setExternalBusy(true);
+    try {
+      await api('/fiscal/external-invoices', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount,
+          note: externalNote.trim() || undefined,
+        }),
+      });
+      setExternalAmount('');
+      setExternalNote('');
+      await fetchSales();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo registrar el monto.');
+    } finally {
+      setExternalBusy(false);
+    }
+  };
+
+  const handleDeleteExternalInvoice = async (id: string) => {
+    if (!confirm('¿Quitar este monto del total facturado?')) return;
+    setExternalBusy(true);
+    try {
+      await api(`/fiscal/external-invoices/${id}`, { method: 'DELETE' });
+      await fetchSales();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo eliminar el registro.');
+    } finally {
+      setExternalBusy(false);
     }
   };
 
@@ -733,6 +794,8 @@ export default function VentasPage() {
             const pendingCount = invoiceSummary?.pendingCount ?? 0;
             const activeCount = invoiceSummary?.activeCount ?? 0;
             const creditNotes = invoiceSummary?.creditNotes ?? 0;
+            const externalTotal = invoiceSummary?.externalTotal ?? 0;
+            const externalCount = invoiceSummary?.externalCount ?? 0;
             const monthly = invoiceAlert?.monthly ?? invoiceAlert;
             const yearly = invoiceAlert?.yearly ?? null;
             const anyWarn =
@@ -813,7 +876,8 @@ export default function VentasPage() {
                       {formatMoneyArs(totalFacturado)}
                     </p>
                     <p className="text-xs text-fg-faint mt-1">
-                      {activeCount} factura(s) activa(s)
+                      {activeCount} factura(s) activa(s) en el sistema
+                      {externalCount > 0 ? ` · ${externalCount} externa(s) +${formatMoneyArs(externalTotal)}` : ''}
                       {creditNotes > 0 ? ` · NC −${formatMoneyArs(creditNotes)}` : ''}
                     </p>
                   </div>
@@ -842,6 +906,77 @@ export default function VentasPage() {
               </div>
             );
           })()}
+
+          <div className="rounded-xl border border-hair-soft bg-surface px-4 py-4 space-y-4">
+            <div>
+              <h3 className="font-medium text-fg">Facturado fuera del sistema</h3>
+              <p className="text-xs text-fg-faint mt-0.5">
+                Si emitiste una factura por tu cuenta (sin pasar por StockRápido), cargá solo el monto para que cuente en el total y en tus topes mensual/anual.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-sm text-fg-muted">
+                Monto
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={externalAmount}
+                  onChange={(e) => setExternalAmount(e.target.value)}
+                  placeholder="Ej. 15000"
+                  className="mt-1 block w-full min-w-[140px] rounded-lg border border-hair-soft bg-raised px-3 py-2 font-mono text-fg sm:w-40"
+                />
+              </label>
+              <label className="text-sm text-fg-muted flex-1 min-w-[180px]">
+                Nota <span className="text-fg-faint">(opcional)</span>
+                <input
+                  type="text"
+                  value={externalNote}
+                  onChange={(e) => setExternalNote(e.target.value)}
+                  placeholder="Ej. Factura manual en ARCA"
+                  className="mt-1 block w-full rounded-lg border border-hair-soft bg-raised px-3 py-2 text-fg"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={externalBusy}
+                onClick={() => void handleAddExternalInvoice()}
+                className="rounded-lg btn-brand px-4 py-2 text-sm disabled:opacity-50"
+              >
+                {externalBusy ? 'Guardando…' : 'Registrar monto'}
+              </button>
+            </div>
+            {externalEntries.length > 0 ? (
+              <ul className="divide-y divide-hair-soft rounded-lg border border-hair-soft overflow-hidden">
+                {externalEntries.map((entry) => (
+                  <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 bg-raised px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="font-mono font-semibold tabular-nums text-fg">
+                        {formatMoneyArs(entry.amount)}
+                      </p>
+                      <p className="text-xs text-fg-faint">
+                        {new Date(entry.invoicedAt).toLocaleDateString('es-AR', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                        {entry.note ? ` · ${entry.note}` : ' · Sin nota'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={externalBusy}
+                      onClick={() => void handleDeleteExternalInvoice(entry.id)}
+                      className="rounded-lg border border-hair px-3 py-1.5 text-xs text-fg-muted hover:bg-surface disabled:opacity-50"
+                    >
+                      Quitar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-fg-faint">Todavía no cargaste montos externos en este período.</p>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-hair overflow-hidden">
