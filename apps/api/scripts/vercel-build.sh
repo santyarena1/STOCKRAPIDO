@@ -7,6 +7,7 @@ export NODE_ENV=development
 npm install --include=dev --legacy-peer-deps
 npx prisma@6.19.2 generate
 npx nest build
+node -e "require('./dist/apps/api/src/vercel').default; console.log('vercel handler ok')"
 mkdir -p public
 echo "StockRapido API" > public/index.html
 

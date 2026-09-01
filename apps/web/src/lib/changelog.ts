@@ -36,6 +36,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Límites de catálogo por plan',
         desc: 'Publicar fichas: ilimitado para todos. Importar: BASIC 300/mes; PRO y Premium sin tope. PRO: 1 conexión sync de proveedores.',
       },
+      {
+        tag: 'FIX',
+        title: 'API en Vercel (failed to fetch)',
+        desc: 'Corregido el entrypoint del deploy serverless tras incluir shared/plans en el build. La API vuelve a responder.',
+      },
     ],
   },
   {
