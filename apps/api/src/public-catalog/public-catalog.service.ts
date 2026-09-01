@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertCatalogImportLimit,
-  assertCatalogPublishLimit,
+  assertCatalogShareConsent,
   assertPlanFeatureRead,
   assertProductLimit,
 } from '../billing/plan-guard';
@@ -88,7 +88,7 @@ export class PublicCatalogService {
   }
 
   async publishFromProduct(businessId: string, productId: string) {
-    await assertCatalogPublishLimit(this.prisma, businessId);
+    await assertCatalogShareConsent(this.prisma, businessId);
     const product = await this.prisma.product.findFirst({
       where: { id: productId, businessId },
       include: { category: { select: { name: true } } },
@@ -144,6 +144,7 @@ export class PublicCatalogService {
   }
 
   async importOne(businessId: string, publicProductId: string, price?: number) {
+    await assertCatalogShareConsent(this.prisma, businessId);
     await assertCatalogImportLimit(this.prisma, businessId, 1);
     return this.importOneInternal(businessId, publicProductId, price);
   }
@@ -151,6 +152,7 @@ export class PublicCatalogService {
   async importBatch(businessId: string, publicProductIds: string[]) {
     const ids = [...new Set(publicProductIds)].filter(Boolean);
     if (!ids.length) return { imported: 0, skipped: 0, results: [] };
+    await assertCatalogShareConsent(this.prisma, businessId);
     await assertCatalogImportLimit(this.prisma, businessId, ids.length);
 
     const results: { publicProductId: string; ok: boolean; error?: string }[] = [];

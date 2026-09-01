@@ -34,6 +34,8 @@ model Business {
   billingCycle String    @default("monthly") // monthly | yearly
   trialEndsAt  DateTime?
   planRenewsAt DateTime?
+  /** Aceptación de compartir fichas en catálogo comunitario (sin precios ni stock). */
+  catalogShareConsentAt DateTime?
   /** Wizard de alta: pasos completados, skips, versión de tour. */
   onboarding   Json?
   /** Multisucursal (futuro): agrupa sucursales bajo una organización. */

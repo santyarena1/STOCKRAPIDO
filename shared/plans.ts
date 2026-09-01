@@ -50,7 +50,11 @@ export type PlanDefinition = {
   bullets: string[];
 };
 
+export const CATALOG_SHARE_CONSENT_TEXT =
+  'Acepto que las fichas que publique en el catálogo comunitario compartan solo datos no sensibles (nombre, marca, categoría, código de barras, imagen y atributos del producto). Nunca se comparten precios, costos ni stock.';
+
 export const TRIAL_DAYS = 14;
+
 export const YEARLY_MONTHS_CHARGED = 10;
 
 const BASICO: PlanFeature[] = [
@@ -86,8 +90,8 @@ export const PLAN_CATALOG: PlanDefinition[] = [
       maxUsers: 5,
       maxProducts: 2000,
       maxSyncProviders: 0,
-      maxCatalogPublish: 50,
-      maxCatalogImportPerMonth: 100,
+      maxCatalogPublish: null,
+      maxCatalogImportPerMonth: 300,
       maxBranches: 0,
     },
     bullets: [
@@ -95,7 +99,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
       'Productos, stock, compras a mano y proveedores',
       'Caja, fiado, promos y reportes',
       'Hasta 5 usuarios',
-      'Catálogo comunitario: publicar hasta 50 fichas e importar 100/mes',
+      'Catálogo comunitario: publicar fichas ilimitado, importar hasta 300/mes',
     ],
   },
   {
@@ -108,19 +112,20 @@ export const PLAN_CATALOG: PlanDefinition[] = [
     monthlyPrice: 34900,
     yearlyPrice: 349000,
     cta: 'Sumar facturación',
-    features: [...BASICO, 'fiscal', 'multibranch'],
+    features: [...BASICO, 'fiscal', 'sync', 'multibranch'],
     limits: {
       maxUsers: 5,
       maxProducts: null,
-      maxSyncProviders: 0,
+      maxSyncProviders: 1,
       maxCatalogPublish: null,
-      maxCatalogImportPerMonth: 500,
+      maxCatalogImportPerMonth: null,
       maxBranches: 3,
     },
     bullets: [
       'Todo Mostrador',
       'Factura electrónica AFIP (Factura C)',
-      'Catálogo comunitario sin tope de publicación',
+      'Catálogo comunitario ilimitado',
+      '1 conexión de proveedor sync',
       'Hasta 5 usuarios',
       'Multisucursal (hasta 3 locales, próximamente)',
     ],
@@ -146,7 +151,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
     },
     bullets: [
       'Todo Fiscal, usuarios sin tope',
-      'Sync Tokin, Mondelez y Juntos+',
+      'Sync Tokin, Mondelez y Juntos+ (sin tope de conexiones)',
       'Compras con IA',
       'Catálogo comunitario ilimitado',
       'Multisucursal sin tope (próximamente)',

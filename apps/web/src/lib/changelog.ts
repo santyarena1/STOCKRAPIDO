@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.18',
+    date: '2026-09-01',
+    summary: 'Catálogo comunitario: consentimiento obligatorio y límites de plan ajustados.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Consentimiento de catálogo comunitario',
+        desc: 'Al registrarte aceptás compartir solo datos no sensibles (sin precios ni stock). Cuentas anteriores deben aceptar antes de publicar o importar.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Límites de catálogo por plan',
+        desc: 'Publicar fichas: ilimitado para todos. Importar: BASIC 300/mes; PRO y Premium sin tope. PRO: 1 conexión sync de proveedores.',
+      },
+    ],
+  },
+  {
     version: 'v1.17',
     date: '2026-09-01',
     summary: 'Plataforma premium: planes, catálogo comunitario, onboarding y solo lectura.',

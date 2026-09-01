@@ -11,3 +11,5 @@ export function formatPlanPrice(amount: number): string {
 export function yearlyEquivalentMonthly(plan: { yearlyPrice: number }): number {
   return Math.round(plan.yearlyPrice / 12);
 }
+
+export { CATALOG_SHARE_CONSENT_TEXT } from '../../../../shared/plans';

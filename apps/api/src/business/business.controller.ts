@@ -57,4 +57,10 @@ export class BusinessController {
   ) {
     return this.business.patchOnboarding(user.businessId, body);
   }
+
+  @Post('catalog-share-consent')
+  @SkipReadOnly()
+  acceptCatalogShareConsent(@CurrentUser() user: User) {
+    return this.business.acceptCatalogShareConsent(user.businessId);
+  }
 }

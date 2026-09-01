@@ -27,6 +27,11 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    if (!dto.catalogShareConsent) {
+      throw new BadRequestException(
+        'Tenés que aceptar el uso del catálogo comunitario para crear la cuenta (solo se comparten datos no sensibles, sin precios).',
+      );
+    }
     const hash = await argon2.hash(dto.password, { type: 2 });
     const plan = getPlan(dto.planId || 'mostrador');
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
@@ -40,6 +45,7 @@ export class AuthService {
         billingCycle: 'monthly',
         trialEndsAt,
         planRenewsAt: trialEndsAt,
+        catalogShareConsentAt: new Date(),
         onboarding: {
           completedSteps: [],
           skippedSteps: [],

@@ -237,4 +237,12 @@ export class BusinessService {
 
     return this.getOnboarding(businessId);
   }
+
+  async acceptCatalogShareConsent(businessId: string) {
+    const updated = await this.prisma.business.update({
+      where: { id: businessId },
+      data: { catalogShareConsentAt: new Date() },
+    });
+    return this.sanitize(updated);
+  }
 }

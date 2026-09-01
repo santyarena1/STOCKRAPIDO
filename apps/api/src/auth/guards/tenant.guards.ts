@@ -21,6 +21,7 @@ const WRITE_PREFIX_ALLOW = [
   '/billing/',
   '/support/',
   '/business/onboarding',
+  '/business/catalog-share-consent',
   '/platform/',
 ];
 

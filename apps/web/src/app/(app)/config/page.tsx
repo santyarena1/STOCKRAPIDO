@@ -32,7 +32,7 @@ const SECTIONS = [
     title: 'Integraciones',
     desc: 'Herramientas opcionales según tu plan.',
     items: [
-      { href: '/config/proveedores', label: 'Proveedores / Sync', hint: 'Tokin, Mondelez…', plan: 'PREMIUM' },
+      { href: '/config/proveedores', label: 'Proveedores / Sync', hint: '1 conexión en PRO, ilimitado en Premium', plan: 'PRO' },
       { href: '/config/serper', label: 'Imágenes Serper', hint: 'Fotos desde Google' },
       { href: '/config/compras-ia', label: 'Compras IA', hint: 'PDF de facturas', plan: 'PREMIUM' },
     ],

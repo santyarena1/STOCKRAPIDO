@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/env-urls';
-import { type PlanId } from '@/lib/plans';
+import { CATALOG_SHARE_CONSENT_TEXT, type PlanId } from '@/lib/plans';
 import { LANDING_PLAN_META, landingPlans, resolveLandingPlanId } from '@/lib/landing-copy';
 
 export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
@@ -19,6 +19,7 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
     cuit: '',
     address: '',
     planId,
+    catalogShareConsent: true,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
           cuit: form.cuit || undefined,
           address: form.address || undefined,
           planId: form.planId,
+          catalogShareConsent: form.catalogShareConsent,
         }),
         credentials: 'include',
       });
@@ -107,6 +109,16 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
           ))}
         </select>
       </div>
+      <label className="flex gap-3 rounded-2xl border border-[var(--mk-line)] bg-[var(--mk-paper)] p-3 text-sm text-[var(--mk-ink-2)]">
+        <input
+          type="checkbox"
+          className="mt-1 shrink-0"
+          checked={form.catalogShareConsent}
+          onChange={(e) => setForm((f) => ({ ...f, catalogShareConsent: e.target.checked }))}
+          required
+        />
+        <span>{CATALOG_SHARE_CONSENT_TEXT}</span>
+      </label>
       {error ? <p className="text-sm text-[var(--mk-red-dark)]">{error}</p> : null}
       <button type="submit" disabled={loading} className="mk-cta w-full disabled:opacity-50">
         {loading ? 'Creando…' : `Empezar con ${landing.name}`}

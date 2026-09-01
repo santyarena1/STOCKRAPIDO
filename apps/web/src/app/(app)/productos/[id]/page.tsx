@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { CATALOG_SHARE_CONSENT_TEXT } from '@/lib/plans';
 import { CategorySelector } from '@/components/CategorySelector';
 import { BarcodeField } from '@/components/BarcodeField';
 import { STOCK_REASONS } from '@/components/StockAdjustReasons';
@@ -110,6 +111,7 @@ export default function EditarProductoPage() {
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
   const [publishBusy, setPublishBusy] = useState(false);
+  const [hasCatalogConsent, setHasCatalogConsent] = useState<boolean | null>(null);
   const [silentBusy, setSilentBusy] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [extraOpen, setExtraOpen] = useState<Record<string, boolean>>({});
@@ -263,6 +265,31 @@ export default function EditarProductoPage() {
       setPcBusy(false);
     }
   };
+
+  const publishToCatalog = async () => {
+    if (hasCatalogConsent === false) {
+      const ok = window.confirm(`${CATALOG_SHARE_CONSENT_TEXT}\n\n¿Aceptás y publicás esta ficha?`);
+      if (!ok) return;
+      await api('/business/catalog-share-consent', { method: 'POST' });
+      setHasCatalogConsent(true);
+    }
+    setPublishBusy(true);
+    try {
+      await api(`/public-catalog/publish/${id}`, { method: 'POST' });
+      setSaveMsg('Publicado en catálogo (sin precio)');
+      window.setTimeout(() => setSaveMsg(''), 2500);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo publicar');
+    } finally {
+      setPublishBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    api<{ catalogShareConsentAt?: string | null }>('/business/me')
+      .then((b) => setHasCatalogConsent(Boolean(b.catalogShareConsentAt)))
+      .catch(() => setHasCatalogConsent(false));
+  }, []);
 
   useEffect(() => {
     Promise.allSettled([
@@ -786,19 +813,8 @@ export default function EditarProductoPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={publishBusy}
-              onClick={async () => {
-                setPublishBusy(true);
-                try {
-                  await api(`/public-catalog/publish/${id}`, { method: 'POST' });
-                  setSaveMsg('Publicado en catálogo (sin precio)');
-                  window.setTimeout(() => setSaveMsg(''), 2500);
-                } catch (e) {
-                  alert(e instanceof Error ? e.message : 'No se pudo publicar');
-                } finally {
-                  setPublishBusy(false);
-                }
-              }}
+              disabled={publishBusy || hasCatalogConsent === null}
+              onClick={() => void publishToCatalog()}
               className="rounded-xl border border-hair px-3 py-2 text-xs font-medium text-fg-muted hover:bg-raised disabled:opacity-50"
             >
               {publishBusy ? 'Publicando…' : 'Compartir en catálogo público'}

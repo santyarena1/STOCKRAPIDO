@@ -133,32 +133,31 @@ export async function assertSyncLimit(prisma: PrismaService, businessId: string)
   const max = access.plan.limits.maxSyncProviders;
   if (max === 0) {
     throw new ForbiddenException(
-      `La importación de distribuidores (Tokin, Mondelez, Juntos+) está en el plan Pro. Tu plan actual es ${access.plan.name}.`,
+      `La importación de distribuidores (Tokin, Mondelez, Juntos+) está en el plan Fiscal (PRO) o superior. Tu plan actual es ${access.plan.name}.`,
     );
   }
   if (max == null) return access;
   const count = await prisma.syncConnection.count({ where: { businessId } });
   if (count >= max) {
     throw new ForbiddenException(
-      `Tu plan ${access.plan.name} admite ${max} proveedor sincronizado. El plan Pro habilita Tokin, Mondelez y Juntos+ juntos.`,
+      max === 1
+        ? `Tu plan ${access.plan.name} admite 1 proveedor sincronizado. Pasate a Premium para conectar más.`
+        : `Tu plan ${access.plan.name} admite ${max} proveedores sincronizados.`,
     );
   }
   return access;
 }
 
-export async function assertCatalogPublishLimit(prisma: PrismaService, businessId: string) {
-  const access = await assertWritableTenant(prisma, businessId);
-  const max = access.plan.limits.maxCatalogPublish;
-  if (max == null) return access;
-  const count = await prisma.publicProduct.count({
-    where: { publishedByBusinessId: businessId, status: 'active' },
+export async function assertCatalogShareConsent(prisma: PrismaService, businessId: string) {
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: { catalogShareConsentAt: true },
   });
-  if (count >= max) {
+  if (!business?.catalogShareConsentAt) {
     throw new ForbiddenException(
-      `Tu plan ${access.plan.name} admite publicar hasta ${max} fichas en el catálogo comunitario.`,
+      'Tenés que aceptar compartir fichas en el catálogo comunitario (solo datos no sensibles, sin precios) antes de publicar o importar.',
     );
   }
-  return access;
 }
 
 export async function assertCatalogImportLimit(prisma: PrismaService, businessId: string, qty = 1) {
