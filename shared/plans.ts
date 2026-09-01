@@ -51,7 +51,19 @@ export type PlanDefinition = {
 };
 
 export const CATALOG_SHARE_CONSENT_TEXT =
-  'Acepto que las fichas que publique en el catálogo comunitario compartan solo datos no sensibles (nombre, marca, categoría, código de barras, imagen y atributos del producto). Nunca se comparten precios, costos ni stock.';
+  'Al usar StockRápido, las fichas que publiques en el catálogo comunitario comparten solo datos no sensibles (nombre, marca, categoría, código de barras, imagen y atributos). Nunca se comparten precios, costos ni stock.';
+
+/** Copy para la bienvenida la primera vez que se abre el catálogo comunitario. */
+export const PUBLIC_CATALOG_INTRO = {
+  title: 'Catálogo comunitario',
+  lead: 'Fichas de productos compartidas entre locales de StockRápido, para importar más rápido y armar el inventario.',
+  bullets: [
+    'Importá nombre, marca, categoría, código e imagen (sin precio ni stock).',
+    'Podés publicar tus fichas con “Compartir en catálogo” desde cada producto.',
+    'Solo se comparten datos no sensibles; tus precios y costos quedan en tu negocio.',
+  ],
+  limits: 'Publicar es ilimitado. En BASIC podés importar hasta 300 fichas por mes; PRO y Premium, sin tope.',
+} as const;
 
 export const TRIAL_DAYS = 14;
 

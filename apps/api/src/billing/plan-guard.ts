@@ -148,15 +148,16 @@ export async function assertSyncLimit(prisma: PrismaService, businessId: string)
   return access;
 }
 
-export async function assertCatalogShareConsent(prisma: PrismaService, businessId: string) {
+export async function ensureCatalogShareConsent(prisma: PrismaService, businessId: string) {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
     select: { catalogShareConsentAt: true },
   });
   if (!business?.catalogShareConsentAt) {
-    throw new ForbiddenException(
-      'Tenés que aceptar compartir fichas en el catálogo comunitario (solo datos no sensibles, sin precios) antes de publicar o importar.',
-    );
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { catalogShareConsentAt: new Date() },
+    });
   }
 }
 

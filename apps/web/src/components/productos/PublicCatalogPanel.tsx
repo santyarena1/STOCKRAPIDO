@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { CATALOG_SHARE_CONSENT_TEXT } from '@/lib/plans';
+import { CATALOG_SHARE_CONSENT_TEXT, PUBLIC_CATALOG_INTRO } from '@/lib/plans';
 import { Loader } from '@/components/ui/Loader';
 import { useBilling } from '@/components/billing/BillingProvider';
+
+const INTRO_STORAGE_KEY = 'stockrapido:public-catalog-intro:v1';
 
 type CatalogItem = {
   id: string;
@@ -20,35 +22,32 @@ type CatalogItem = {
 
 export function PublicCatalogPanel() {
   const { readOnly } = useBilling();
-  const [hasConsent, setHasConsent] = useState<boolean | null>(null);
-  const [consentBusy, setConsentBusy] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
   const [q, setQ] = useState('');
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api<{ catalogShareConsentAt?: string | null }>('/business/me')
-      .then((b) => setHasConsent(Boolean(b.catalogShareConsentAt)))
-      .catch(() => setHasConsent(false));
+    try {
+      setShowIntro(localStorage.getItem(INTRO_STORAGE_KEY) !== '1');
+    } catch {
+      setShowIntro(false);
+    }
   }, []);
 
-  const acceptConsent = async () => {
-    setConsentBusy(true);
+  const dismissIntro = () => {
     try {
-      await api('/business/catalog-share-consent', { method: 'POST' });
-      setHasConsent(true);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'No se pudo guardar el consentimiento');
-    } finally {
-      setConsentBusy(false);
+      localStorage.setItem(INTRO_STORAGE_KEY, '1');
+    } catch {
+      /* ignore */
     }
+    setShowIntro(false);
   };
 
   const fetchList = useCallback(async () => {
-    if (!hasConsent) return;
     setLoading(true);
     try {
       const data = await api<{ items: CatalogItem[]; total: number }>('/public-catalog', {
@@ -62,10 +61,9 @@ export function PublicCatalogPanel() {
     } finally {
       setLoading(false);
     }
-  }, [q, hasConsent]);
+  }, [q]);
 
   useEffect(() => {
-    if (hasConsent !== true) return;
     const t = setTimeout(() => void fetchList(), 200);
     return () => clearTimeout(t);
   }, [fetchList]);
@@ -109,33 +107,37 @@ export function PublicCatalogPanel() {
     await importSelected();
   };
 
-  if (hasConsent === null) {
-    return <Loader size="sm" label="Catálogo comunitario" />;
-  }
-
-  if (!hasConsent) {
-    return (
-      <div className="rounded-xl border border-hair-soft bg-surface p-6 max-w-xl">
-        <h2 className="font-semibold text-fg">Catálogo comunitario</h2>
-        <p className="text-sm text-fg-muted mt-2">
-          Para buscar e importar fichas de la comunidad tenés que aceptar compartir solo datos no sensibles de tus productos
-          (nunca precios, costos ni stock).
-        </p>
-        <p className="mt-4 text-sm text-fg-faint border-l-2 border-brand pl-3">{CATALOG_SHARE_CONSENT_TEXT}</p>
-        <button
-          type="button"
-          disabled={consentBusy}
-          onClick={() => void acceptConsent()}
-          className="mt-5 rounded-lg btn-brand px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-        >
-          {consentBusy ? 'Guardando…' : 'Aceptar y continuar'}
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
+      {showIntro && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={dismissIntro}>
+          <div
+            className="w-full max-w-lg rounded-2xl border border-hair bg-surface p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-semibold text-fg">{PUBLIC_CATALOG_INTRO.title}</h2>
+            <p className="mt-2 text-sm text-fg-muted">{PUBLIC_CATALOG_INTRO.lead}</p>
+            <ul className="mt-4 space-y-2 text-sm text-fg-muted">
+              {PUBLIC_CATALOG_INTRO.bullets.map((line) => (
+                <li key={line} className="flex gap-2">
+                  <span className="text-brand">•</span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs text-fg-faint">{PUBLIC_CATALOG_INTRO.limits}</p>
+            <p className="mt-3 text-xs text-fg-faint border-l-2 border-hair pl-3">{CATALOG_SHARE_CONSENT_TEXT}</p>
+            <button
+              type="button"
+              onClick={dismissIntro}
+              className="mt-5 w-full rounded-xl btn-brand px-4 py-2.5 text-sm font-semibold"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl border border-hair-soft bg-surface p-4">
         <h2 className="font-semibold text-fg">Catálogo comunitario</h2>
         <p className="text-sm text-fg-faint mt-1">

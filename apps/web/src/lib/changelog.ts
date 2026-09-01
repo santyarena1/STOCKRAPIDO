@@ -29,7 +29,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'MEJORA',
         title: 'Consentimiento de catálogo comunitario',
-        desc: 'Al registrarte aceptás compartir solo datos no sensibles (sin precios ni stock). Cuentas anteriores deben aceptar antes de publicar o importar.',
+        desc: 'Al usar StockRápido, las fichas que publiques comparten solo datos no sensibles (sin precios ni stock). La primera vez que abrís el catálogo se explica en pantalla.',
       },
       {
         tag: 'MEJORA',
@@ -40,6 +40,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         tag: 'FIX',
         title: 'API en Vercel (failed to fetch)',
         desc: 'Corregido el entrypoint del deploy serverless tras incluir shared/plans en el build. La API vuelve a responder.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Catálogo comunitario sin paso extra de aceptación',
+        desc: 'Compartir fichas queda incluido en el uso de la plataforma. La primera vez que abrís Catálogo público en Productos, un aviso explica cómo funciona.',
       },
     ],
   },

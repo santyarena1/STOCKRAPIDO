@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -27,8 +27,4 @@ export class RegisterDto {
   @IsOptional()
   @IsIn(['mostrador', 'kiosco', 'red'])
   planId?: 'mostrador' | 'kiosco' | 'red';
-
-  /** Obligatorio: aceptar compartir fichas en catálogo comunitario (solo campos no sensibles). */
-  @IsBoolean()
-  catalogShareConsent: boolean;
 }
