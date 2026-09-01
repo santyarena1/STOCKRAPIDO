@@ -113,6 +113,7 @@ const GROUPS = [
       { href: '/config/serper', label: 'Imágenes Serper' },
       { href: '/config/categorias', label: 'Categorías' },
       { href: '/config/fiscal', label: 'Fiscal' },
+      { href: '/config/seguridad', label: 'Seguridad' },
       { href: '/config/eliminar-datos', label: 'Eliminar datos' },
     ],
   },
@@ -297,10 +298,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!ready) return <Loader full label="Cargando" />;
 
-  const handleLogoutAll = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      await fetch(`${getApiBaseUrl()}/auth/logout-all`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  const handleLogout = async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    try {
+      await fetch(`${getApiBaseUrl()}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      /* salir igual si la API no responde */
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
@@ -350,7 +357,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
       </nav>
-      <div className="shrink-0 border-t border-hair-soft p-2"><button type="button" onClick={handleLogoutAll} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-[var(--crit-soft)] hover:text-crit">Cerrar sesión en todos los dispositivos</button></div>
+      <div className="shrink-0 border-t border-hair-soft p-2"><button type="button" onClick={handleLogout} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-raised hover:text-fg">Cerrar sesión</button></div>
     </>
   );
 

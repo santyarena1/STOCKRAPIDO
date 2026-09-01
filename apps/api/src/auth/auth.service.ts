@@ -112,6 +112,24 @@ export class AuthService {
     return { ok: true };
   }
 
+  /** Cierra sesión solo en el dispositivo actual (revoca el refresh token enviado). */
+  async logoutCurrentDevice(refreshToken: string) {
+    if (!refreshToken?.trim()) return { ok: true };
+    try {
+      const payload = this.jwt.verify(refreshToken, {
+        secret: this.config.get('JWT_REFRESH_SECRET') || this.config.get('JWT_SECRET'),
+      });
+      const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: payload.sub, tokenHash, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    } catch {
+      /* token inválido o ya expirado: igual consideramos logout local OK */
+    }
+    return { ok: true };
+  }
+
   async forgotPassword(email: string) {
     const user = await this.prisma.user.findFirst({ where: { email: email.toLowerCase() } });
     if (!user) return { message: 'Si el email existe, recibirás un enlace.' };

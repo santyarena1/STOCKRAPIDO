@@ -49,6 +49,11 @@ export class AuthController {
     return this.auth.me(user);
   }
 
+  @Post('logout')
+  async logout(@Body('refreshToken') refreshToken: string) {
+    return this.auth.logoutCurrentDevice(refreshToken);
+  }
+
   @Post('logout-all')
   @UseGuards(JwtAuthGuard)
   async logoutAll(@CurrentUser() user: { id: string }) {
