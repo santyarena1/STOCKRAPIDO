@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.16',
+    date: '2026-09-01',
+    summary: 'Cerrar sesión solo en este dispositivo.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Cerrar sesión en este dispositivo',
+        desc: 'El botón del menú cierra sesión solo acá. Para cerrar en todos los equipos, andá a Configuración → Seguridad.',
+      },
+    ],
+  },
+  {
     version: 'v1.15',
     date: '2026-08-28',
     summary: 'Registrar montos facturados fuera del sistema para el tope fiscal.',
