@@ -52,6 +52,8 @@ export class BillingService {
       planRenewsAt: access.planRenewsAt,
       trialActive,
       trialDays: TRIAL_DAYS,
+      accessMode: access.accessMode,
+      accessReason: access.accessReason,
       paymentStatus: payment.key,
       paymentStatusLabel: payment.label,
       lastPaidAt: lastPaid?.paidAt ?? null,

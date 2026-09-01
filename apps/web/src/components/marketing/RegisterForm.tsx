@@ -47,7 +47,7 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));
-      router.push('/pos');
+      router.push('/setup');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error de conexión');

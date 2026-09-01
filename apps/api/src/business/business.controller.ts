@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipReadOnly } from '../auth/guards/tenant.guards';
 import { BusinessService } from './business.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UpdateBusinessDto } from './dto/update-business.dto';
@@ -40,5 +41,20 @@ export class BusinessController {
   @Post('categories')
   createCategory(@CurrentUser() user: User, @Body() body: { name: string }) {
     return this.business.createCategory(user.businessId, body.name);
+  }
+
+  @Get('onboarding')
+  @SkipReadOnly()
+  onboarding(@CurrentUser() user: User) {
+    return this.business.getOnboarding(user.businessId);
+  }
+
+  @Patch('onboarding')
+  @SkipReadOnly()
+  patchOnboarding(
+    @CurrentUser() user: User,
+    @Body() body: { completeStep?: string; skipStep?: string; dismissChecklist?: boolean; finish?: boolean },
+  ) {
+    return this.business.patchOnboarding(user.businessId, body);
   }
 }

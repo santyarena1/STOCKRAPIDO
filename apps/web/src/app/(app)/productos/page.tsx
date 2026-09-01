@@ -6,6 +6,7 @@ import { api, getApiBaseUrl } from '@/lib/api';
 import { UnitPriceDisplay } from '@/components/UnitPriceDisplay';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { PublicCatalogPanel } from '@/components/productos/PublicCatalogPanel';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
@@ -141,6 +142,7 @@ export default function ProductosPage() {
   const [hydrated, setHydrated] = useState(false);
   const [filters, setFilters] = usePersistedState<Filters>('sr-filters:productos:catalog', EMPTY_FILTERS);
   const [searchInput, setSearchInput] = useState('');
+  const [sectionTab, setSectionTab] = useState<'inventory' | 'community'>('inventory');
   const [mode, setMode] = useState<'catalog' | 'stock'>('catalog');
   const [view, setView] = useState<'cards' | 'list'>('cards');
   const [showMoreFilters, setShowMoreFilters] = useState(false);
@@ -637,14 +639,24 @@ export default function ProductosPage() {
   return <Container className="space-y-6">
     <PageHeader
       title="Productos"
-      subtitle={view === 'cards' ? 'Tocá un producto para editarlo' : 'Gestioná catálogo, precios, costos y niveles de stock.'}
+      subtitle={sectionTab === 'community' ? 'Importá fichas sin precio del catálogo comunitario.' : view === 'cards' ? 'Tocá un producto para editarlo' : 'Gestioná catálogo, precios, costos y niveles de stock.'}
       actions={
+        sectionTab === 'inventory' ? (
         <>
           <button type="button" disabled={incompleteProducts.length === 0} onClick={() => { setShowIncomplete(true); void loadIncompleteProducts(); }} className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm font-medium text-warn hover:bg-raised2 disabled:cursor-not-allowed disabled:opacity-50">Completar <span className="font-mono tabular-nums">({incompleteProducts.length})</span></button>
           <Link href="/productos/nuevo" data-tour="productos-nuevo" className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold">Nuevo producto</Link>
         </>
+        ) : null
       }
     />
+    <div className="inline-flex rounded-lg border border-hair overflow-hidden">
+      <button type="button" onClick={() => setSectionTab('inventory')} className={`px-4 py-2 text-sm font-semibold ${sectionTab === 'inventory' ? 'bg-brand-highlight text-brand' : 'bg-raised text-fg-muted'}`}>Mi inventario</button>
+      <button type="button" onClick={() => setSectionTab('community')} className={`px-4 py-2 text-sm font-semibold ${sectionTab === 'community' ? 'bg-brand-highlight text-brand' : 'bg-raised text-fg-muted'}`}>Catálogo público</button>
+    </div>
+    {sectionTab === 'community' ? (
+      <PublicCatalogPanel />
+    ) : (
+    <>
     <div className="flex flex-wrap items-center gap-2">
       {view === 'list' && <>
         <a href="#" role="button" onClick={(event) => handleExportStock(event)} className={`${toolBtn} inline-block cursor-pointer select-none no-underline`} style={{ pointerEvents: exporting ? 'none' : undefined, opacity: exporting ? 0.6 : 1 }}>{exporting ? 'Exportando…' : 'Exportar stock'}</a>
@@ -911,5 +923,7 @@ export default function ProductosPage() {
     {showHiddenCategories && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHiddenCategories(false); }}><div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-hair bg-surface p-5 shadow-xl"><div className="mb-4 flex items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-fg">Categorías ocultas</h2><p className="mt-1 text-sm text-fg-muted">No se mostrarán en el catálogo mientras el toggle esté activado.</p></div><button type="button" onClick={() => setShowHiddenCategories(false)} className="text-sm text-fg-muted hover:text-fg">Cerrar</button></div><div className="space-y-2">{facets.categories.length === 0 ? <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">No hay categorías disponibles.</p> : facets.categories.map((category) => <label key={category.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-hair-soft bg-raised px-3 py-2.5 hover:bg-raised2"><input type="checkbox" checked={hiddenCategoryIds.includes(category.id)} onChange={(event) => setHiddenCategoryIds((current) => event.target.checked ? [...new Set([...current, category.id])] : current.filter((id) => id !== category.id))} /><span className="min-w-0 flex-1 text-sm text-fg">{category.name}</span><span className="font-mono text-xs tabular-nums text-fg-faint">{category.count}</span></label>)}</div><div className="mt-5 flex items-center justify-between gap-3 border-t border-hair-soft pt-4"><button type="button" onClick={() => setHiddenCategoryIds([])} className="text-sm text-crit hover:underline">Limpiar selección</button><button type="button" disabled={savingHiddenCategories} onClick={() => void saveHiddenCategories()} className="btn-brand rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">{savingHiddenCategories ? 'Guardando…' : 'Guardar'}</button></div></div></div>}
     {showIncomplete && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowIncomplete(false); }}><div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-hair bg-surface p-5 shadow-xl"><div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-fg">Completar productos</h2><p className="mt-1 text-sm text-fg-muted">Completá los datos básicos y activá el control de stock cuando corresponda.</p></div><button type="button" onClick={() => setShowIncomplete(false)} className="text-sm text-fg-muted hover:text-fg">Cerrar</button></div>{incompleteProducts.length === 0 ? <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-8 text-center text-ok">No hay productos incompletos.</div> : <div className="space-y-3">{incompleteProducts.map((product) => { const draft = incompleteDrafts[product.id] ?? { categoryId: '', brand: '', cost: '', stockControl: false }; const updateDraft = (patch: Partial<IncompleteDraft>) => setIncompleteDrafts((current) => ({ ...current, [product.id]: { ...draft, ...patch } })); return <section key={product.id} className="rounded-xl border border-hair-soft bg-raised p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><strong className="text-fg">{product.name}</strong><p className="font-mono text-xs text-fg-faint">{product.barcode || 'Sin SKU'} · {formatMoneyArs(Number(product.price))}</p></div><span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Incompleto</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs text-fg-muted">Categoría<select value={draft.categoryId} onChange={(event) => updateDraft({ categoryId: event.target.value })} className="mt-1 w-full rounded-lg border border-hair bg-surface px-3 py-2 text-sm text-fg"><option value="">Sin categoría</option>{facets.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label className="text-xs text-fg-muted">Marca<input value={draft.brand} onChange={(event) => updateDraft({ brand: event.target.value })} className="mt-1 w-full rounded-lg border border-hair bg-surface px-3 py-2 text-sm text-fg" /></label><label className="text-xs text-fg-muted">Costo<input value={draft.cost} inputMode="decimal" onChange={(event) => updateDraft({ cost: event.target.value })} className="mt-1 w-full rounded-lg border border-hair bg-surface px-3 py-2 font-mono text-sm tabular-nums text-fg" /></label><label className="flex items-center gap-2 self-end rounded-lg border border-hair bg-surface px-3 py-2.5 text-sm text-fg-muted"><input type="checkbox" checked={draft.stockControl} onChange={(event) => updateDraft({ stockControl: event.target.checked })} />Control de stock</label></div><div className="mt-3 flex justify-end"><button type="button" disabled={savingIncompleteId === product.id} onClick={() => void saveIncompleteProduct(product)} className="btn-brand rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">{savingIncompleteId === product.id ? 'Guardando…' : 'Guardar'}</button></div></section>; })}</div>}</div></div>}
     {labelItems ? <LabelPrintDialog items={labelItems} onClose={() => setLabelItems(null)} /> : null}
+    </>
+    )}
   </Container>;
 }

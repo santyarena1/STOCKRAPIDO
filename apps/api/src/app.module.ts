@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ReadOnlyGuard, RolesGuard } from './auth/guards/tenant.guards';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { BusinessModule } from './business/business.module';
@@ -25,6 +27,7 @@ import { SupportModule } from './support/support.module';
 import { PlatformModule } from './platform/platform.module';
 import { PreciosClarosModule } from './precios-claros/precios-claros.module';
 import { ConsignmentModule } from './consignment/consignment.module';
+import { PublicCatalogModule } from './public-catalog/public-catalog.module';
 
 @Module({
   imports: [
@@ -54,6 +57,11 @@ import { ConsignmentModule } from './consignment/consignment.module';
     PlatformModule,
     PreciosClarosModule,
     ConsignmentModule,
+    PublicCatalogModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ReadOnlyGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

@@ -4,6 +4,33 @@ import { mergePosConfigUpdate, sanitizePosConfigForApi } from './pos-config.util
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
 
+export type OnboardingState = {
+  completedSteps: string[];
+  skippedSteps: string[];
+  tourVersion: number;
+  finishedAt: string | null;
+  dismissedChecklist?: boolean;
+};
+
+export const ONBOARDING_STEPS = ['brand', 'categories', 'first_product', 'open_caja', 'first_sale'] as const;
+
+export function defaultOnboarding(): OnboardingState {
+  return { completedSteps: [], skippedSteps: [], tourVersion: 2, finishedAt: null };
+}
+
+function parseOnboarding(raw: unknown): OnboardingState {
+  const base = defaultOnboarding();
+  if (!raw || typeof raw !== 'object') return base;
+  const o = raw as Partial<OnboardingState>;
+  return {
+    completedSteps: Array.isArray(o.completedSteps) ? o.completedSteps.filter((s) => typeof s === 'string') : [],
+    skippedSteps: Array.isArray(o.skippedSteps) ? o.skippedSteps.filter((s) => typeof s === 'string') : [],
+    tourVersion: typeof o.tourVersion === 'number' ? o.tourVersion : 2,
+    finishedAt: typeof o.finishedAt === 'string' ? o.finishedAt : null,
+    dismissedChecklist: Boolean(o.dismissedChecklist),
+  };
+}
+
 @Injectable()
 export class BusinessService {
   constructor(private prisma: PrismaService) {}
@@ -152,5 +179,62 @@ export class BusinessService {
     return this.prisma.category.create({
       data: { businessId, name },
     });
+  }
+
+  async getOnboarding(businessId: string) {
+    const b = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { onboarding: true },
+    });
+    if (!b) throw new NotFoundException('Negocio no encontrado');
+    const state = parseOnboarding(b.onboarding);
+    const pending = ONBOARDING_STEPS.filter(
+      (s) => !state.completedSteps.includes(s) && !state.skippedSteps.includes(s),
+    );
+    return { ...state, pending, totalSteps: ONBOARDING_STEPS.length };
+  }
+
+  async patchOnboarding(
+    businessId: string,
+    patch: { completeStep?: string; skipStep?: string; dismissChecklist?: boolean; finish?: boolean },
+  ) {
+    const b = await this.prisma.business.findUnique({ where: { id: businessId } });
+    if (!b) throw new NotFoundException('Negocio no encontrado');
+    const state = parseOnboarding(b.onboarding);
+
+    if (patch.completeStep) {
+      if (!ONBOARDING_STEPS.includes(patch.completeStep as (typeof ONBOARDING_STEPS)[number])) {
+        throw new BadRequestException('Paso de onboarding inválido.');
+      }
+      if (!state.completedSteps.includes(patch.completeStep)) {
+        state.completedSteps.push(patch.completeStep);
+      }
+      state.skippedSteps = state.skippedSteps.filter((s) => s !== patch.completeStep);
+    }
+
+    if (patch.skipStep) {
+      if (!ONBOARDING_STEPS.includes(patch.skipStep as (typeof ONBOARDING_STEPS)[number])) {
+        throw new BadRequestException('Paso de onboarding inválido.');
+      }
+      if (!state.skippedSteps.includes(patch.skipStep)) {
+        state.skippedSteps.push(patch.skipStep);
+      }
+    }
+
+    if (patch.dismissChecklist) state.dismissedChecklist = true;
+
+    const allDone = ONBOARDING_STEPS.every(
+      (s) => state.completedSteps.includes(s) || state.skippedSteps.includes(s),
+    );
+    if (patch.finish || allDone) {
+      state.finishedAt = new Date().toISOString();
+    }
+
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: { onboarding: state as object },
+    });
+
+    return this.getOnboarding(businessId);
   }
 }

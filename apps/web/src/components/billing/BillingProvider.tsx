@@ -29,6 +29,8 @@ export type BillingMe = {
   planRenewsAt: string | null;
   trialActive: boolean;
   trialDays: number;
+  accessMode?: 'full' | 'read_only';
+  accessReason?: string | null;
   paymentStatus: string;
   paymentStatusLabel: string;
   lastPaidAt: string | null;
@@ -46,6 +48,7 @@ type BillingContextValue = {
   loading: boolean;
   refresh: () => Promise<void>;
   can: (feature: PlanFeature) => boolean;
+  readOnly: boolean;
 };
 
 const BillingContext = createContext<BillingContextValue>({
@@ -53,6 +56,7 @@ const BillingContext = createContext<BillingContextValue>({
   loading: true,
   refresh: async () => {},
   can: () => true,
+  readOnly: false,
 });
 
 export function BillingProvider({ children }: { children: React.ReactNode }) {
@@ -79,6 +83,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       data,
       loading,
       refresh,
+      readOnly: data?.accessMode === 'read_only',
       can: (feature) => {
         if (!data) return true;
         return hasFeature(data.plan, feature);

@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
+import { ReadOnlyBanner } from '@/components/ReadOnlyBanner';
 import { ChangelogWidget } from '@/components/ChangelogWidget';
 import { BillingProvider, useBilling } from '@/components/billing/BillingProvider';
 import { StockRapidoLogo } from '@/components/brand/StockRapidoLogo';
@@ -407,6 +408,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <ReadOnlyBanner />
           <BillingBanner />
           {children}
         </div>

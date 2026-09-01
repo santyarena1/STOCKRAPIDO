@@ -30,10 +30,15 @@ model Business {
   openaiKeyEncrypted String?
   serperKeyEncrypted String?
   planId       String    @default("mostrador")
-  planStatus   String    @default("active") // trial | active | pending_payment | past_due | canceled
+  planStatus   String    @default("active") // trial | active | pending_payment | past_due | canceled | complimentary
   billingCycle String    @default("monthly") // monthly | yearly
   trialEndsAt  DateTime?
   planRenewsAt DateTime?
+  /** Wizard de alta: pasos completados, skips, versión de tour. */
+  onboarding   Json?
+  /** Multisucursal (futuro): agrupa sucursales bajo una organización. */
+  organizationId String?
+  branchLabel    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -63,6 +68,19 @@ model Business {
   consignmentParties   ConsignmentParty[]
   consignmentLedger    ConsignmentLedgerEntry[]
   consignmentPayments  ConsignmentPayment[]
+  publicProducts       PublicProduct[]
+  catalogImports       CatalogImportLog[]
+  organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+}
+
+/** Agrupación para multisucursal (plan PRO/PREMIUM, futuro). */
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches Business[]
 }
 
 model Invoice {
@@ -177,6 +195,10 @@ model Product {
   allCodes    String?   // todos los códigos concatenados (unidad/display/bulto/ref/sku) para filtrar por cualquiera
   sourceConnectionId String?
   sourceProvider String?
+  /** Ficha publicada en catálogo comunitario (sin precio). */
+  publishToCatalog Boolean @default(false)
+  /** Si se importó desde catálogo público. */
+  sourcePublicProductId String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -589,6 +611,46 @@ model CatalogProduct {
   barcode   String?
   content   String?
   keywords  String?
+}
+
+/** Catálogo comunitario: fichas sin precio ni stock, publicadas por los usuarios. */
+model PublicProduct {
+  id                    String   @id @default(cuid())
+  name                  String
+  brand                 String?
+  category              String?
+  barcode               String?
+  imageUrl              String?
+  unitsPerBox           String?
+  weight                String?
+  format                String?
+  flavor                String?
+  presentation          String?
+  subcategory           String?
+  keywords              String?
+  publishedByBusinessId String
+  status                String   @default("active") // active | hidden
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  publisher Business @relation(fields: [publishedByBusinessId], references: [id], onDelete: Cascade)
+
+  @@index([barcode])
+  @@index([name])
+  @@index([publishedByBusinessId])
+  @@index([status, createdAt])
+}
+
+model CatalogImportLog {
+  id              String   @id @default(cuid())
+  businessId      String
+  publicProductId String
+  localProductId  String?
+  importedAt      DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, importedAt])
 }
 
 // ===== Módulo de Sincronización con APIs de proveedores =====

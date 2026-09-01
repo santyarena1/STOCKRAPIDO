@@ -40,6 +40,12 @@ export class AuthService {
         billingCycle: 'monthly',
         trialEndsAt,
         planRenewsAt: trialEndsAt,
+        onboarding: {
+          completedSteps: [],
+          skippedSteps: [],
+          tourVersion: 2,
+          finishedAt: null,
+        },
       },
     });
     const user = await this.prisma.user.create({

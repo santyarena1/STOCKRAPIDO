@@ -109,6 +109,7 @@ export default function EditarProductoPage() {
   const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, silent: false, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
+  const [publishBusy, setPublishBusy] = useState(false);
   const [silentBusy, setSilentBusy] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [extraOpen, setExtraOpen] = useState<Record<string, boolean>>({});
@@ -781,8 +782,29 @@ export default function EditarProductoPage() {
 
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-hair bg-surface/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <p className="text-sm text-fg-muted">{saveMsg || 'Los cambios se guardan en la ficha local.'}</p>
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={publishBusy}
+              onClick={async () => {
+                setPublishBusy(true);
+                try {
+                  await api(`/public-catalog/publish/${id}`, { method: 'POST' });
+                  setSaveMsg('Publicado en catálogo (sin precio)');
+                  window.setTimeout(() => setSaveMsg(''), 2500);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : 'No se pudo publicar');
+                } finally {
+                  setPublishBusy(false);
+                }
+              }}
+              className="rounded-xl border border-hair px-3 py-2 text-xs font-medium text-fg-muted hover:bg-raised disabled:opacity-50"
+            >
+              {publishBusy ? 'Publicando…' : 'Compartir en catálogo público'}
+            </button>
+            <p className="text-sm text-fg-muted">{saveMsg || 'Sin precio ni stock — solo la ficha.'}</p>
+          </div>
           <button type="submit" form="editar-producto-form" disabled={saving} className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
             {saving ? 'Guardando…' : 'Guardar'}
           </button>

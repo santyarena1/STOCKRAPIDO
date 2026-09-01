@@ -22,6 +22,38 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.17',
+    date: '2026-09-01',
+    summary: 'Plataforma premium: planes, catálogo comunitario, onboarding y solo lectura.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Catálogo comunitario',
+        desc: 'En Productos → Catálogo público importás fichas sin precio (imagen, nombre, código). Podés compartir tus productos desde la ficha con “Publicar en catálogo”.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Configuración inicial',
+        desc: 'Al registrarte, un asistente te guía: nombre, categorías, primer producto, caja y POS. Podés saltear y retomarlo desde Configuración o /setup.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Trial vencido: solo lectura',
+        desc: 'Si termina la prueba o hay pago pendiente, podés ver todo pero no cargar ventas ni editar hasta activar el plan.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Configuración reorganizada',
+        desc: 'El hub de Configuración agrupa Mi kiosco, POS, facturación, integraciones y seguridad.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Tutorial paso a paso',
+        desc: 'El botón Tutorial avanza de a un paso con Siguiente / Anterior en cada pantalla.',
+      },
+    ],
+  },
+  {
     version: 'v1.16',
     date: '2026-09-01',
     summary: 'Cerrar sesión solo en este dispositivo.',

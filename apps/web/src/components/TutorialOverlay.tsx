@@ -117,17 +117,24 @@ export function TutorialOverlay({ open, onClose }: { open: boolean; onClose: () 
   const pathname = usePathname();
   const route = getRouteFromPath(pathname);
   const steps = TOUR_CONFIG[route] ?? [];
+  const [stepIndex, setStepIndex] = useState(0);
   const [measured, setMeasured] = useState<MeasuredStep[]>([]);
   const [viewport, setViewport] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 1920, h: typeof window !== 'undefined' ? window.innerHeight : 1080 });
 
+  useEffect(() => {
+    if (open) setStepIndex(0);
+  }, [open, pathname]);
+
+  const activeSteps = steps.length > 0 ? [steps[Math.min(stepIndex, steps.length - 1)]].filter(Boolean) : [];
+
   const measure = useCallback(() => {
     if (typeof window !== 'undefined') setViewport({ w: window.innerWidth, h: window.innerHeight });
-    if (!open || steps.length === 0) {
+    if (!open || activeSteps.length === 0) {
       setMeasured([]);
       return;
     }
     const next: MeasuredStep[] = [];
-    for (const step of steps) {
+    for (const step of activeSteps) {
       const el = document.querySelector(step.target);
       if (el) {
         const rect = el.getBoundingClientRect();
@@ -135,7 +142,7 @@ export function TutorialOverlay({ open, onClose }: { open: boolean; onClose: () 
       }
     }
     setMeasured(next);
-  }, [open, pathname, steps]);
+  }, [open, pathname, activeSteps, stepIndex]);
 
   useEffect(() => {
     if (!open) return;
@@ -209,12 +216,28 @@ export function TutorialOverlay({ open, onClose }: { open: boolean; onClose: () 
         {measured.length === 0 && steps.length === 0 && (
           <p className="text-slate-400 text-sm">No hay guía visual para esta pantalla.</p>
         )}
-        <p className="text-slate-300 text-sm">Clic en cualquier lado para cerrar</p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-6 py-2.5 rounded-lg btn-brand font-medium"
-        >
+        {steps.length > 0 && (
+          <p className="text-slate-300 text-sm font-mono">
+            Paso {stepIndex + 1} de {steps.length}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {stepIndex > 0 && (
+            <button type="button" onClick={() => setStepIndex((i) => i - 1)} className="px-4 py-2 rounded-lg border border-slate-500 text-slate-200 text-sm">
+              Anterior
+            </button>
+          )}
+          {stepIndex < steps.length - 1 ? (
+            <button type="button" onClick={() => setStepIndex((i) => i + 1)} className="px-4 py-2 rounded-lg btn-brand text-sm font-medium">
+              Siguiente
+            </button>
+          ) : (
+            <button type="button" onClick={onClose} className="px-6 py-2.5 rounded-lg btn-brand font-medium">
+              Listo
+            </button>
+          )}
+        </div>
+        <button type="button" onClick={onClose} className="text-xs text-slate-400 hover:text-slate-200">
           Cerrar tutorial
         </button>
       </div>
