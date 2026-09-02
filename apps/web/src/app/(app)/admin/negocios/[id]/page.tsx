@@ -50,6 +50,11 @@ type Detail = {
     createdAt: string;
   }>;
   tickets: Array<{ id: string; subject: string; status: string; updatedAt: string; user: { name: string } }>;
+  referral?: {
+    code: string | null;
+    referredBy: { id: string; name: string; code: string; monthsLeft: number } | null;
+    referralsMade: Array<{ id: string; businessId: string; name: string; createdAt: string; monthsLeft: number }>;
+  };
   stats: {
     products: number;
     salesTodayCount: number;
@@ -215,6 +220,39 @@ function DetailInner() {
             <p className="w-full text-xs text-fg-faint">Cortesía: el kiosco usa el plan elegido sin pagar. Se anulan comprobantes pendientes y no puede contratar solo.</p>
           ) : null}
         </form>
+      </section>
+
+      <section className="rounded-xl border border-hair-soft bg-surface p-5">
+        <h2 className="font-semibold">Referidos</h2>
+        <p className="mt-1 font-mono text-lg tracking-widest">{data.referral?.code || 'Sin código todavía'}</p>
+        {data.referral?.referredBy ? (
+          <p className="mt-2 text-sm text-fg-muted">
+            Lo invitó{' '}
+            <Link href={`/admin/negocios/${data.referral.referredBy.id}`} className="text-brand hover:underline">
+              {data.referral.referredBy.name}
+            </Link>{' '}
+            ({data.referral.referredBy.code}) · {data.referral.referredBy.monthsLeft} mes
+            {data.referral.referredBy.monthsLeft === 1 ? '' : 'es'} de descuento restantes.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-fg-muted">No se registró con código de otro local.</p>
+        )}
+        {data.referral?.referralsMade?.length ? (
+          <ul className="mt-3 space-y-1.5 text-sm">
+            {data.referral.referralsMade.map((r) => (
+              <li key={r.id} className="flex justify-between gap-2 border-t border-hair-soft pt-2">
+                <Link href={`/admin/negocios/${r.businessId}`} className="text-brand hover:underline">
+                  {r.name}
+                </Link>
+                <span className="text-fg-muted">
+                  {formatWhen(r.createdAt)} · {r.monthsLeft > 0 ? `${r.monthsLeft} meses rest.` : 'cumplido'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-fg-faint">Todavía no trajo locales nuevos.</p>
+        )}
       </section>
 
       <section className="rounded-xl border border-hair-soft bg-surface p-5">

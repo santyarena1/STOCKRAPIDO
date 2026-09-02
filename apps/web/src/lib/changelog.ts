@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.21',
+    date: '2026-09-02',
+    summary: 'Programa de referidos: código por local y $5.000 de descuento por 3 meses para ambos.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Referidos entre locales',
+        desc: 'Cada kiosco tiene un código en Plan y facturación. Si un local nuevo se registra con ese código, ambos reciben $5.000 de descuento por mes durante los primeros 3 meses.',
+      },
+    ],
+  },
+  {
     version: 'v1.20',
     date: '2026-09-02',
     summary: 'Landing actualizada con el catálogo comunitario renovado.',

@@ -96,6 +96,7 @@ const TOUR_CONFIG: Record<string, TourStep[]> = {
   ],
   '/billing': [
     { target: '[data-tour="billing-info"]', label: 'Acá está tu plan (Mostrador, Fiscal o Pro), si estás en prueba y cuántos usuarios usás.', placement: 'bottom' },
+    { target: '[data-tour="billing-referral"]', label: 'Tu código de referidos: invitá otro local y ambos tienen $5.000 off por 3 meses.', placement: 'top' },
   ],
 };
 

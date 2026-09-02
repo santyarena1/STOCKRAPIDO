@@ -69,6 +69,10 @@ export const TRIAL_DAYS = 14;
 
 export const YEARLY_MONTHS_CHARGED = 10;
 
+/** Descuento de referido: $5.000/mes durante 3 meses, para el local nuevo y para quien lo invitó. */
+export const REFERRAL_DISCOUNT_PER_MONTH = 5000;
+export const REFERRAL_DISCOUNT_MONTHS = 3;
+
 const BASICO: PlanFeature[] = [
   'pos',
   'products',

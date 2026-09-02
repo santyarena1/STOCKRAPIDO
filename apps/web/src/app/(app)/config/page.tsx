@@ -41,7 +41,7 @@ const SECTIONS = [
     title: 'Cuenta y seguridad',
     desc: 'Plan, usuarios y sesiones.',
     items: [
-      { href: '/billing', label: 'Plan y facturación', hint: 'Tu suscripción a StockRápido' },
+      { href: '/billing', label: 'Plan y facturación', hint: 'Plan, pagos y código para referir otros locales' },
       { href: '/usuarios', label: 'Usuarios', hint: 'Equipo y roles' },
       { href: '/config/seguridad', label: 'Seguridad', hint: 'Cerrar sesión en todos los dispositivos' },
     ],

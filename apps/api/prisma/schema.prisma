@@ -41,6 +41,8 @@ model Business {
   /** Multisucursal (futuro): agrupa sucursales bajo una organización. */
   organizationId String?
   branchLabel    String?
+  /** Código único para invitar otros locales (ej. K7M3PQ). */
+  referralCode   String?   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -73,6 +75,27 @@ model Business {
   publicProducts       PublicProduct[]
   catalogImports       CatalogImportLog[]
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  referralsMade        Referral[] @relation("ReferralsMade")
+  referralReceived     Referral?  @relation("ReferralReceived")
+}
+
+/** Un local invitó a otro con su código. Ambos tienen $5.000/mes x 3 meses al facturar. */
+model Referral {
+  id                 String   @id @default(cuid())
+  code               String
+  referrerBusinessId String
+  referredBusinessId String   @unique
+  discountAmount     Decimal  @default(5000)
+  months             Int      @default(3)
+  refereeMonthsLeft  Int      @default(3)
+  referrerMonthsLeft Int      @default(3)
+  createdAt          DateTime @default(now())
+
+  referrer Business @relation("ReferralsMade", fields: [referrerBusinessId], references: [id], onDelete: Cascade)
+  referred Business @relation("ReferralReceived", fields: [referredBusinessId], references: [id], onDelete: Cascade)
+
+  @@index([referrerBusinessId])
+  @@index([code])
 }
 
 /** Agrupación para multisucursal (plan PRO/PREMIUM, futuro). */
@@ -91,6 +114,10 @@ model Invoice {
   planId         String
   cycle          String
   amount         Decimal
+  /** Descuento de referidos ya descontado de amount. */
+  discount       Decimal   @default(0)
+  /** Meses de referido aplicados en este comprobante: [{ id, role, months }]. */
+  referralMeta   Json?
   currency       String    @default("ARS")
   status         String    @default("pending") // pending | paid | failed | void
   periodStart    DateTime

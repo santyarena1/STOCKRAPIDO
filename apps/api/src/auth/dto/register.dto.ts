@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -27,4 +27,9 @@ export class RegisterDto {
   @IsOptional()
   @IsIn(['mostrador', 'kiosco', 'red'])
   planId?: 'mostrador' | 'kiosco' | 'red';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  referralCode?: string;
 }

@@ -7,7 +7,7 @@ import { RegisterForm } from '@/components/marketing/RegisterForm';
 
 function RegisterInner() {
   const params = useSearchParams();
-  return <RegisterForm initialPlan={params.get('plan') ?? undefined} />;
+  return <RegisterForm initialPlan={params.get('plan') ?? undefined} initialReferral={params.get('ref') ?? undefined} />;
 }
 
 export default function RegisterPage() {

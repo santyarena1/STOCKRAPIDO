@@ -1,9 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
-import { BillingCycle, getPlan, PLAN_CATALOG, PlanId, planPrice, TRIAL_DAYS } from './plans';
+import { BillingCycle, getPlan, PLAN_CATALOG, PlanId, planPrice, REFERRAL_DISCOUNT_MONTHS, REFERRAL_DISCOUNT_PER_MONTH, TRIAL_DAYS } from './plans';
 import { resolvePlanAccess } from './plan-guard';
+import { ReferralService, referralNotes } from './referral.service';
 
 type AuthUser = { id: string; role: string; businessId: string };
 
@@ -14,6 +16,7 @@ export class BillingService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    private referrals: ReferralService,
   ) {}
 
   listPlans() {
@@ -23,6 +26,11 @@ export class BillingService {
       ivaNote: 'Precios + IVA',
       plans: PLAN_CATALOG,
       transfer: this.transferDetails(),
+      referral: {
+        discountPerMonth: REFERRAL_DISCOUNT_PER_MONTH,
+        months: REFERRAL_DISCOUNT_MONTHS,
+        note: `Si un local nuevo se registra con tu código, ambos reciben $${REFERRAL_DISCOUNT_PER_MONTH.toLocaleString('es-AR')} de descuento por mes durante ${REFERRAL_DISCOUNT_MONTHS} meses.`,
+      },
     };
   }
 
@@ -43,6 +51,7 @@ export class BillingService {
     const lastPaid = invoices.find((inv) => inv.status === 'paid') ?? null;
     const trialActive = access.trialActive;
     const payment = this.paymentStatus(access.status, trialActive, !!pending);
+    const referral = await this.referrals.snapshot(businessId);
     return {
       plan: access.plan,
       planId: access.planId,
@@ -68,6 +77,7 @@ export class BillingService {
       pendingInvoice: pending ? this.serializeInvoice(pending) : null,
       transfer: this.transferDetails(),
       mercadopagoEnabled: Boolean(this.config.get<string>('MP_ACCESS_TOKEN')?.trim()),
+      referral,
     };
   }
 
@@ -83,7 +93,9 @@ export class BillingService {
     const method = dto.method || (this.config.get<string>('MP_ACCESS_TOKEN')?.trim() ? 'mercadopago' : 'transfer');
     const now = new Date();
     const periodEnd = this.periodEnd(now, dto.cycle);
-    const amount = planPrice(plan, dto.cycle);
+    const listPrice = planPrice(plan, dto.cycle);
+    const quoted = await this.referrals.quote(user.businessId, dto.cycle, listPrice);
+    const amount = quoted.amount;
 
     await this.prisma.invoice.updateMany({
       where: { businessId: user.businessId, status: 'pending' },
@@ -96,11 +108,14 @@ export class BillingService {
         planId: plan.id,
         cycle: dto.cycle,
         amount: new Decimal(amount),
+        discount: new Decimal(quoted.discount),
+        referralMeta: quoted.meta ? (quoted.meta as Prisma.InputJsonValue) : Prisma.JsonNull,
         currency: 'ARS',
         status: 'pending',
         periodStart: now,
         periodEnd,
         method,
+        notes: quoted.discount > 0 ? referralNotes(quoted.discount, quoted.meta?.grants ?? []) : null,
       },
     });
 
@@ -125,8 +140,12 @@ export class BillingService {
       transfer: this.transferDetails(),
       message:
         method === 'transfer' || !checkoutUrl
-          ? 'Plan reservado. Transferí el importe y avisanos; lo activamos ni bien impacta.'
-          : 'Te llevamos a Mercado Pago para pagar.',
+          ? quoted.discount > 0
+            ? `Plan reservado con ${quoted.discount.toLocaleString('es-AR')} de descuento por referidos. Transferí el importe y avisanos.`
+            : 'Plan reservado. Transferí el importe y avisanos; lo activamos ni bien impacta.'
+          : quoted.discount > 0
+            ? 'Te llevamos a Mercado Pago para pagar (ya incluye el descuento de referidos).'
+            : 'Te llevamos a Mercado Pago para pagar.',
     };
   }
 
@@ -181,6 +200,7 @@ export class BillingService {
         method: method || invoice.method,
       },
     });
+    await this.referrals.consumePaid(paid);
     const business = await this.prisma.business.findUnique({
       where: { id: invoice.businessId },
       select: { planStatus: true },
@@ -229,6 +249,7 @@ export class BillingService {
     planId: string;
     cycle: string;
     amount: Decimal | { toString(): string } | number;
+    discount?: Decimal | { toString(): string } | number | null;
     currency: string;
     status: string;
     periodStart: Date;
@@ -240,12 +261,15 @@ export class BillingService {
     mpPaymentId?: string | null;
     createdAt: Date;
   }) {
+    const discount = Number(inv.discount ?? 0);
     return {
       id: inv.id,
       planId: inv.planId,
       planName: getPlan(inv.planId).name,
       cycle: inv.cycle,
       amount: Number(inv.amount),
+      discount,
+      listAmount: Number(inv.amount) + (Number.isFinite(discount) ? discount : 0),
       currency: inv.currency,
       status: inv.status,
       periodStart: inv.periodStart,
