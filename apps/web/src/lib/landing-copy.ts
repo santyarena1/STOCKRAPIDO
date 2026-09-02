@@ -38,7 +38,7 @@ export const LANDING_PLAN_META: Record<
       'Productos: stock, costos, vencimientos y ticket',
       'Caja: apertura, cierre, efectivo y Mercado Pago',
       'Compras y proveedores cargados a mano',
-      'Catálogo comunitario: publicar ilimitado, importar hasta 300/mes',
+      'Catálogo comunitario: tarjetas, filtros y paginación (importar hasta 300/mes)',
       'Fiado, promociones, reportes y hasta 5 usuarios',
       'Pantalla del cliente y módulo de figuritas',
     ],
@@ -53,7 +53,7 @@ export const LANDING_PLAN_META: Record<
     bullets: [
       'Todo lo de BASIC',
       'Factura C electrónica desde el POS',
-      'Catálogo comunitario ilimitado (publicar e importar)',
+      'Catálogo comunitario ilimitado: buscar, filtrar e importar fichas',
       '1 conexión sync de proveedor (Tokin, Mondelez, Juntos+)',
       'CUIT, punto de venta y certificado en el sistema',
       'Comprobante interno o Factura C, según el cliente',
@@ -69,7 +69,7 @@ export const LANDING_PLAN_META: Record<
     bullets: [
       'Todo lo de PRO, usuarios sin tope',
       'Sync de proveedores sin tope de conexiones',
-      'Catálogo comunitario ilimitado (publicar e importar)',
+      'Catálogo comunitario ilimitado: buscar, filtrar e importar fichas',
       'Costos B2B, pedidos y cuenta del proveedor',
       'Compras con IA: subís el PDF o la foto',
       'Mapeo de columnas del Excel del mayorista',

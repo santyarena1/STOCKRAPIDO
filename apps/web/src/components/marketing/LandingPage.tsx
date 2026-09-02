@@ -23,6 +23,7 @@ const COMPARE: { feature: PlanFeature; plans: [boolean, boolean, boolean] }[] = 
   { feature: 'customers', plans: [true, true, true] },
   { feature: 'promotions', plans: [true, true, true] },
   { feature: 'reports', plans: [true, true, true] },
+  { feature: 'publicCatalog', plans: [true, true, true] },
   { feature: 'fiscal', plans: [false, true, true] },
   { feature: 'sync', plans: [false, false, true] },
   { feature: 'aiPurchases', plans: [false, false, true] },
@@ -32,7 +33,7 @@ const MODULES = [
   {
     plan: 'BASIC',
     title: 'Para vender todos los días',
-    text: 'Cobrar, bajar stock, cerrar caja, cargar compras, fiado, promos y reportes. El kiosco queda ordenado y el mostrador no se frena.',
+    text: 'Cobrar, bajar stock, cerrar caja, cargar compras, fiado, promos y reportes. Además, en Productos importás fichas del catálogo comunitario (sin precio) con filtros y paginación.',
   },
   {
     plan: 'PRO',
@@ -53,7 +54,7 @@ const WHY = [
   },
   {
     title: 'Todo en un solo lugar',
-    text: 'Ventas, caja, productos, compras y facturación viven juntos. No hace falta entrar a mil plataformas ni copiar datos de un lado al otro.',
+    text: 'Ventas, caja, productos, compras, catálogo comunitario y facturación viven juntos. No hace falta entrar a mil plataformas ni copiar datos de un lado al otro.',
   },
   {
     title: 'Lo hacemos nosotros',
@@ -68,11 +69,15 @@ const FAQ = [
   },
   {
     q: '¿Qué entra en BASIC?',
-    a: 'Cobrar, stock, caja, compras a mano, proveedores, fiado, promos, reportes, figuritas y hasta 5 usuarios. Es el día a día del kiosco. La factura electrónica y las listas de mayoristas van en los planes de arriba.',
+    a: 'Cobrar, stock, caja, compras a mano, proveedores, fiado, promos, reportes, figuritas y hasta 5 usuarios. Incluye el catálogo comunitario en Productos (importar fichas sin precio). La factura electrónica y las listas de mayoristas van en los planes de arriba.',
   },
   {
     q: '¿Y si el cliente pide factura?',
     a: 'Con PRO la emitís desde el mismo cobro (Factura C). El ticket interno sigue para quien no la pide. No tenés que abrir otro programa.',
+  },
+  {
+    q: '¿Qué es el catálogo comunitario?',
+    a: 'En Productos → Catálogo público ves fichas que otros locales comparten (nombre, marca, categoría, código e imagen, sin precio ni stock). Filtrás, paginás e importás a tu inventario. También podés publicar las tuyas. En BASIC: publicar ilimitado e importar hasta 300 fichas por mes; en PRO y PREMIUM, sin tope.',
   },
   {
     q: '¿Tokin, Mondelez o Juntos+ en qué plan están?',
@@ -141,7 +146,8 @@ export function LandingPage() {
         <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">El sistema</p>
         <h2 className="mk-display mt-2 max-w-[18ch] text-4xl sm:text-5xl">Te ordena el día, desde el mostrador.</h2>
         <p className="mt-3 max-w-2xl text-[var(--mk-ink-2)]">
-          Punto de venta, caja, facturación y listas de mayoristas. Todo adentro. Así no te perdés entre mil pantallas.
+          Punto de venta, caja, catálogo comunitario, facturación y listas de mayoristas. Todo adentro. Así no te perdés
+          entre mil pantallas.
         </p>
         <div className="mt-8">
           <ProductDemos />

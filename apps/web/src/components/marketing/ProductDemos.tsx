@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 const TABS = [
   { id: 'pos', label: 'Punto de venta', plan: 'BASIC' },
+  { id: 'catalogo', label: 'Catálogo comunitario', plan: 'BASIC' },
   { id: 'caja', label: 'Caja', plan: 'BASIC' },
   { id: 'factura', label: 'Facturación', plan: 'PRO' },
   { id: 'dist', label: 'Distribuidores', plan: 'PREMIUM' },
@@ -33,6 +34,7 @@ export function ProductDemos() {
       </div>
       <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[var(--mk-line)] bg-white shadow-[0_24px_60px_-28px_rgba(227,28,35,0.35)]">
         {tab === 'pos' ? <PosDemo /> : null}
+        {tab === 'catalogo' ? <CatalogoDemo /> : null}
         {tab === 'caja' ? <CajaDemo /> : null}
         {tab === 'factura' ? <FacturaDemo /> : null}
         {tab === 'dist' ? <DistDemo /> : null}
@@ -84,6 +86,72 @@ function PosDemo() {
         <div className="mt-3 rounded-full bg-[var(--mk-yellow)] py-3 text-center text-sm font-extrabold text-[#2a1412]">
           Cobrar · F4
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CatalogoDemo() {
+  const cards = [
+    { name: 'Coca-Cola 500ml', brand: 'Coca-Cola', cat: 'Bebidas', code: '7790895000994' },
+    { name: 'Oreo 118g', brand: 'Mondelez', cat: 'Golosinas', code: '7622300459433' },
+    { name: 'Bon o Bon 30g', brand: 'Arcor', cat: 'Golosinas', code: '7790040112345' },
+    { name: 'Marlboro box 20', brand: 'Philip Morris', cat: 'Tabaco', code: '7791234567890' },
+    { name: 'Red Bull 250ml', brand: 'Red Bull', cat: 'Bebidas', code: '9002490100090' },
+    { name: 'Lay\'s clásicas 85g', brand: 'Pepsico', cat: 'Snacks', code: '7790310987654' },
+  ];
+
+  return (
+    <div className="p-5 sm:p-7">
+      <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Productos · Catálogo público</p>
+      <h3 className="mt-1 text-2xl font-extrabold">Fichas de la comunidad, listas para importar</h3>
+      <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--mk-ink-2)]">
+        Buscá por nombre o código, filtrá por marca y categoría, y traé fichas sin precio a tu inventario. Tarjetas
+        compactas o lista densa, con paginación para recorrer todo el catálogo.
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-[var(--mk-ink-2)]">
+        <span className="rounded-full bg-[#fff4f0] px-3 py-1.5 ring-1 ring-[var(--mk-line)]">🔍 Buscar</span>
+        <span className="rounded-full bg-[#fff4f0] px-3 py-1.5 ring-1 ring-[var(--mk-line)]">Marca · Categoría</span>
+        <span className="rounded-full bg-[#fff4f0] px-3 py-1.5 ring-1 ring-[var(--mk-line)]">Sin importar</span>
+        <span className="rounded-full bg-[#fff4f0] px-3 py-1.5 ring-1 ring-[var(--mk-line)]">Solo con foto</span>
+        <span className="rounded-full bg-[var(--mk-red)] px-3 py-1.5 text-white">Importar seleccionados</span>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {cards.map((item) => (
+          <div
+            key={item.code}
+            className="overflow-hidden rounded-xl border border-[var(--mk-line)] bg-[#fff4f0]"
+          >
+            <div className="relative flex aspect-[4/3] items-center justify-center bg-white p-2">
+              <span className="absolute left-1.5 top-1.5 h-3 w-3 rounded border border-[var(--mk-line)] bg-white" />
+              <span className="text-2xl font-extrabold text-[var(--mk-ink-3)]">{item.name.slice(0, 2)}</span>
+            </div>
+            <div className="p-2">
+              <p className="line-clamp-2 text-[11px] font-bold leading-tight">{item.name}</p>
+              <p className="mt-0.5 truncate text-[10px] text-[var(--mk-ink-3)]">
+                {item.brand} · {item.cat}
+              </p>
+              <button
+                type="button"
+                className="mt-1.5 w-full rounded-lg bg-[var(--mk-red)] py-1 text-[10px] font-extrabold text-white"
+              >
+                Importar
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#fff4f0] px-3 py-2 text-[11px] font-semibold text-[var(--mk-ink-2)]">
+        <span>
+          Mostrando <span className="font-mono">1–48</span> de <span className="font-mono">1.240</span> fichas
+        </span>
+        <span className="inline-flex gap-1">
+          <span className="rounded-lg border border-[var(--mk-line)] bg-white px-2 py-1">Anterior</span>
+          <span className="rounded-lg border border-[var(--mk-line)] bg-white px-2 py-1">Siguiente</span>
+        </span>
       </div>
     </div>
   );

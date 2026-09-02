@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.20',
+    date: '2026-09-02',
+    summary: 'Landing actualizada con el catálogo comunitario renovado.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Landing con catálogo comunitario',
+        desc: 'La página de inicio muestra la demo del catálogo público (tarjetas, filtros, paginación), lo incluye en la tabla de planes y en las preguntas frecuentes.',
+      },
+    ],
+  },
+  {
     version: 'v1.19',
     date: '2026-09-02',
     summary: 'Catálogo comunitario: historial de importados, aviso de parecidos y modal para completar la ficha.',
