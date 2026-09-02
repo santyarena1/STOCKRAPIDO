@@ -1,24 +1,29 @@
+import type { DeliveryProvider } from '@/lib/delivery';
+
+const BRAND_LOGOS: Record<DeliveryProvider, { src: string; alt: string }> = {
+  rappi: { src: '/delivery/rappi.png', alt: 'Rappi' },
+  pedidosya: { src: '/delivery/pedidosya.png', alt: 'PedidosYa' },
+};
+
 export function RappiIcon({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#FF441F" />
-      <path
-        d="M9 22V10h4.2c3.1 0 5.1 1.7 5.1 4.4 0 1.8-1 3.2-2.6 3.8L19.5 22H15l-2.8-3.2H13V22H9zm4-6.6h.2c1.2 0 1.9-.6 1.9-1.5s-.7-1.5-1.9-1.5H13v3zM20.5 22l3.5-12h3.8L24.3 22h-3.8z"
-        fill="white"
-      />
-    </svg>
-  );
+  return <DeliveryBrandLogo provider="rappi" className={className} />;
 }
 
 export function PedidosYaIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return <DeliveryBrandLogo provider="pedidosya" className={className} />;
+}
+
+export function DeliveryBrandLogo({
+  provider,
+  className = 'h-5 w-5',
+}: {
+  provider: DeliveryProvider;
+  className?: string;
+}) {
+  const { src, alt } = BRAND_LOGOS[provider];
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#FA0050" />
-      <path
-        d="M8 11h16v2.2H13.8L19 22h-3.4l-4.3-7.2v7.2H8V11zm14.8 0H24l-3.2 5.4L24 22h-3.2l-2.1-3.6L16.6 22h-3.2l4.8-8.1L13.4 11h3.2l2.1 3.5L21.2 11z"
-        fill="white"
-      />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} className={`inline-block object-contain ${className}`} />
   );
 }
 

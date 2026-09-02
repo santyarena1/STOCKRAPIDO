@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, Package, RefreshCw, Store, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
@@ -61,33 +61,47 @@ function ProviderStatCard({
 export default function DeliveryHubPage() {
   const [stats, setStats] = useState<HubStats | null>(null);
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [provider, setProvider] = useState<string>('');
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [provider, setProvider] = useState('');
   const [status, setStatus] = useState('');
+  const hasLoadedRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [hub, list] = await Promise.all([
-        api<HubStats>('/delivery/hub/stats'),
-        api<{ items: DeliveryOrder[] }>('/delivery/orders', {
-          params: {
-            provider: provider || undefined,
-            status: status || undefined,
-            limit: '60',
-          },
-        }),
-      ]);
-      setStats(hub);
-      setOrders(list.items);
-    } finally {
-      setLoading(false);
-    }
-  }, [provider, status]);
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? hasLoadedRef.current;
+      if (silent) setRefreshing(true);
+      else setInitialLoading(true);
+      try {
+        const [hub, list] = await Promise.all([
+          api<HubStats>('/delivery/hub/stats'),
+          api<{ items: DeliveryOrder[] }>('/delivery/orders', {
+            params: {
+              provider: provider || undefined,
+              status: status || undefined,
+              limit: '60',
+            },
+          }),
+        ]);
+        setStats(hub);
+        setOrders(list.items);
+        hasLoadedRef.current = true;
+      } finally {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [provider, status],
+  );
 
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), 30000);
+  }, [load]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') void load({ silent: true });
+    }, 60000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -100,11 +114,12 @@ export default function DeliveryHubPage() {
           actions={
             <button
               type="button"
-              onClick={() => void load()}
-              className="inline-flex items-center gap-2 rounded-xl border border-hair bg-raised px-4 py-2.5 text-sm font-medium text-fg hover:bg-raised2"
+              onClick={() => void load({ silent: true })}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl border border-hair bg-raised px-4 py-2.5 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-60"
             >
-              <RefreshCw className="h-4 w-4" />
-              Actualizar
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Actualizando…' : 'Actualizar'}
             </button>
           }
         />
@@ -187,10 +202,10 @@ export default function DeliveryHubPage() {
             </select>
           </div>
 
-          {loading ? (
+          {initialLoading ? (
             <Loader label="Pedidos delivery" />
           ) : (
-            <DeliveryOrderBoard orders={orders} onRefresh={load} showProvider />
+            <DeliveryOrderBoard orders={orders} onRefresh={() => load({ silent: true })} showProvider />
           )}
         </section>
       </Container>
