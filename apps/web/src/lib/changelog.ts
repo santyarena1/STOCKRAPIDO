@@ -22,6 +22,28 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.22',
+    date: '2026-09-02',
+    summary: 'Delivery end-to-end: publicar catálogo, precios con comisión y requisitos en productos.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Tab Publicar en Rappi y PedidosYa',
+        desc: 'Elegí categorías y productos, editá la ficha por plataforma, validá y enviá el catálogo con precio calculado (margen + comisión).',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Requisitos delivery en productos',
+        desc: 'En la ficha y en la lista ves qué campos son obligatorios o recomendados para cada app activa (Rappi / PedidosYa).',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Conexión por plataforma',
+        desc: 'Formularios distintos y útiles: Rappi (Store ID + OAuth) y PedidosYa (Chain + Vendor + API Key). Incluye margen y comisión.',
+      },
+    ],
+  },
+  {
     version: 'v1.21',
     date: '2026-09-02',
     summary: 'Módulo completo de delivery: Rappi, PedidosYa y central de pedidos.',

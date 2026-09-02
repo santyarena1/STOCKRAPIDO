@@ -11,7 +11,11 @@ import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
 import { autoAssignSerperPhotos, formatSerperAutoResult, type PhotoProduct } from '@/lib/serper-client';
-import { DeliveryProductReadinessBadges, type ProductDeliveryReadiness } from '@/components/delivery/DeliveryProductReadiness';
+import {
+  DeliveryProductReadinessBadges,
+  DeliveryProductReadinessInline,
+  type ProductDeliveryReadiness,
+} from '@/components/delivery/DeliveryProductReadiness';
 import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, ImageIcon, List, Printer, Search, SlidersHorizontal } from 'lucide-react';
 
 type Product = {
@@ -637,7 +641,7 @@ export default function ProductosPage() {
   const renderCell = (product: Product, key: ColumnKey): ReactNode => {
     const cost = product.cost == null ? null : Number(product.cost); const price = Number(product.price); const margin = cost == null ? null : price - cost;
     if (key === 'image') return product.imageUrl ? <img src={product.imageUrl} alt="" className="h-10 w-10 rounded-lg bg-raised2 object-contain" /> : <div className="h-10 w-10 rounded-lg bg-raised2" />;
-    if (key === 'name') return <div><div className="flex flex-wrap items-center gap-2"><Link href={`/productos/${product.id}`} className="font-semibold text-fg hover:text-brand hover:underline">{product.name}</Link>{product.incomplete && <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-warn">Incompleto</span>}{product.silent && <span title="Producto silencioso: en el ticket sale con el texto configurado" className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand">PS</span>}<DeliveryProductReadinessBadges providers={deliveryReadiness[product.id] ?? []} compact /></div><span className="block font-mono text-xs tabular-nums text-fg-faint">{[product.barcode, product.unitsPerBox ? `x${product.unitsPerBox}` : null].filter(Boolean).join(' · ')}</span></div>;
+    if (key === 'name') return <div><div className="flex flex-wrap items-center gap-2"><Link href={`/productos/${product.id}`} className="font-semibold text-fg hover:text-brand hover:underline">{product.name}</Link>{product.incomplete && <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-warn">Incompleto</span>}{product.silent && <span title="Producto silencioso: en el ticket sale con el texto configurado" className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand">PS</span>}<DeliveryProductReadinessBadges providers={deliveryReadiness[product.id] ?? []} compact /></div><span className="block font-mono text-xs tabular-nums text-fg-faint">{[product.barcode, product.unitsPerBox ? `x${product.unitsPerBox}` : null].filter(Boolean).join(' · ')}</span><DeliveryProductReadinessInline providers={deliveryReadiness[product.id] ?? []} /></div>;
     if (key === 'origin') return product.sourceProvider ? <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="text-fg-faint">—</span>;
     if (key === 'sku') return <span className="font-mono text-xs text-fg-muted">{product.supplierSku || '—'}</span>;
     if (key === 'category') return <span className="text-fg-muted">{product.category?.name || '—'}</span>;
@@ -826,6 +830,7 @@ export default function ProductosPage() {
           <div className="flex flex-1 flex-col p-4">
             <h2 className="min-h-12 overflow-hidden text-base font-semibold leading-6 text-fg [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{product.name}</h2>
             <p className="mt-1 truncate text-sm text-fg-faint">{product.category?.name || 'Sin categoría'} · {product.brand || 'Sin marca'}</p>
+            <DeliveryProductReadinessInline providers={deliveryReadiness[product.id] ?? []} />
             {product.points != null && <span className="mt-2 self-start rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 font-mono text-xs text-warn">★ {product.points} pts</span>}
             <div className="mt-4 flex items-end justify-between gap-3 border-t border-hair-soft pt-4"><span className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(Number(product.price))}</span><span className="flex items-center gap-2 text-sm text-fg-muted"><span className={`h-2.5 w-2.5 rounded-full ${lowStock ? 'bg-warn' : 'bg-ok'}`} /><span className="font-mono tabular-nums">{product.stock}</span></span></div>
             <span className="mt-4 block w-full rounded-xl border border-hair bg-raised px-4 py-2.5 text-center text-sm font-semibold text-fg-muted transition-colors group-hover:border-[color:var(--brand-accent)] group-hover:bg-brand-highlight-soft group-hover:text-brand">Editar</span>

@@ -104,6 +104,35 @@ export const DELIVERY_FIELD_REQUIREMENTS: Record<DeliveryProviderId, DeliveryFie
   pedidosya: PEDIDOSYA_REQUIREMENTS,
 };
 
+/** Dónde completar cada campo en StockRápido (producto local vs ficha delivery). */
+export const DELIVERY_FIELD_WHERE: Record<DeliveryFieldSource, string> = {
+  name: 'Producto → Nombre',
+  barcode: 'Producto → Código de barras (o SKU / ID externo)',
+  supplierSku: 'Producto → SKU proveedor',
+  externalId: 'Producto → ID externo',
+  price: 'Producto → Precio venta',
+  cost: 'Producto → Costo unitario',
+  categoryId: 'Producto → Categoría',
+  categoryName: 'Producto → Categoría',
+  brand: 'Producto → Marca',
+  imageUrl: 'Producto → Imagen',
+  iva: 'Producto → IVA (datos proveedor o acción masiva)',
+  weight: 'Producto → Peso (logística)',
+  presentation: 'Producto → Presentación',
+  description: 'Delivery → Publicar → descripción larga',
+  shortDescription: 'Producto → Presentación/marca, o Delivery → Publicar → descripción',
+  platformCategoryId: 'Delivery → Publicar → categoría de la app',
+  platformCategoryName: 'Delivery → Publicar → categoría de la app',
+  listPrice: 'Se calcula con margen + comisión (Delivery → Conexión)',
+  isActive: 'Producto activo en inventario',
+  stock: 'Stock disponible (o desactivar control de stock)',
+  stockControl: 'Producto → Controlar stock',
+};
+
+export function deliveryFieldWhere(key: DeliveryFieldSource): string {
+  return DELIVERY_FIELD_WHERE[key] ?? 'Producto o Delivery → Publicar';
+}
+
 export function deliveryProviderLabel(provider: DeliveryProviderId): string {
   return provider === 'rappi' ? 'Rappi' : 'PedidosYa';
 }
