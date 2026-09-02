@@ -41,6 +41,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Modal para completar al importar',
         desc: 'Podés cargar código de barras, marca, categoría, precio de venta y costo al importar. Todo opcional: podés importar y completar después.',
       },
+      {
+        tag: 'MEJORA',
+        title: 'Catálogo público en tarjetas',
+        desc: 'Las fichas del catálogo comunitario y el historial de importados se muestran en formato tarjeta, con imagen grande y acciones claras.',
+      },
     ],
   },
   {

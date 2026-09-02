@@ -252,51 +252,84 @@ export function PublicCatalogPanel() {
               No hay resultados. Probá otra búsqueda o publicá productos desde tus fichas.
             </p>
           ) : (
-            <ul className="divide-y divide-hair-soft rounded-xl border border-hair-soft overflow-hidden">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4">
               {items.map((item) => (
-                <li key={item.id} className="flex flex-wrap items-center gap-3 bg-raised px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(item.id)}
-                    disabled={item.alreadyImported}
-                    onChange={() => {
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(item.id)) next.delete(item.id);
-                        else next.add(item.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  {item.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.imageUrl} alt="" className="h-12 w-12 rounded object-contain bg-surface" />
-                  ) : (
-                    <div className="h-12 w-12 rounded bg-surface border border-hair-soft" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-fg truncate">{item.name}</p>
-                    <p className="text-xs text-fg-faint">
-                      {[item.brand, item.category, item.barcode].filter(Boolean).join(' · ') || 'Sin datos extra'}
-                    </p>
+                <article
+                  key={item.id}
+                  className={`group flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm transition duration-200 ${
+                    selected.has(item.id)
+                      ? 'border-[color:var(--brand-accent)] shadow-md'
+                      : 'border-hair-soft hover:-translate-y-0.5 hover:border-[color:var(--brand-accent)] hover:shadow-lg'
+                  }`}
+                >
+                  <div className="relative aspect-square overflow-hidden bg-raised p-5">
+                    <label className="absolute left-3 top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-hair bg-surface/90 backdrop-blur">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(item.id)}
+                        disabled={item.alreadyImported}
+                        onChange={() => {
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item.id)) next.delete(item.id);
+                            else next.add(item.id);
+                            return next;
+                          });
+                        }}
+                        className="h-4 w-4"
+                      />
+                    </label>
+                    {item.alreadyImported && (
+                      <span className="absolute right-3 top-3 z-10 rounded-md border border-ok/40 bg-[var(--ok-soft)] px-2 py-1 text-xs font-semibold text-ok backdrop-blur">
+                        Importado
+                      </span>
+                    )}
+                    {item.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-xl border border-hair-soft bg-surface text-5xl font-bold text-fg-faint">
+                        {item.name.trim().slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                   </div>
-                  {item.alreadyImported && item.localProductId ? (
-                    <Link href={`/productos/${item.localProductId}`} className="text-xs text-brand hover:underline">
-                      En tu inventario
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={readOnly || busyId === item.id}
-                      onClick={() => openImport(item.id)}
-                      className="rounded-lg border border-hair px-3 py-1.5 text-xs font-medium hover:bg-surface disabled:opacity-50"
-                    >
-                      Importar
-                    </button>
-                  )}
-                </li>
+                  <div className="flex flex-1 flex-col p-4">
+                    <h3 className="min-h-12 overflow-hidden text-base font-semibold leading-6 text-fg [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                      {item.name}
+                    </h3>
+                    <p className="mt-1 truncate text-sm text-fg-faint">
+                      {[item.category, item.brand].filter(Boolean).join(' · ') || 'Sin categoría ni marca'}
+                    </p>
+                    {item.barcode && (
+                      <p className="mt-1 truncate font-mono text-xs text-fg-faint">{item.barcode}</p>
+                    )}
+                    <div className="mt-4 border-t border-hair-soft pt-4">
+                      {item.alreadyImported && item.localProductId ? (
+                        <Link
+                          href={`/productos/${item.localProductId}`}
+                          className="block w-full rounded-xl border border-hair bg-raised px-4 py-2.5 text-center text-sm font-semibold text-brand transition-colors hover:border-[color:var(--brand-accent)] hover:bg-brand-highlight-soft"
+                        >
+                          Ver en inventario
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={readOnly || busyId === item.id}
+                          onClick={() => openImport(item.id)}
+                          className="w-full rounded-xl btn-brand px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+                        >
+                          Importar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
               ))}
-            </ul>
+            </div>
           )}
         </>
       ) : (
@@ -312,32 +345,45 @@ export function PublicCatalogPanel() {
           ) : history.length === 0 ? (
             <p className="p-8 text-center text-sm text-fg-faint">Todavía no importaste fichas del catálogo.</p>
           ) : (
-            <ul className="divide-y divide-hair-soft">
-              {history.map((row) => (
-                <li key={row.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-raised">
-                  {row.publicProduct?.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={row.publicProduct.imageUrl} alt="" className="h-10 w-10 rounded object-contain bg-surface" />
-                  ) : (
-                    <div className="h-10 w-10 rounded bg-surface border border-hair-soft" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-fg truncate">
-                      {row.localProduct?.name || row.publicProduct?.name || 'Producto'}
-                    </p>
-                    <p className="text-xs text-fg-faint">
-                      {new Date(row.importedAt).toLocaleString('es-AR')}
-                      {row.publicProduct?.barcode ? ` · ${row.publicProduct.barcode}` : ''}
-                    </p>
-                  </div>
-                  {row.localProduct?.id && (
-                    <Link href={`/productos/${row.localProduct.id}`} className="text-xs text-brand hover:underline">
-                      Ver producto
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 p-4">
+              {history.map((row) => {
+                const name = row.localProduct?.name || row.publicProduct?.name || 'Producto';
+                return (
+                  <article
+                    key={row.id}
+                    className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-hair-soft bg-raised transition hover:border-[color:var(--brand-accent)] hover:shadow-md"
+                  >
+                    <div className="relative aspect-[4/3] overflow-hidden bg-surface p-3">
+                      {row.publicProduct?.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={row.publicProduct.imageUrl} alt={name} className="h-full w-full object-contain" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-fg-faint">
+                          {name.trim().slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-1 flex-col p-3">
+                      <p className="truncate text-sm font-semibold text-fg">{name}</p>
+                      <p className="mt-1 text-xs text-fg-faint">
+                        {new Date(row.importedAt).toLocaleString('es-AR')}
+                      </p>
+                      {row.publicProduct?.barcode && (
+                        <p className="mt-0.5 truncate font-mono text-[11px] text-fg-faint">{row.publicProduct.barcode}</p>
+                      )}
+                      {row.localProduct?.id && (
+                        <Link
+                          href={`/productos/${row.localProduct.id}`}
+                          className="mt-3 block rounded-lg border border-hair bg-surface px-3 py-2 text-center text-xs font-semibold text-brand hover:bg-brand-highlight-soft"
+                        >
+                          Ver producto
+                        </Link>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
