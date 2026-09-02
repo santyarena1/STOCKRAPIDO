@@ -37,9 +37,9 @@ export const CHANGELOG: ChangelogVersion[] = [
         desc: 'Cada plataforma tiene su módulo: conexión API, webhook, menú, mapeos SKU, simulador y control de tienda abierta/cerrada.',
       },
       {
-        tag: 'MEJORA',
-        title: 'Landing con delivery integrado',
-        desc: 'La página de inicio muestra la demo de Rappi y PedidosYa, la tabla de planes y preguntas frecuentes sobre la central de pedidos.',
+        tag: 'FIX',
+        title: 'Delivery sin recarga molesta',
+        desc: 'La central y los módulos ya no muestran el loader completo cada 30 segundos. Los pedidos se actualizan en segundo plano sin interrumpir lo que estás haciendo.',
       },
     ],
   },

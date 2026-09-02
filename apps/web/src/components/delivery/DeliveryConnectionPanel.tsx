@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Copy, KeyRound, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
@@ -77,6 +77,38 @@ function FieldInput({
   );
 }
 
+function formFromIntegration(
+  provider: DeliveryProvider,
+  integration: DeliveryIntegration | null,
+): FormState {
+  const schema = DELIVERY_CONNECTION_SCHEMA[provider];
+  return {
+    root: {
+      enabled: integration?.enabled ?? false,
+      storeExternalId: integration?.storeExternalId ?? '',
+      chainExternalId: integration?.chainExternalId ?? '',
+      countryCode: integration?.countryCode ?? 'AR',
+      prepMinutesDefault: integration?.prepMinutesDefault ?? 15,
+      autoAccept: integration?.autoAccept ?? false,
+      autoConfirmSale: integration?.autoConfirmSale ?? true,
+    },
+    config: Object.fromEntries(
+      schema.configFields.map((f) => [
+        f.key,
+        String(
+          (integration?.config as Record<string, unknown>)?.[f.key] ??
+            (provider === 'rappi' && f.key === 'environment'
+              ? 'sandbox'
+              : provider === 'pedidosya' && f.key === 'environment'
+                ? 'staging'
+                : (f.options?.[0]?.value ?? '')),
+        ),
+      ]),
+    ),
+    credentials: Object.fromEntries(schema.credentialFields.map((f) => [f.key, ''])),
+  };
+}
+
 export function DeliveryConnectionPanel({
   provider,
   integration,
@@ -92,21 +124,11 @@ export function DeliveryConnectionPanel({
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
 
-  const [form, setForm] = useState<FormState>(() => ({
-    root: {
-      enabled: integration?.enabled ?? false,
-      storeExternalId: integration?.storeExternalId ?? '',
-      chainExternalId: integration?.chainExternalId ?? '',
-      countryCode: integration?.countryCode ?? 'AR',
-      prepMinutesDefault: integration?.prepMinutesDefault ?? 15,
-      autoAccept: integration?.autoAccept ?? false,
-      autoConfirmSale: integration?.autoConfirmSale ?? true,
-    },
-    config: Object.fromEntries(
-      schema.configFields.map((f) => [f.key, String((integration?.config as Record<string, unknown>)?.[f.key] ?? f.options?.[0]?.value ?? '')]),
-    ),
-    credentials: Object.fromEntries(schema.credentialFields.map((f) => [f.key, ''])),
-  }));
+  const [form, setForm] = useState<FormState>(() => formFromIntegration(provider, integration));
+
+  useEffect(() => {
+    setForm(formFromIntegration(provider, integration));
+  }, [provider, integration?.id, integration?.enabled, integration?.storeExternalId, integration?.chainExternalId]);
 
   const webhookUrl = useMemo(() => {
     if (!integration?.webhookToken) return '';
@@ -137,7 +159,7 @@ export function DeliveryConnectionPanel({
         body: JSON.stringify({
           enabled: form.root.enabled,
           storeExternalId: form.root.storeExternalId,
-          chainExternalId: provider === 'pedidosya' ? form.root.chainExternalId : undefined,
+          chainExternalId: provider === 'pedidosya' ? form.root.chainExternalId : null,
           countryCode: form.root.countryCode,
           autoAccept: form.root.autoAccept,
           autoConfirmSale: form.root.autoConfirmSale,
