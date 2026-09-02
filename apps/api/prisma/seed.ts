@@ -156,6 +156,21 @@ async function main() {
     console.log('Negocio y usuarios creados.');
   }
 
+  if (business && !business.referralCode) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = 'DEMOK1';
+    for (let i = 0; i < 8; i++) {
+      const taken = await prisma.business.findFirst({ where: { referralCode: code }, select: { id: true } });
+      if (!taken || taken.id === business.id) break;
+      code = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+    }
+    business = await prisma.business.update({
+      where: { id: business.id },
+      data: { referralCode: code },
+    });
+    console.log('Código de referido del demo:', business.referralCode);
+  }
+
   const count = await prisma.product.count({ where: { businessId: business!.id } });
   if (count < 50) {
     const catMap = new Map<string, string>();

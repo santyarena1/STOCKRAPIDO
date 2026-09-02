@@ -1,18 +1,27 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BillingService } from './billing.service';
+import { ReferralService } from './referral.service';
 import { SubscribeDto } from './dto/subscribe.dto';
 
 type AuthUser = { id: string; role: string; businessId: string };
 
 @Controller('billing')
 export class BillingController {
-  constructor(private billing: BillingService) {}
+  constructor(
+    private billing: BillingService,
+    private referrals: ReferralService,
+  ) {}
 
   @Get('plans')
   plans() {
     return this.billing.listPlans();
+  }
+
+  @Get('referral/:code')
+  lookupReferral(@Param('code') code: string) {
+    return this.referrals.lookup(code);
   }
 
   @Get('me')

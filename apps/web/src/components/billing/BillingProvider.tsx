@@ -10,6 +10,8 @@ export type BillingInvoice = {
   planName: string;
   cycle: string;
   amount: number;
+  discount?: number;
+  listAmount?: number;
   currency: string;
   status: string;
   periodStart: string;
@@ -18,6 +20,25 @@ export type BillingInvoice = {
   method: string | null;
   notes: string | null;
   createdAt: string;
+};
+
+export type BillingReferral = {
+  code: string;
+  shareUrl: string;
+  discountPerMonth: number;
+  discountMonths: number;
+  referredBy: { businessName: string; code: string; monthsLeft: number } | null;
+  referralsMade: Array<{
+    id: string;
+    businessName: string;
+    createdAt: string;
+    monthsLeft: number;
+  }>;
+  activeDiscount: {
+    monthlyAmount: number;
+    monthsLeftAsReferee: number;
+    monthsLeftAsReferrer: number;
+  };
 };
 
 export type BillingMe = {
@@ -41,6 +62,7 @@ export type BillingMe = {
   pendingInvoice: BillingInvoice | null;
   transfer: { alias: string; cbu: string; cuit: string; whatsapp: string; holder: string };
   mercadopagoEnabled: boolean;
+  referral?: BillingReferral | null;
 };
 
 type BillingContextValue = {

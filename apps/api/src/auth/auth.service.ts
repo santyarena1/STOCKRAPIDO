@@ -9,6 +9,8 @@ import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { jwtDurationToSeconds, parseJwtDurationToMs } from './jwt-duration.util';
 import { getPlan, TRIAL_DAYS } from '../billing/plans';
+import { ReferralService } from '../billing/referral.service';
+import { generateReferralCode } from '../billing/referral.util';
 import { userIsPlatformAdmin } from '../platform/platform-access';
 import { PLATFORM_ADMIN_LOGIN, PLATFORM_ADMIN_PASSWORD, ensurePlatformAdmin } from '../platform/ensure-platform-admin';
 
@@ -24,46 +26,77 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private mail: MailService,
+    private referrals: ReferralService,
   ) {}
 
   async register(dto: RegisterDto) {
     const hash = await argon2.hash(dto.password, { type: 2 });
     const plan = getPlan(dto.planId || 'mostrador');
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
-    const business = await this.prisma.business.create({
-      data: {
-        name: dto.businessName,
-        cuit: dto.cuit,
-        address: dto.address,
-        planId: plan.id,
-        planStatus: 'trial',
-        billingCycle: 'monthly',
-        trialEndsAt,
-        planRenewsAt: trialEndsAt,
-        catalogShareConsentAt: new Date(),
-        onboarding: {
-          completedSteps: [],
-          skippedSteps: [],
-          tourVersion: 2,
-          finishedAt: null,
+    const referralCode = await this.allocateReferralCode();
+    const { business, user } = await this.prisma.$transaction(async (tx) => {
+      const business = await tx.business.create({
+        data: {
+          name: dto.businessName,
+          cuit: dto.cuit,
+          address: dto.address,
+          planId: plan.id,
+          planStatus: 'trial',
+          billingCycle: 'monthly',
+          trialEndsAt,
+          planRenewsAt: trialEndsAt,
+          catalogShareConsentAt: new Date(),
+          referralCode,
+          onboarding: {
+            completedSteps: [],
+            skippedSteps: [],
+            tourVersion: 2,
+            finishedAt: null,
+          },
         },
-      },
+      });
+      const user = await tx.user.create({
+        data: {
+          email: dto.email.toLowerCase(),
+          passwordHash: hash,
+          name: dto.name,
+          role: 'OWNER',
+          businessId: business.id,
+        },
+        select: { id: true, email: true, name: true, role: true, businessId: true, isPlatformAdmin: true },
+      });
+      if (dto.referralCode?.trim()) {
+        await this.referrals.applyCode(business.id, dto.referralCode, tx);
+      }
+      return { business, user };
     });
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email.toLowerCase(),
-        passwordHash: hash,
-        name: dto.name,
-        role: 'OWNER',
-        businessId: business.id,
-      },
-      select: { id: true, email: true, name: true, role: true, businessId: true, isPlatformAdmin: true },
-    });
+    if (dto.referralCode?.trim()) {
+      const applied = await this.prisma.referral.findUnique({
+        where: { referredBusinessId: business.id },
+        select: { referrerBusinessId: true },
+      });
+      if (applied) {
+        try {
+          await this.referrals.refreshPendingTransferInvoice(applied.referrerBusinessId);
+        } catch {
+          /* la factura pendiente del referente se recalcula en la próxima contratación */
+        }
+      }
+    }
     const tokens = await this.issueTokens(user.id, user.email);
     return {
       user: this.withPlatformFlag({ ...user, business: { id: business.id, name: business.name } }),
       ...tokens,
     };
+  }
+
+  private async allocateReferralCode(): Promise<string> {
+    for (let i = 0; i < 12; i++) {
+      const code = generateReferralCode();
+      const taken = await this.prisma.business.findFirst({ where: { referralCode: code }, select: { id: true } });
+      if (!taken) return code;
+    }
+    return generateReferralCode(8);
   }
 
   async login(email: string, password: string) {

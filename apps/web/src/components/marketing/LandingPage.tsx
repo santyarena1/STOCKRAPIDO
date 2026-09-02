@@ -95,6 +95,10 @@ const FAQ = [
     q: '¿Hay prueba? ¿Piden tarjeta?',
     a: '14 días del plan que elijas, sin tarjeta. Si no sigue, no se cobra. Después contratás desde acá o, ya adentro, en Plan y facturación.',
   },
+  {
+    q: '¿Hay programa de referidos?',
+    a: 'Sí. Cada local tiene un código en Plan y facturación. Si un kiosco nuevo se registra con ese código, los dos reciben $5.000 de descuento por mes durante los primeros 3 meses.',
+  },
 ];
 
 export function LandingPage() {

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
+import { ReferralService } from '../billing/referral.service';
 import { getPlan } from '../billing/plans';
 import { SupportService } from '../support/support.service';
 
@@ -10,6 +11,7 @@ export class PlatformService {
   constructor(
     private prisma: PrismaService,
     private billing: BillingService,
+    private referrals: ReferralService,
     private support: SupportService,
   ) {}
 
@@ -118,6 +120,7 @@ export class PlatformService {
       salesCount: b._count.sales,
       openTickets: ticketMap.get(b.id) || 0,
       lastSaleAt: lastSaleMap.get(b.id) || null,
+      referralCode: b.referralCode,
       pendingInvoice:
         b.planStatus === 'complimentary' || !b.invoices[0]
           ? null
@@ -152,9 +155,16 @@ export class PlatformService {
           take: 20,
           include: { user: { select: { id: true, name: true, email: true } }, _count: { select: { messages: true } } },
         },
+        referralReceived: { include: { referrer: { select: { id: true, name: true, referralCode: true } } } },
+        referralsMade: {
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          include: { referred: { select: { id: true, name: true } } },
+        },
       },
     });
     if (!business) throw new NotFoundException('Cuenta no encontrada');
+    const referralCode = await this.referrals.ensureCode(id);
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -215,6 +225,24 @@ export class PlatformService {
       invoices: business.invoices.map((inv) => this.serializeInvoice(inv)),
       users: business.users,
       tickets: business.supportTickets,
+      referral: {
+        code: referralCode,
+        referredBy: business.referralReceived
+          ? {
+              id: business.referralReceived.referrer.id,
+              name: business.referralReceived.referrer.name,
+              code: business.referralReceived.code,
+              monthsLeft: business.referralReceived.refereeMonthsLeft,
+            }
+          : null,
+        referralsMade: business.referralsMade.map((r) => ({
+          id: r.id,
+          businessId: r.referred.id,
+          name: r.referred.name,
+          createdAt: r.createdAt,
+          monthsLeft: r.referrerMonthsLeft,
+        })),
+      },
       stats: {
         products,
         salesTodayCount: salesToday._count,
@@ -321,6 +349,7 @@ export class PlatformService {
       planName: getPlan(inv.planId).name,
       cycle: inv.cycle,
       amount: Number(inv.amount),
+      discount: Number((inv as { discount?: unknown }).discount ?? 0),
       currency: inv.currency,
       status: inv.status,
       periodStart: inv.periodStart,

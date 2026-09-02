@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/lib/env-urls';
-import { type PlanId } from '@/lib/plans';
+import { formatPlanPrice, REFERRAL_DISCOUNT_MONTHS, REFERRAL_DISCOUNT_PER_MONTH, type PlanId } from '@/lib/plans';
 import { LANDING_PLAN_META, landingPlans, resolveLandingPlanId } from '@/lib/landing-copy';
 
-export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
+export function RegisterForm({ initialPlan, initialReferral }: { initialPlan?: string; initialReferral?: string }) {
   const router = useRouter();
   const planId: PlanId = resolveLandingPlanId(initialPlan);
   const landing = LANDING_PLAN_META[planId];
@@ -19,9 +19,29 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
     cuit: '',
     address: '',
     planId,
+    referralCode: (initialReferral || '').toUpperCase(),
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [referralHint, setReferralHint] = useState('');
+
+  useEffect(() => {
+    const code = (initialReferral || '').trim();
+    if (!code) return;
+    void (async () => {
+      try {
+        const res = await fetch(`${getApiBaseUrl()}/billing/referral/${encodeURIComponent(code)}`);
+        const data = (await res.json().catch(() => ({}))) as { valid?: boolean; referrerName?: string };
+        if (data.valid && data.referrerName) {
+          setReferralHint(
+            `Código de ${data.referrerName}. Vos y ese local tienen ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} off por ${REFERRAL_DISCOUNT_MONTHS} meses.`,
+          );
+        }
+      } catch {
+        /* el alta sigue igual si no se puede validar ahora */
+      }
+    })();
+  }, [initialReferral]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,6 +59,7 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
           cuit: form.cuit || undefined,
           address: form.address || undefined,
           planId: form.planId,
+          referralCode: form.referralCode.trim() || undefined,
         }),
         credentials: 'include',
       });
@@ -106,6 +127,46 @@ export function RegisterForm({ initialPlan }: { initialPlan?: string }) {
             </option>
           ))}
         </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">
+          Código de referido (opcional)
+        </label>
+        <input
+          type="text"
+          value={form.referralCode}
+          onChange={(e) => {
+            setReferralHint('');
+            setForm((f) => ({ ...f, referralCode: e.target.value.toUpperCase() }));
+          }}
+          onBlur={async () => {
+            const code = form.referralCode.trim();
+            if (!code) {
+              setReferralHint('');
+              return;
+            }
+            try {
+              const res = await fetch(`${getApiBaseUrl()}/billing/referral/${encodeURIComponent(code)}`);
+              const data = (await res.json().catch(() => ({}))) as { valid?: boolean; referrerName?: string };
+              if (data.valid && data.referrerName) {
+                setReferralHint(
+                  `Código de ${data.referrerName}. Vos y ese local tienen ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} off por ${REFERRAL_DISCOUNT_MONTHS} meses.`,
+                );
+              } else {
+                setReferralHint('No encontramos ese código. Podés dejarlo vacío o pedirlo de nuevo.');
+              }
+            } catch {
+              setReferralHint('');
+            }
+          }}
+          className={field}
+          placeholder="Ej. K7M3PQ"
+          autoComplete="off"
+        />
+        <p className="mt-1 text-xs text-[var(--mk-ink-2)]">
+          {referralHint ||
+            `Si te invitaron, ambos reciben ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} de descuento los primeros ${REFERRAL_DISCOUNT_MONTHS} meses.`}
+        </p>
       </div>
       {error ? <p className="text-sm text-[var(--mk-red-dark)]">{error}</p> : null}
       <button type="submit" disabled={loading} className="mk-cta w-full disabled:opacity-50">

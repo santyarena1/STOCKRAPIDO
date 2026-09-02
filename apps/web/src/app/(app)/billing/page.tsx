@@ -27,12 +27,18 @@ function statusLabel(status: string, trialActive: boolean) {
 
 function InvoiceRow({ inv }: { inv: BillingInvoice }) {
   const paid = inv.status === 'paid';
+  const discount = Number(inv.discount ?? 0);
   return (
     <tr className="border-t border-hair-soft">
       <td className="py-2.5 pr-3 text-sm">{new Date(inv.createdAt).toLocaleDateString('es-AR')}</td>
       <td className="py-2.5 pr-3 text-sm">{inv.planName}</td>
       <td className="py-2.5 pr-3 text-sm">{inv.cycle === 'yearly' ? 'Anual' : 'Mensual'}</td>
-      <td className="py-2.5 pr-3 text-right font-mono text-sm">{formatPlanPrice(inv.amount)}</td>
+      <td className="py-2.5 pr-3 text-right font-mono text-sm">
+        {formatPlanPrice(inv.amount)}
+        {discount > 0 ? (
+          <span className="block text-[11px] text-ok">−{formatPlanPrice(discount)} referidos</span>
+        ) : null}
+      </td>
       <td className="py-2.5 text-right text-sm text-fg-muted">
         {paid ? 'Pagado' : inv.status === 'void' ? 'Anulado' : inv.status === 'failed' ? 'Falló' : 'Pendiente'}
       </td>
@@ -48,6 +54,17 @@ function BillingInner() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+
+  const copyText = async (value: string, kind: 'code' | 'link') => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(kind);
+      setTimeout(() => setCopied(null), 1800);
+    } catch {
+      setError('No se pudo copiar. Seleccioná el texto a mano.');
+    }
+  };
 
   const subscribe = async (planId: string, method: 'mercadopago' | 'transfer') => {
     setBusy(planId + method);
@@ -172,6 +189,75 @@ function BillingInner() {
         </dl>
       </section>
 
+      {data.referral ? (
+        <section data-tour="billing-referral" className="rounded-xl border border-hair-soft bg-surface p-5">
+          <h3 className="text-lg font-semibold">Invitá otros locales</h3>
+          <p className="mt-1 text-sm text-fg-muted">
+            Cada local nuevo que se registre con tu código recibe {formatPlanPrice(data.referral.discountPerMonth)} de
+            descuento durante {data.referral.discountMonths} meses. Vos también: {formatPlanPrice(data.referral.discountPerMonth)} por
+            mes, por cada uno, durante {data.referral.discountMonths} meses.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-lg tracking-widest">
+              {data.referral.code}
+            </span>
+            <button
+              type="button"
+              onClick={() => void copyText(data.referral!.code, 'code')}
+              className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised"
+            >
+              {copied === 'code' ? 'Copiado' : 'Copiar código'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyText(data.referral!.shareUrl, 'link')}
+              className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised"
+            >
+              {copied === 'link' ? 'Link copiado' : 'Copiar link'}
+            </button>
+          </div>
+          {data.referral.activeDiscount.monthlyAmount > 0 ? (
+            <p className="mt-3 text-sm text-ok">
+              Descuento activo: {formatPlanPrice(data.referral.activeDiscount.monthlyAmount)} por mes en los próximos
+              pagos
+              {data.referral.activeDiscount.monthsLeftAsReferee > 0
+                ? ` · ${data.referral.activeDiscount.monthsLeftAsReferee} mes${data.referral.activeDiscount.monthsLeftAsReferee === 1 ? '' : 'es'} como local nuevo`
+                : ''}
+              {data.referral.referralsMade.filter((r) => r.monthsLeft > 0).length > 0
+                ? ` · ${data.referral.referralsMade.filter((r) => r.monthsLeft > 0).length} referido${data.referral.referralsMade.filter((r) => r.monthsLeft > 0).length === 1 ? '' : 's'} vigentes`
+                : ''}
+              .
+            </p>
+          ) : null}
+          {data.referral.referredBy ? (
+            <p className="mt-2 text-sm text-fg-muted">
+              Te invitó {data.referral.referredBy.businessName} ({data.referral.referredBy.code}).
+              {data.referral.referredBy.monthsLeft > 0
+                ? ` Te quedan ${data.referral.referredBy.monthsLeft} mes${data.referral.referredBy.monthsLeft === 1 ? '' : 'es'} de descuento.`
+                : ' Ese descuento ya se usó.'}
+            </p>
+          ) : null}
+          {data.referral.referralsMade.length > 0 ? (
+            <ul className="mt-4 space-y-1.5 text-sm">
+              {data.referral.referralsMade.map((row) => (
+                <li key={row.id} className="flex flex-wrap justify-between gap-2 border-t border-hair-soft pt-2">
+                  <span>{row.businessName}</span>
+                  <span className="text-fg-muted">
+                    {new Date(row.createdAt).toLocaleDateString('es-AR')}
+                    {' · '}
+                    {row.monthsLeft > 0
+                      ? `${row.monthsLeft} mes${row.monthsLeft === 1 ? '' : 'es'} de descuento`
+                      : 'descuento cumplido'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-fg-faint">Todavía no hay locales registrados con tu código.</p>
+          )}
+        </section>
+      ) : null}
+
       {data.status === 'complimentary' ? (
         <section className="rounded-xl border border-hair-soft bg-surface p-5">
           <h3 className="text-lg font-semibold">Plan de cortesía</h3>
@@ -205,6 +291,12 @@ function BillingInner() {
                 <p className="mt-1 text-sm text-fg-muted">{plan.tagline}</p>
                 <p className="mt-4 font-mono text-2xl tabular-nums">{formatPlanPrice(price)}<span className="text-sm text-fg-faint">/mes</span></p>
                 <p className="text-xs text-fg-faint">+ IVA{cycle === 'yearly' ? ` · ${formatPlanPrice(plan.yearlyPrice)} el año` : ''}</p>
+                {data.referral && data.referral.activeDiscount.monthlyAmount > 0 ? (
+                  <p className="mt-1 text-xs text-ok">
+                    Con referidos: −{formatPlanPrice(data.referral.activeDiscount.monthlyAmount)}
+                    {cycle === 'yearly' ? ' × hasta 3 meses en el pago anual' : '/mes'}
+                  </p>
+                ) : null}
                 <ul className="mt-4 flex-1 space-y-1.5 text-sm text-fg-muted">
                   {plan.bullets.map((b) => (
                     <li key={b}>{b}</li>
@@ -244,8 +336,11 @@ function BillingInner() {
           <h3 className="font-semibold">Cómo pagar</h3>
           {data.pendingInvoice ? (
             <p className="mt-2 text-sm text-fg-muted">
-              Pendiente: {data.pendingInvoice.planName} · {formatPlanPrice(data.pendingInvoice.amount)} ·{' '}
-              {data.pendingInvoice.cycle === 'yearly' ? 'anual' : 'mensual'}.
+              Pendiente: {data.pendingInvoice.planName} · {formatPlanPrice(data.pendingInvoice.amount)}
+              {Number(data.pendingInvoice.discount) > 0
+                ? ` (incluye −${formatPlanPrice(Number(data.pendingInvoice.discount))} de referidos)`
+                : ''}{' '}
+              · {data.pendingInvoice.cycle === 'yearly' ? 'anual' : 'mensual'}.
             </p>
           ) : null}
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">

@@ -193,6 +193,7 @@ const TUTORIAL_BY_ROUTE: Record<string, TutorialSection[]> = {
   '/billing': [
     { title: 'Plan y facturación', items: [
       { label: 'Plan actual', desc: 'Mostrador (básico), Fiscal (AFIP) o Pro (distribuidores + IA). Muestra prueba, usuarios y syncs.' },
+      { label: 'Referidos', desc: 'Tu código para invitar otros locales. El nuevo y vos reciben $5.000 de descuento por mes durante 3 meses.' },
       { label: 'Cambiar de plan', desc: 'Elegí mensual o anual. El pago va por Mercado Pago o transferencia; queda un comprobante pendiente hasta que acredite.' },
     ]},
   ],
