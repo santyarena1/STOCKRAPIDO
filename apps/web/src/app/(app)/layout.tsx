@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner';
-import { ChangelogWidget } from '@/components/ChangelogWidget';
+import { ChangelogNavLink, ChangelogWidget } from '@/components/ChangelogWidget';
 import { BillingProvider, useBilling } from '@/components/billing/BillingProvider';
 import { StockRapidoLogo } from '@/components/brand/StockRapidoLogo';
 import { api } from '@/lib/api';
@@ -358,7 +358,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
       </nav>
-      <div className="shrink-0 border-t border-hair-soft p-2"><button type="button" onClick={handleLogout} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-raised hover:text-fg">Cerrar sesión</button></div>
+      <div className="shrink-0 space-y-1 border-t border-hair-soft p-2">
+        <ChangelogNavLink onNavigate={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined} />
+        <button type="button" onClick={handleLogout} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-fg-faint transition-colors hover:bg-raised hover:text-fg">Cerrar sesión</button>
+      </div>
     </>
   );
 

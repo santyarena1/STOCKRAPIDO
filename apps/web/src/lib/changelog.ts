@@ -56,6 +56,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Editar usuarios',
         desc: 'En Usuarios podés cambiar nombre y email de cada integrante del equipo.',
       },
+      {
+        tag: 'MEJORA',
+        title: 'Novedades en el menú lateral',
+        desc: 'El acceso a Novedades quedó en el menú, arriba de Cerrar sesión, para no tapar botones del POS ni otras pantallas.',
+      },
     ],
   },
   {
