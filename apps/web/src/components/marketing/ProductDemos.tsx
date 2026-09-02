@@ -5,7 +5,7 @@ import { useState } from 'react';
 const TABS = [
   { id: 'pos', label: 'Punto de venta', plan: 'BASIC' },
   { id: 'catalogo', label: 'Catálogo comunitario', plan: 'BASIC' },
-  { id: 'delivery', label: 'Rappi y PedidosYa', plan: 'PRO' },
+  { id: 'delivery', label: 'Rappi y PedidosYa', plan: 'PREMIUM' },
   { id: 'caja', label: 'Caja', plan: 'BASIC' },
   { id: 'factura', label: 'Facturación', plan: 'PRO' },
   { id: 'dist', label: 'Distribuidores', plan: 'PREMIUM' },
@@ -168,7 +168,7 @@ function DeliveryDemo() {
   return (
     <div className="grid gap-0 lg:grid-cols-[1fr_0.9fr]">
       <div className="border-b border-black/5 p-5 sm:p-7 lg:border-b-0 lg:border-r">
-        <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Central de pedidos · PRO</p>
+        <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Central de pedidos · PREMIUM</p>
         <h3 className="mt-1 text-2xl font-extrabold">Rappi y PedidosYa en un solo lugar</h3>
         <p className="mt-3 text-[15px] leading-relaxed text-[var(--mk-ink-2)]">
           Bandeja unificada con filtros por plataforma y estado. Cada app tiene su módulo: conexión, menú, mapeos SKU y

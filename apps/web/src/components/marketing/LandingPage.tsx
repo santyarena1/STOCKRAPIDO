@@ -24,7 +24,7 @@ const COMPARE: { feature: PlanFeature; plans: [boolean, boolean, boolean] }[] = 
   { feature: 'promotions', plans: [true, true, true] },
   { feature: 'reports', plans: [true, true, true] },
   { feature: 'publicCatalog', plans: [true, true, true] },
-  { feature: 'deliveryIntegrations', plans: [false, true, true] },
+  { feature: 'deliveryIntegrations', plans: [false, false, true] },
   { feature: 'fiscal', plans: [false, true, true] },
   { feature: 'sync', plans: [false, false, true] },
   { feature: 'aiPurchases', plans: [false, false, true] },
@@ -39,12 +39,12 @@ const MODULES = [
   {
     plan: 'PRO',
     title: 'Cuando piden factura',
-    text: 'Suma Factura C electrónica al mismo cobro y la central de delivery: Rappi y PedidosYa con módulos separados, bandeja unificada, menú, mapeos y venta con baja de stock.',
+    text: 'Suma Factura C electrónica al mismo cobro. Cargás CUIT, punto de venta y certificado una vez. Si no hace falta factura, el ticket interno sigue.',
   },
   {
     plan: 'PREMIUM',
     title: 'Mayoristas, también acá',
-    text: 'Entran las listas de Tokin, Mondelez y Juntos+. Pedidos, costos y compras con IA: subís el PDF o la foto de la factura y se arma la compra.',
+    text: 'Entran las listas de Tokin, Mondelez y Juntos+. Pedidos, costos y compras con IA: subís el PDF o la foto de la factura y se arma la compra. Además, Rappi y PedidosYa con central de pedidos y módulos dedicados.',
   },
 ];
 
@@ -82,7 +82,7 @@ const FAQ = [
   },
   {
     q: '¿Rappi y PedidosYa están integrados?',
-    a: 'Sí, desde PRO y PREMIUM. Tenés una central de pedidos unificada y un módulo dedicado para cada app: conexión API, webhook, menú, mapeo de SKU con tu inventario, aceptar/rechazar, preparar, despachar y convertir en venta con baja de stock. Cada plataforma se configura por separado.',
+    a: 'Sí, en PREMIUM. Tenés una central de pedidos unificada y un módulo dedicado para cada app: conexión API, webhook, menú, mapeo de SKU con tu inventario, aceptar/rechazar, preparar, despachar y convertir en venta con baja de stock. Cada plataforma se configura por separado.',
   },
   {
     q: '¿Tokin, Mondelez o Juntos+ en qué plan están?',

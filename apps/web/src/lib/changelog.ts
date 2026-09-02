@@ -29,7 +29,12 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'NUEVO',
         title: 'Central de pedidos delivery',
-        desc: 'Bandeja unificada para Rappi y PedidosYa con estados, acciones y registro de venta con baja de stock.',
+        desc: 'Bandeja unificada para Rappi y PedidosYa con estados, acciones y registro de venta con baja de stock. Disponible en plan PREMIUM.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Módulos Rappi y PedidosYa',
+        desc: 'Cada plataforma tiene su módulo: conexión API, webhook, menú, mapeos SKU, simulador y control de tienda abierta/cerrada.',
       },
       {
         tag: 'MEJORA',

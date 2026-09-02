@@ -125,7 +125,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
     monthlyPrice: 34900,
     yearlyPrice: 349000,
     cta: 'Sumar facturación',
-    features: [...BASICO, 'fiscal', 'sync', 'multibranch', 'deliveryIntegrations'],
+    features: [...BASICO, 'fiscal', 'sync', 'multibranch'],
     limits: {
       maxUsers: 5,
       maxProducts: null,
@@ -139,7 +139,6 @@ export const PLAN_CATALOG: PlanDefinition[] = [
       'Factura electrónica AFIP (Factura C)',
       'Catálogo comunitario ilimitado',
       '1 conexión de proveedor sync',
-      'Rappi y PedidosYa: central de pedidos',
       'Hasta 5 usuarios',
       'Multisucursal (hasta 3 locales, próximamente)',
     ],
