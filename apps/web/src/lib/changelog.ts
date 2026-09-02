@@ -24,7 +24,7 @@ export const CHANGELOG: ChangelogVersion[] = [
   {
     version: 'v1.18',
     date: '2026-09-01',
-    summary: 'Catálogo comunitario: consentimiento obligatorio y límites de plan ajustados.',
+    summary: 'Catálogo comunitario automático, planes ajustados, ventas, usuarios y mejoras de interfaz.',
     items: [
       {
         tag: 'MEJORA',
