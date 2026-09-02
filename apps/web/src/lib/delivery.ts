@@ -15,6 +15,10 @@ export type DeliveryIntegration = {
   autoAccept: boolean;
   autoConfirmSale: boolean;
   prepMinutesDefault: number;
+  priceMarkupPercent?: number;
+  platformCommissionPercent?: number;
+  publishMode?: string;
+  testMode?: boolean;
   lastSyncAt: string | null;
   lastError: string | null;
 };

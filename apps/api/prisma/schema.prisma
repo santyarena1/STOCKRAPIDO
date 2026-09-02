@@ -162,6 +162,7 @@ model Category {
 
   business  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   products  Product[]
+  deliveryCategoryRules DeliveryCategoryRule[]
 }
 
 model Product {
@@ -686,6 +687,10 @@ model DeliveryIntegration {
   autoAccept           Boolean   @default(false)
   autoConfirmSale      Boolean   @default(true)
   prepMinutesDefault   Int       @default(15)
+  priceMarkupPercent   Decimal   @default(0)
+  platformCommissionPercent Decimal @default(28)
+  publishMode          String    @default("manual")
+  testMode             Boolean   @default(false)
   lastSyncAt           DateTime?
   lastError            String?
   createdAt            DateTime  @default(now())
@@ -696,9 +701,28 @@ model DeliveryIntegration {
   mappings  DeliveryProductMapping[]
   menuItems DeliveryMenuItem[]
   events    DeliveryIntegrationEvent[]
+  categoryRules DeliveryCategoryRule[]
 
   @@unique([businessId, provider])
   @@index([webhookToken])
+}
+
+model DeliveryCategoryRule {
+  id                    String   @id @default(cuid())
+  integrationId         String
+  categoryId            String
+  published             Boolean  @default(false)
+  platformCategoryId    String?
+  platformCategoryName  String?
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  integration DeliveryIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  category    Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, categoryId])
+  @@index([integrationId, published])
 }
 
 model DeliveryOrder {
@@ -803,6 +827,20 @@ model DeliveryMenuItem {
   available       Boolean  @default(true)
   imageUrl        String?
   productId       String?
+  published       Boolean  @default(false)
+  shortDescription String?
+  description     String?
+  platformCategoryId String?
+  platformCategoryName String?
+  basePrice       Decimal?
+  markupPercent   Decimal?
+  listPrice       Decimal?
+  priceMode       String   @default("calculated")
+  syncStatus      String   @default("draft")
+  validationErrors Json?
+  lastPushedAt    DateTime?
+  pausedReason    String?
+  sortOrder       Int      @default(0)
   lastSyncedAt    DateTime?
   raw             Json?
 

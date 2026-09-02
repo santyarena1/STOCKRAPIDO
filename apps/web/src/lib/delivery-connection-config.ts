@@ -10,8 +10,7 @@ export type ConnectionField = {
   type?: ConnectionFieldType;
   options?: { value: string; label: string }[];
   required?: boolean;
-  /** root = columna Prisma; config = JSON config; credentials = cifrado */
-  storage: 'root' | 'config' | 'credentials';
+  storage: 'root' | 'config' | 'credentials' | 'pricing';
 };
 
 export type DeliveryConnectionSchema = {
@@ -20,8 +19,9 @@ export type DeliveryConnectionSchema = {
   docsHint: string;
   webhookHeader: string;
   identityFields: ConnectionField[];
-  configFields: ConnectionField[];
   credentialFields: ConnectionField[];
+  pricingFields: ConnectionField[];
+  operationFields: ConnectionField[];
 };
 
 const COUNTRY_OPTIONS = [
@@ -35,23 +35,17 @@ const COUNTRY_OPTIONS = [
   { value: 'BR', label: 'Brasil' },
 ];
 
-const ENV_OPTIONS = [
-  { value: 'sandbox', label: 'Sandbox / pruebas' },
-  { value: 'production', label: 'Producción' },
-];
-
 export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnectionSchema> = {
   rappi: {
     title: 'Conexión Rappi Partner API',
-    lead: 'Credenciales de desarrollador Rappi y el ID de tu local. No uses campos de PedidosYa acá.',
-    docsHint: 'En el portal de partners de Rappi: Store ID, Client ID y Client Secret. El webhook recibe pedidos nuevos y cambios de estado.',
+    lead: 'Store ID, país y credenciales OAuth de Rappi Developers. Campos exclusivos de Rappi.',
+    docsHint: 'En Rappi Partners copiá Store ID, Client ID y Client Secret. El webhook recibe pedidos nuevos.',
     webhookHeader: 'X-Webhook-Secret',
     identityFields: [
       {
         key: 'storeExternalId',
-        label: 'Store ID (Rappi)',
-        placeholder: 'Ej. 123456',
-        help: 'ID del local en Rappi. Lo ves en Rappi Partners → tu tienda.',
+        label: 'Store ID',
+        placeholder: 'ID del local en Rappi Partners',
         required: true,
         storage: 'root',
       },
@@ -64,40 +58,11 @@ export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnec
         storage: 'root',
       },
     ],
-    configFields: [
-      {
-        key: 'brandId',
-        label: 'Brand ID (opcional)',
-        placeholder: 'Si Rappi te asignó un brand',
-        help: 'Solo si tu cuenta partner lo requiere.',
-        storage: 'config',
-      },
-      {
-        key: 'restaurantId',
-        label: 'Restaurant ID (opcional)',
-        placeholder: 'ID interno del restaurante en Rappi',
-        storage: 'config',
-      },
-      {
-        key: 'environment',
-        label: 'Ambiente API',
-        type: 'select',
-        options: ENV_OPTIONS,
-        storage: 'config',
-      },
-      {
-        key: 'apiBaseUrl',
-        label: 'URL base API (avanzado)',
-        placeholder: 'https://api.rappi.com.ar',
-        help: 'Dejá vacío para usar el endpoint oficial del país.',
-        storage: 'config',
-      },
-    ],
     credentialFields: [
       {
         key: 'clientId',
         label: 'Client ID',
-        placeholder: 'OAuth Client ID de Rappi Developers',
+        placeholder: 'OAuth Client ID',
         required: true,
         storage: 'credentials',
       },
@@ -105,39 +70,50 @@ export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnec
         key: 'clientSecret',
         label: 'Client Secret',
         type: 'password',
-        placeholder: 'OAuth Client Secret',
         required: true,
         storage: 'credentials',
       },
+    ],
+    pricingFields: [
       {
-        key: 'accessToken',
-        label: 'Access Token (opcional)',
-        type: 'password',
-        placeholder: 'Si ya tenés un token de larga duración',
-        help: 'Solo si Rappi te entregó un bearer token fijo además del OAuth.',
-        storage: 'credentials',
+        key: 'priceMarkupPercent',
+        label: 'Margen extra %',
+        type: 'number',
+        help: 'Sobre el precio mostrador antes de compensar comisión.',
+        storage: 'pricing',
       },
+      {
+        key: 'platformCommissionPercent',
+        label: 'Comisión Rappi %',
+        type: 'number',
+        help: 'Según tu contrato. Se usa para calcular el precio en la app.',
+        storage: 'pricing',
+      },
+    ],
+    operationFields: [
+      { key: 'prepMinutesDefault', label: 'Minutos de preparación', type: 'number', storage: 'root' },
+      { key: 'autoAccept', label: 'Aceptar pedidos automáticamente', type: 'checkbox', storage: 'root' },
+      { key: 'autoConfirmSale', label: 'Registrar venta al marcar listo', type: 'checkbox', storage: 'root' },
+      { key: 'testMode', label: 'Modo prueba (sandbox)', type: 'checkbox', storage: 'pricing' },
     ],
   },
   pedidosya: {
     title: 'Conexión PedidosYa Partner API',
-    lead: 'Chain ID, Restaurant ID y credenciales del portal de partners. Campos propios de PedidosYa.',
-    docsHint: 'En PedidosYa Partners: Chain ID de la cadena, Restaurant/Vendor ID del local y API Key o usuario/contraseña.',
+    lead: 'Chain ID, Vendor ID, país y credencial partner. Campos exclusivos de PedidosYa.',
+    docsHint: 'En PedidosYa Partners: Chain ID, Restaurant/Vendor ID y API Key o usuario/contraseña.',
     webhookHeader: 'X-Webhook-Secret',
     identityFields: [
       {
         key: 'chainExternalId',
         label: 'Chain ID',
-        placeholder: 'Ej. chain-abc123',
-        help: 'ID de cadena o marca en PedidosYa Partners.',
+        placeholder: 'ID de cadena en PedidosYa',
         required: true,
         storage: 'root',
       },
       {
         key: 'storeExternalId',
-        label: 'Restaurant / Vendor ID',
-        placeholder: 'Ej. vendor-789',
-        help: 'ID del local o restaurante dentro de la cadena.',
+        label: 'Vendor / Restaurant ID',
+        placeholder: 'ID del local',
         required: true,
         storage: 'root',
       },
@@ -150,41 +126,18 @@ export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnec
         storage: 'root',
       },
     ],
-    configFields: [
-      {
-        key: 'platformRestaurantName',
-        label: 'Nombre del local en PedidosYa',
-        placeholder: 'Como figura en el panel partner',
-        storage: 'config',
-      },
-      {
-        key: 'platformRestaurantId',
-        label: 'Platform Restaurant ID (opcional)',
-        placeholder: 'ID adicional si PedidosYa lo muestra aparte',
-        storage: 'config',
-      },
-      {
-        key: 'environment',
-        label: 'Ambiente API',
-        type: 'select',
-        options: [
-          { value: 'staging', label: 'Staging / pruebas' },
-          { value: 'production', label: 'Producción' },
-        ],
-        storage: 'config',
-      },
-      {
-        key: 'apiBaseUrl',
-        label: 'URL base API (avanzado)',
-        placeholder: 'https://partners-api.pedidosya.com',
-        storage: 'config',
-      },
-    ],
     credentialFields: [
+      {
+        key: 'apiKey',
+        label: 'API Key / Partner Token',
+        type: 'password',
+        placeholder: 'Token principal de PedidosYa',
+        help: 'Si tu cuenta usa usuario/contraseña, completá también Client ID y Secret abajo.',
+        storage: 'credentials',
+      },
       {
         key: 'clientId',
         label: 'Client ID / Usuario API',
-        placeholder: 'Usuario o client_id del partner',
         storage: 'credentials',
       },
       {
@@ -193,42 +146,26 @@ export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnec
         type: 'password',
         storage: 'credentials',
       },
+    ],
+    pricingFields: [
       {
-        key: 'apiKey',
-        label: 'API Key / Partner Token',
-        type: 'password',
-        placeholder: 'Token o API key del portal PedidosYa',
-        help: 'Completá API Key o usuario/contraseña, según lo que te haya dado PedidosYa.',
-        storage: 'credentials',
+        key: 'priceMarkupPercent',
+        label: 'Margen extra %',
+        type: 'number',
+        storage: 'pricing',
       },
+      {
+        key: 'platformCommissionPercent',
+        label: 'Comisión PedidosYa %',
+        type: 'number',
+        storage: 'pricing',
+      },
+    ],
+    operationFields: [
+      { key: 'prepMinutesDefault', label: 'Minutos de preparación', type: 'number', storage: 'root' },
+      { key: 'autoAccept', label: 'Aceptar pedidos automáticamente', type: 'checkbox', storage: 'root' },
+      { key: 'autoConfirmSale', label: 'Registrar venta al marcar listo', type: 'checkbox', storage: 'root' },
+      { key: 'testMode', label: 'Modo prueba (staging)', type: 'checkbox', storage: 'pricing' },
     ],
   },
 };
-
-export function buildConnectionFormDefaults(provider: DeliveryProvider) {
-  const schema = DELIVERY_CONNECTION_SCHEMA[provider];
-  const root: Record<string, string | number | boolean> = {
-    enabled: false,
-    countryCode: 'AR',
-    prepMinutesDefault: 15,
-    autoAccept: false,
-    autoConfirmSale: true,
-    storeExternalId: '',
-    chainExternalId: '',
-  };
-  const config: Record<string, string> = {};
-  const credentials: Record<string, string> = {};
-
-  for (const field of [...schema.identityFields, ...schema.configFields, ...schema.credentialFields]) {
-    if (field.storage === 'config') config[field.key] = field.type === 'select' ? field.options?.[0]?.value ?? '' : '';
-    if (field.storage === 'credentials') credentials[field.key] = '';
-  }
-
-  if (provider === 'rappi') {
-    config.environment = 'sandbox';
-  } else {
-    config.environment = 'staging';
-  }
-
-  return { root, config, credentials };
-}

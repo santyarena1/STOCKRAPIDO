@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { DeliveryOrdersService } from './delivery-orders.service';
 import { DeliveryIntegrationsService } from './delivery-integrations.service';
+import { DeliveryListingsService } from './delivery-listings.service';
 import { isDeliveryProvider, type DeliveryProviderId } from './delivery.constants';
 
 type User = { businessId: string; id: string };
@@ -13,7 +14,19 @@ export class DeliveryController {
   constructor(
     private orders: DeliveryOrdersService,
     private integrations: DeliveryIntegrationsService,
+    private listingsService: DeliveryListingsService,
   ) {}
+
+  @Get('readiness')
+  readiness(@CurrentUser() u: User, @Query('productIds') productIds?: string) {
+    const ids = productIds ? productIds.split(',').map((id) => id.trim()).filter(Boolean) : undefined;
+    return this.listingsService.productReadiness(u.businessId, ids);
+  }
+
+  @Get('readiness/:productId')
+  readinessOne(@CurrentUser() u: User, @Param('productId') productId: string) {
+    return this.listingsService.productReadiness(u.businessId, [productId]);
+  }
 
   @Get('hub/stats')
   hubStats(@CurrentUser() u: User) {
@@ -110,6 +123,10 @@ export class DeliveryController {
       autoAccept?: boolean;
       autoConfirmSale?: boolean;
       prepMinutesDefault?: number;
+      priceMarkupPercent?: number;
+      platformCommissionPercent?: number;
+      publishMode?: string;
+      testMode?: boolean;
     },
   ) {
     return this.integrations.upsert(u.businessId, provider, body);
@@ -167,6 +184,54 @@ export class DeliveryController {
   ) {
     if (!isDeliveryProvider(provider)) throw new Error('Proveedor inválido');
     return this.orders.simulate(u.businessId, provider, body);
+  }
+
+  @Get('integrations/:provider/category-rules')
+  categoryRules(@CurrentUser() u: User, @Param('provider') provider: string) {
+    return this.listingsService.listCategoryRules(u.businessId, provider);
+  }
+
+  @Patch('integrations/:provider/category-rules')
+  upsertCategoryRules(
+    @CurrentUser() u: User,
+    @Param('provider') provider: string,
+    @Body() body: { rules: { categoryId: string; published?: boolean; platformCategoryId?: string; platformCategoryName?: string; sortOrder?: number }[] },
+  ) {
+    return this.listingsService.upsertCategoryRules(u.businessId, provider, body);
+  }
+
+  @Get('integrations/:provider/listings')
+  listProviderListings(@CurrentUser() u: User, @Param('provider') provider: string, @Query('q') q?: string) {
+    return this.listingsService.listListings(u.businessId, provider, q);
+  }
+
+  @Patch('integrations/:provider/listings/:id')
+  updateListing(
+    @CurrentUser() u: User,
+    @Param('provider') provider: string,
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.listingsService.upsertListing(u.businessId, provider, id, body);
+  }
+
+  @Post('integrations/:provider/listings/import')
+  importListings(
+    @CurrentUser() u: User,
+    @Param('provider') provider: string,
+    @Body() body: { productIds?: string[]; categoryIds?: string[]; allActive?: boolean },
+  ) {
+    return this.listingsService.importFromSelection(u.businessId, provider, body);
+  }
+
+  @Post('integrations/:provider/listings/validate')
+  validateListings(@CurrentUser() u: User, @Param('provider') provider: string) {
+    return this.listingsService.validateAll(u.businessId, provider);
+  }
+
+  @Post('integrations/:provider/listings/push')
+  pushListings(@CurrentUser() u: User, @Param('provider') provider: string) {
+    return this.listingsService.pushPublished(u.businessId, provider);
   }
 }
 

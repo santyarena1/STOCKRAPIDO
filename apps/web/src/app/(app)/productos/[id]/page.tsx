@@ -13,6 +13,7 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { Check, ChevronDown, Copy, Search } from 'lucide-react';
+import { DeliveryProductReadinessPanel, DeliveryProductReadinessBadges, type ProductDeliveryReadiness } from '@/components/delivery/DeliveryProductReadiness';
 import { flattenRaw } from '@/lib/flatten-raw';
 
 type ProductBatch = {
@@ -118,6 +119,7 @@ export default function EditarProductoPage() {
   const [consignParties, setConsignParties] = useState<Array<{ id: string; name: string; defaultCommissionPercent: number }>>([]);
   const [consignPartyId, setConsignPartyId] = useState('');
   const [consignPct, setConsignPct] = useState('');
+  const [deliveryProviders, setDeliveryProviders] = useState<ProductDeliveryReadiness[]>([]);
   const [pcBusy, setPcBusy] = useState(false);
   const [pcMsg, setPcMsg] = useState('');
   const [pcHits, setPcHits] = useState<Array<{
@@ -283,7 +285,8 @@ export default function EditarProductoPage() {
       api<Category[]>('/business/categories'),
       api<StockMove[]>(`/products/${id}/stock-moves`),
       api<SupplierData>(`/products/${id}/supplier-data`),
-    ]).then(([pRes, catsRes, mRes, supplierRes]) => {
+      api<{ byProduct: Record<string, { providers: ProductDeliveryReadiness[] }> }>(`/delivery/readiness/${id}`).catch(() => ({ byProduct: {} as Record<string, { providers: ProductDeliveryReadiness[] }> })),
+    ]).then(([pRes, catsRes, mRes, supplierRes, deliveryRes]) => {
       const p = pRes.status === 'fulfilled' ? pRes.value : null;
       const cats = catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) ? catsRes.value : [];
       const m = mRes.status === 'fulfilled' && Array.isArray(mRes.value) ? mRes.value : [];
@@ -313,6 +316,8 @@ export default function EditarProductoPage() {
       setCategories(cats);
       setMoves(m);
       setSupplierData(supplier);
+      const delivery = deliveryRes.status === 'fulfilled' ? deliveryRes.value : { byProduct: {} as Record<string, { providers: ProductDeliveryReadiness[] }> };
+      setDeliveryProviders(delivery.byProduct[id]?.providers ?? []);
     }).finally(() => setLoading(false));
   }, [id]);
 
@@ -444,6 +449,7 @@ export default function EditarProductoPage() {
         </div>
       </section>
 
+      <DeliveryProductReadinessPanel providers={deliveryProviders} />
 
       <details className="rounded-xl border border-hair-soft bg-surface open:shadow-sm">
         <summary className="cursor-pointer list-none p-4 font-semibold text-fg sm:p-5 [&::-webkit-details-marker]:hidden flex items-center justify-between gap-2">

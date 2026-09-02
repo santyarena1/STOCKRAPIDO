@@ -51,6 +51,10 @@ export class DeliveryIntegrationsService {
       autoAccept?: boolean;
       autoConfirmSale?: boolean;
       prepMinutesDefault?: number;
+      priceMarkupPercent?: number;
+      platformCommissionPercent?: number;
+      publishMode?: string;
+      testMode?: boolean;
     },
   ) {
     await assertPlanFeature(this.prisma, businessId, 'deliveryIntegrations');
@@ -67,6 +71,10 @@ export class DeliveryIntegrationsService {
     if (body.autoAccept !== undefined) data.autoAccept = body.autoAccept;
     if (body.autoConfirmSale !== undefined) data.autoConfirmSale = body.autoConfirmSale;
     if (body.prepMinutesDefault !== undefined) data.prepMinutesDefault = body.prepMinutesDefault;
+    if (body.priceMarkupPercent !== undefined) data.priceMarkupPercent = body.priceMarkupPercent;
+    if (body.platformCommissionPercent !== undefined) data.platformCommissionPercent = body.platformCommissionPercent;
+    if (body.publishMode !== undefined) data.publishMode = body.publishMode;
+    if (body.testMode !== undefined) data.testMode = body.testMode;
     if (body.credentials !== undefined) {
       data.credentialsEncrypted =
         body.credentials && Object.keys(body.credentials).length
@@ -90,6 +98,10 @@ export class DeliveryIntegrationsService {
         autoAccept: Boolean(data.autoAccept),
         autoConfirmSale: data.autoConfirmSale !== undefined ? Boolean(data.autoConfirmSale) : true,
         prepMinutesDefault: Number(data.prepMinutesDefault) || 15,
+        priceMarkupPercent: Number(data.priceMarkupPercent) || 0,
+        platformCommissionPercent: Number(data.platformCommissionPercent) || 28,
+        publishMode: (data.publishMode as string) || 'manual',
+        testMode: Boolean(data.testMode),
       },
       update: data,
     });
@@ -303,6 +315,10 @@ export class DeliveryIntegrationsService {
     autoAccept: boolean;
     autoConfirmSale: boolean;
     prepMinutesDefault: number;
+    priceMarkupPercent: unknown;
+    platformCommissionPercent: unknown;
+    publishMode: string;
+    testMode: boolean;
     lastSyncAt: Date | null;
     lastError: string | null;
     createdAt: Date;
@@ -324,6 +340,10 @@ export class DeliveryIntegrationsService {
       autoAccept: row.autoAccept,
       autoConfirmSale: row.autoConfirmSale,
       prepMinutesDefault: row.prepMinutesDefault,
+      priceMarkupPercent: row.priceMarkupPercent != null ? Number(row.priceMarkupPercent) : 0,
+      platformCommissionPercent: row.platformCommissionPercent != null ? Number(row.platformCommissionPercent) : 28,
+      publishMode: row.publishMode ?? 'manual',
+      testMode: row.testMode ?? false,
       lastSyncAt: row.lastSyncAt,
       lastError: row.lastError,
       createdAt: row.createdAt,
@@ -348,6 +368,10 @@ export class DeliveryIntegrationsService {
       autoAccept: false,
       autoConfirmSale: true,
       prepMinutesDefault: 15,
+      priceMarkupPercent: 0,
+      platformCommissionPercent: 28,
+      publishMode: 'manual',
+      testMode: false,
       lastSyncAt: null,
       lastError: null,
       createdAt: null,

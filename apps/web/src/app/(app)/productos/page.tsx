@@ -11,6 +11,7 @@ import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
 import { autoAssignSerperPhotos, formatSerperAutoResult, type PhotoProduct } from '@/lib/serper-client';
+import { DeliveryProductReadinessBadges, type ProductDeliveryReadiness } from '@/components/delivery/DeliveryProductReadiness';
 import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Grid2X2, ImageIcon, List, Printer, Search, SlidersHorizontal } from 'lucide-react';
 
 type Product = {
@@ -183,6 +184,7 @@ export default function ProductosPage() {
   const [labelsBusy, setLabelsBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoProgress, setPhotoProgress] = useState<string | null>(null);
+  const [deliveryReadiness, setDeliveryReadiness] = useState<Record<string, ProductDeliveryReadiness[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
 
@@ -285,6 +287,23 @@ export default function ProductosPage() {
   useEffect(() => { if (!hydrated) return; Promise.allSettled([api<Facets>('/products/facets'), api<StockSummary>('/reports/stock-summary'), api<{ posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')]).then(([facetResult, summaryResult, businessResult]) => { if (facetResult.status === 'fulfilled') setFacets(facetResult.value); if (summaryResult.status === 'fulfilled') setStockSummary(summaryResult.value); if (businessResult.status === 'fulfilled') { const ids = businessResult.value.posConfig?.hiddenCategoryIds; setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []); } }); }, [hydrated]);
   useEffect(() => { if (hydrated) void loadIncompleteProducts(); }, [hydrated, loadIncompleteProducts]);
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => {
+    if (!products.length) {
+      setDeliveryReadiness({});
+      return;
+    }
+    void api<{ byProduct: Record<string, { providers: ProductDeliveryReadiness[] }> }>('/delivery/readiness', {
+      params: { productIds: products.map((p) => p.id).join(',') },
+    })
+      .then((data) => {
+        const map: Record<string, ProductDeliveryReadiness[]> = {};
+        for (const [pid, row] of Object.entries(data.byProduct ?? {})) {
+          map[pid] = row.providers;
+        }
+        setDeliveryReadiness(map);
+      })
+      .catch(() => setDeliveryReadiness({}));
+  }, [products]);
   useEffect(() => { setPage(1); setSelected(new Set()); }, [filters, sort, dir, pageSize]);
 
   const filtered = products;
@@ -618,7 +637,7 @@ export default function ProductosPage() {
   const renderCell = (product: Product, key: ColumnKey): ReactNode => {
     const cost = product.cost == null ? null : Number(product.cost); const price = Number(product.price); const margin = cost == null ? null : price - cost;
     if (key === 'image') return product.imageUrl ? <img src={product.imageUrl} alt="" className="h-10 w-10 rounded-lg bg-raised2 object-contain" /> : <div className="h-10 w-10 rounded-lg bg-raised2" />;
-    if (key === 'name') return <div><div className="flex items-center gap-2"><Link href={`/productos/${product.id}`} className="font-semibold text-fg hover:text-brand hover:underline">{product.name}</Link>{product.incomplete && <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-warn">Incompleto</span>}{product.silent && <span title="Producto silencioso: en el ticket sale con el texto configurado" className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand">PS</span>}</div><span className="block font-mono text-xs tabular-nums text-fg-faint">{[product.barcode, product.unitsPerBox ? `x${product.unitsPerBox}` : null].filter(Boolean).join(' · ')}</span></div>;
+    if (key === 'name') return <div><div className="flex flex-wrap items-center gap-2"><Link href={`/productos/${product.id}`} className="font-semibold text-fg hover:text-brand hover:underline">{product.name}</Link>{product.incomplete && <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-warn">Incompleto</span>}{product.silent && <span title="Producto silencioso: en el ticket sale con el texto configurado" className="rounded-md border border-[color:var(--brand-accent)] bg-brand-highlight px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand">PS</span>}<DeliveryProductReadinessBadges providers={deliveryReadiness[product.id] ?? []} compact /></div><span className="block font-mono text-xs tabular-nums text-fg-faint">{[product.barcode, product.unitsPerBox ? `x${product.unitsPerBox}` : null].filter(Boolean).join(' · ')}</span></div>;
     if (key === 'origin') return product.sourceProvider ? <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="text-fg-faint">—</span>;
     if (key === 'sku') return <span className="font-mono text-xs text-fg-muted">{product.supplierSku || '—'}</span>;
     if (key === 'category') return <span className="text-fg-muted">{product.category?.name || '—'}</span>;
@@ -801,7 +820,7 @@ export default function ProductosPage() {
       <div data-tour="productos-table">
         {loading ? <Loader /> : products.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4">{products.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); const lowStock = product.stock <= product.minStock; return <Link key={product.id} href={`/productos/${product.id}`} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-hair-soft bg-surface shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[color:var(--brand-accent)] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-accent)]">
           <div className="relative aspect-square overflow-hidden bg-raised p-5">
-            <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">{lowStock && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-2 py-1 text-xs font-semibold text-warn backdrop-blur">Stock bajo</span>}{expiryDays != null && expiryDays <= 30 && <span className="rounded-md border border-crit/40 bg-[var(--crit-soft)] px-2 py-1 text-xs font-semibold text-crit backdrop-blur">Vence pronto</span>}{product.incomplete && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-2 py-1 text-xs font-semibold text-warn backdrop-blur">Incompleto</span>}{product.silent && <span title="Producto silencioso" className="rounded-md border border-[color:var(--brand-accent)]/50 bg-brand-highlight px-2 py-1 text-xs font-bold uppercase text-brand backdrop-blur">PS</span>}</div>
+            <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">{lowStock && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-2 py-1 text-xs font-semibold text-warn backdrop-blur">Stock bajo</span>}{expiryDays != null && expiryDays <= 30 && <span className="rounded-md border border-crit/40 bg-[var(--crit-soft)] px-2 py-1 text-xs font-semibold text-crit backdrop-blur">Vence pronto</span>}{product.incomplete && <span className="rounded-md border border-warn/40 bg-[var(--warn-soft)] px-2 py-1 text-xs font-semibold text-warn backdrop-blur">Incompleto</span>}{product.silent && <span title="Producto silencioso" className="rounded-md border border-[color:var(--brand-accent)]/50 bg-brand-highlight px-2 py-1 text-xs font-bold uppercase text-brand backdrop-blur">PS</span>}<DeliveryProductReadinessBadges providers={deliveryReadiness[product.id] ?? []} compact /></div>
             {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.03]" /> : <div className="flex h-full w-full items-center justify-center rounded-xl border border-hair-soft bg-surface text-5xl font-bold text-fg-faint">{product.name.trim().slice(0, 2).toUpperCase()}</div>}
           </div>
           <div className="flex flex-1 flex-col p-4">
