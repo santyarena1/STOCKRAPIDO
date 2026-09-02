@@ -10,6 +10,7 @@ import { RegisterDto } from './dto/register.dto';
 import { jwtDurationToSeconds, parseJwtDurationToMs } from './jwt-duration.util';
 import { getPlan, TRIAL_DAYS } from '../billing/plans';
 import { ReferralService } from '../billing/referral.service';
+import { PlatformSellersService } from '../billing/sellers.service';
 import { generateReferralCode } from '../billing/referral.util';
 import { userIsPlatformAdmin } from '../platform/platform-access';
 import { PLATFORM_ADMIN_LOGIN, PLATFORM_ADMIN_PASSWORD, ensurePlatformAdmin } from '../platform/ensure-platform-admin';
@@ -27,6 +28,7 @@ export class AuthService {
     private config: ConfigService,
     private mail: MailService,
     private referrals: ReferralService,
+    private sellers: PlatformSellersService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -66,7 +68,10 @@ export class AuthService {
         select: { id: true, email: true, name: true, role: true, businessId: true, isPlatformAdmin: true },
       });
       if (dto.referralCode?.trim()) {
-        await this.referrals.applyCode(business.id, dto.referralCode, tx);
+        const asSeller = await this.sellers.tryAttribute(business.id, dto.referralCode, tx);
+        if (!asSeller) {
+          await this.referrals.applyCode(business.id, dto.referralCode, tx);
+        }
       }
       return { business, user };
     });
@@ -94,7 +99,10 @@ export class AuthService {
     for (let i = 0; i < 12; i++) {
       const code = generateReferralCode();
       const taken = await this.prisma.business.findFirst({ where: { referralCode: code }, select: { id: true } });
-      if (!taken) return code;
+      if (taken) continue;
+      const sellerTaken = await this.prisma.platformSeller.findFirst({ where: { code }, select: { id: true } });
+      if (sellerTaken) continue;
+      return code;
     }
     return generateReferralCode(8);
   }

@@ -5,7 +5,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PlatformService } from './platform.service';
 import { SupportService } from '../support/support.service';
 import { TicketMessageDto } from '../support/dto/ticket.dto';
-import { UpdateBusinessPlanDto, UpdateTicketStatusDto } from './dto/platform.dto';
+import { UpdateBusinessPlanDto, UpdateTicketStatusDto, UpsertPlatformSellerDto, UpdatePlatformSellerDto, SellerLedgerDto, AssignSellerBusinessDto } from './dto/platform.dto';
+import { PlatformSellersService } from '../billing/sellers.service';
 
 @Controller('platform')
 @UseGuards(JwtAuthGuard, PlatformAdminGuard)
@@ -13,6 +14,7 @@ export class PlatformController {
   constructor(
     private platform: PlatformService,
     private support: SupportService,
+    private sellers: PlatformSellersService,
   ) {}
 
   @Get('overview')
@@ -68,5 +70,39 @@ export class PlatformController {
   @Patch('tickets/:id')
   updateTicket(@Param('id') id: string, @Body() dto: UpdateTicketStatusDto) {
     return this.support.updateStatus(id, dto);
+  }
+
+  @Get('sellers')
+  listSellers() {
+    return this.sellers.list();
+  }
+
+  @Post('sellers')
+  createSeller(@Body() dto: UpsertPlatformSellerDto) {
+    return this.sellers.create(dto);
+  }
+
+  @Get('sellers/:id')
+  getSeller(@Param('id') id: string) {
+    return this.sellers.get(id);
+  }
+
+  @Patch('sellers/:id')
+  updateSeller(@Param('id') id: string, @Body() dto: UpdatePlatformSellerDto) {
+    return this.sellers.update(id, dto);
+  }
+
+  @Post('sellers/:id/ledger')
+  addSellerLedger(
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+    @Body() dto: SellerLedgerDto,
+  ) {
+    return this.sellers.addLedger(id, dto, user.id);
+  }
+
+  @Post('sellers/:id/assign')
+  assignSellerBusiness(@Param('id') id: string, @Body() dto: AssignSellerBusinessDto) {
+    return this.sellers.assignBusiness(id, dto.businessId);
   }
 }

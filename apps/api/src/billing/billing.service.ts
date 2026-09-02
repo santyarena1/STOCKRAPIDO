@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BillingCycle, getPlan, PLAN_CATALOG, PlanId, planPrice, REFERRAL_DISCOUNT_MONTHS, REFERRAL_DISCOUNT_PER_MONTH, TRIAL_DAYS } from './plans';
 import { resolvePlanAccess } from './plan-guard';
 import { ReferralService, referralNotes } from './referral.service';
+import { PlatformSellersService } from './sellers.service';
 
 type AuthUser = { id: string; role: string; businessId: string };
 
@@ -17,6 +18,7 @@ export class BillingService {
     private prisma: PrismaService,
     private config: ConfigService,
     private referrals: ReferralService,
+    private sellers: PlatformSellersService,
   ) {}
 
   listPlans() {
@@ -201,6 +203,7 @@ export class BillingService {
       },
     });
     await this.referrals.consumePaid(paid);
+    await this.sellers.accrueForPaidInvoice(paid);
     const business = await this.prisma.business.findUnique({
       where: { id: invoice.businessId },
       select: { planStatus: true },

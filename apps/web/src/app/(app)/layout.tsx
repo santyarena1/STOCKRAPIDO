@@ -134,6 +134,7 @@ const PLATFORM_GROUP = {
   icon: Shield,
   items: [
     { href: '/admin', label: 'Cuentas' },
+    { href: '/admin/vendedores', label: 'Vendedores' },
     { href: '/admin/tickets', label: 'Tickets' },
   ],
 };
@@ -146,6 +147,7 @@ function isActivePath(pathname: string, href: string) {
     (href === '/compras' && pathname.startsWith('/compras')) ||
     (href === '/figuritas' && pathname.startsWith('/figuritas')) ||
     (href === '/admin' && (pathname === '/admin' || pathname.startsWith('/admin/negocios'))) ||
+    (href === '/admin/vendedores' && pathname.startsWith('/admin/vendedores')) ||
     (href === '/admin/tickets' && pathname.startsWith('/admin/tickets')) ||
     (href === '/soporte' && pathname.startsWith('/soporte')) ||
     (href.startsWith('/config/') && pathname.startsWith(href))

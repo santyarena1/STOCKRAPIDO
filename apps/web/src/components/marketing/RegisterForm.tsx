@@ -7,6 +7,23 @@ import { getApiBaseUrl } from '@/lib/env-urls';
 import { formatPlanPrice, REFERRAL_DISCOUNT_MONTHS, REFERRAL_DISCOUNT_PER_MONTH, type PlanId } from '@/lib/plans';
 import { LANDING_PLAN_META, landingPlans, resolveLandingPlanId } from '@/lib/landing-copy';
 
+type LookupResult = {
+  valid?: boolean;
+  kind?: 'seller' | 'local';
+  referrerName?: string;
+  name?: string;
+};
+
+function referralHintFromLookup(data: LookupResult): string {
+  if (data.valid && (data.referrerName || data.name) && data.kind === 'seller') {
+    return `Código de ${data.referrerName || data.name}. Ese vendedor queda asociado a tu cuenta.`;
+  }
+  if (data.valid && (data.referrerName || data.name)) {
+    return `Código de ${data.referrerName || data.name}. Vos y ese local tienen ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} off por ${REFERRAL_DISCOUNT_MONTHS} meses.`;
+  }
+  return 'No encontramos ese código. Podés dejarlo vacío o pedirlo de nuevo.';
+}
+
 export function RegisterForm({ initialPlan, initialReferral }: { initialPlan?: string; initialReferral?: string }) {
   const router = useRouter();
   const planId: PlanId = resolveLandingPlanId(initialPlan);
@@ -31,12 +48,8 @@ export function RegisterForm({ initialPlan, initialReferral }: { initialPlan?: s
     void (async () => {
       try {
         const res = await fetch(`${getApiBaseUrl()}/billing/referral/${encodeURIComponent(code)}`);
-        const data = (await res.json().catch(() => ({}))) as { valid?: boolean; referrerName?: string };
-        if (data.valid && data.referrerName) {
-          setReferralHint(
-            `Código de ${data.referrerName}. Vos y ese local tienen ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} off por ${REFERRAL_DISCOUNT_MONTHS} meses.`,
-          );
-        }
+        const data = (await res.json().catch(() => ({}))) as LookupResult;
+        if (data.valid) setReferralHint(referralHintFromLookup(data));
       } catch {
         /* el alta sigue igual si no se puede validar ahora */
       }
@@ -130,7 +143,7 @@ export function RegisterForm({ initialPlan, initialReferral }: { initialPlan?: s
       </div>
       <div>
         <label className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-2)]">
-          Código de referido (opcional)
+          Código de referido o vendedor (opcional)
         </label>
         <input
           type="text"
@@ -147,14 +160,8 @@ export function RegisterForm({ initialPlan, initialReferral }: { initialPlan?: s
             }
             try {
               const res = await fetch(`${getApiBaseUrl()}/billing/referral/${encodeURIComponent(code)}`);
-              const data = (await res.json().catch(() => ({}))) as { valid?: boolean; referrerName?: string };
-              if (data.valid && data.referrerName) {
-                setReferralHint(
-                  `Código de ${data.referrerName}. Vos y ese local tienen ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} off por ${REFERRAL_DISCOUNT_MONTHS} meses.`,
-                );
-              } else {
-                setReferralHint('No encontramos ese código. Podés dejarlo vacío o pedirlo de nuevo.');
-              }
+              const data = (await res.json().catch(() => ({}))) as LookupResult;
+              setReferralHint(referralHintFromLookup(data));
             } catch {
               setReferralHint('');
             }
@@ -165,7 +172,7 @@ export function RegisterForm({ initialPlan, initialReferral }: { initialPlan?: s
         />
         <p className="mt-1 text-xs text-[var(--mk-ink-2)]">
           {referralHint ||
-            `Si te invitaron, ambos reciben ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} de descuento los primeros ${REFERRAL_DISCOUNT_MONTHS} meses.`}
+            `Si te invitaron un local o un vendedor, poné el código. El de otro kiosco da ${formatPlanPrice(REFERRAL_DISCOUNT_PER_MONTH)} off por ${REFERRAL_DISCOUNT_MONTHS} meses.`}
         </p>
       </div>
       {error ? <p className="text-sm text-[var(--mk-red-dark)]">{error}</p> : null}

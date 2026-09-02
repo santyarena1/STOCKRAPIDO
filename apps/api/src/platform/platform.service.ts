@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { ReferralService } from '../billing/referral.service';
+import { PlatformSellersService } from '../billing/sellers.service';
 import { getPlan } from '../billing/plans';
 import { SupportService } from '../support/support.service';
 
@@ -12,6 +13,7 @@ export class PlatformService {
     private prisma: PrismaService,
     private billing: BillingService,
     private referrals: ReferralService,
+    private sellers: PlatformSellersService,
     private support: SupportService,
   ) {}
 
@@ -27,6 +29,7 @@ export class PlatformService {
       openTickets,
       pendingInvoices,
       salesToday,
+      sellerTotals,
     ] = await Promise.all([
       this.prisma.business.count(),
       this.prisma.business.count({ where: { planStatus: 'trial' } }),
@@ -40,6 +43,7 @@ export class PlatformService {
         _sum: { totalFinal: true },
         _count: true,
       }),
+      this.sellers.totals(),
     ]);
     return {
       businesses,
@@ -53,6 +57,7 @@ export class PlatformService {
         count: salesToday._count,
         amount: Number(salesToday._sum.totalFinal || 0),
       },
+      sellers: sellerTotals,
     };
   }
 
@@ -161,6 +166,7 @@ export class PlatformService {
           take: 50,
           include: { referred: { select: { id: true, name: true } } },
         },
+        sellerAttribution: { include: { seller: { select: { id: true, name: true, code: true, active: true } } } },
       },
     });
     if (!business) throw new NotFoundException('Cuenta no encontrada');
@@ -243,6 +249,15 @@ export class PlatformService {
           monthsLeft: r.referrerMonthsLeft,
         })),
       },
+      seller: business.sellerAttribution
+        ? {
+            id: business.sellerAttribution.seller.id,
+            name: business.sellerAttribution.seller.name,
+            code: business.sellerAttribution.seller.code,
+            active: business.sellerAttribution.seller.active,
+            attributedAt: business.sellerAttribution.createdAt,
+          }
+        : null,
       stats: {
         products,
         salesTodayCount: salesToday._count,

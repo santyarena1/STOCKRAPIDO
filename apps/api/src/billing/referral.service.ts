@@ -51,6 +51,11 @@ export class ReferralService {
         select: { id: true },
       });
       if (taken) continue;
+      const sellerTaken = await db.platformSeller.findFirst({
+        where: { code },
+        select: { id: true },
+      });
+      if (sellerTaken) continue;
       try {
         const updated = await db.business.update({
           where: { id: businessId },
@@ -103,12 +108,20 @@ export class ReferralService {
   async lookup(rawCode: string) {
     const code = normalizeReferralCode(rawCode);
     if (!code) return { valid: false as const };
+    const seller = await this.prisma.platformSeller.findFirst({
+      where: { code },
+      select: { name: true, active: true },
+    });
+    if (seller) {
+      if (!seller.active) return { valid: false as const, reason: 'inactive' as const };
+      return { valid: true as const, kind: 'seller' as const, name: seller.name, referrerName: seller.name, code };
+    }
     const referrer = await this.prisma.business.findFirst({
       where: { referralCode: code },
       select: { name: true },
     });
     if (!referrer) return { valid: false as const };
-    return { valid: true as const, referrerName: referrer.name, code };
+    return { valid: true as const, kind: 'local' as const, name: referrer.name, referrerName: referrer.name, code };
   }
 
   async quote(businessId: string, cycle: BillingCycle, listPrice: number, db: DbClient = this.prisma) {

@@ -77,6 +77,60 @@ model Business {
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   referralsMade        Referral[] @relation("ReferralsMade")
   referralReceived     Referral?  @relation("ReferralReceived")
+  sellerAttribution    PlatformSellerAttribution?
+}
+
+/** Vendedor comercial de StockRápido (no es el vendedor del POS). Superadmin le arma código y comisión. */
+model PlatformSeller {
+  id               String   @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  notes            String?
+  code             String   @unique
+  active           Boolean  @default(true)
+  /** percent = % sobre cada pago acreditado; fixed = monto fijo la primera vez que el local paga. */
+  commissionType   String   @default("percent")
+  commissionValue  Decimal  @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  attributions PlatformSellerAttribution[]
+  ledger       PlatformSellerLedgerEntry[]
+}
+
+/** Local que se registró con el código de un vendedor del sistema. */
+model PlatformSellerAttribution {
+  id         String   @id @default(cuid())
+  sellerId   String
+  businessId String   @unique
+  code       String
+  createdAt  DateTime @default(now())
+
+  seller   PlatformSeller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  business Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, createdAt])
+}
+
+/** Cuenta corriente del vendedor: comisiones, pagos y ajustes, mes a mes. */
+model PlatformSellerLedgerEntry {
+  id          String   @id @default(cuid())
+  sellerId    String
+  businessId  String?
+  invoiceId   String?  @unique
+  type        String   // commission | payment | adjustment
+  amount      Decimal  // + nos debe; − le pagamos
+  description String?
+  periodYear  Int
+  periodMonth Int
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  seller PlatformSeller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, periodYear, periodMonth])
+  @@index([sellerId, createdAt])
 }
 
 /** Un local invitó a otro con su código. Ambos tienen $5.000/mes x 3 meses al facturar. */

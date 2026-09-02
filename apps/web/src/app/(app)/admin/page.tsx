@@ -17,6 +17,7 @@ type Overview = {
   openTickets: number;
   pendingInvoices: number;
   salesToday: { count: number; amount: number };
+  sellers?: { sellers: number; active: number; balance: number };
 };
 
 export default function AdminHomePage() {
@@ -42,6 +43,12 @@ function AdminHomeInner() {
         { href: '/admin/negocios', label: 'Cuentas', value: String(data.businesses), hint: `${data.active} activas · ${data.complimentary ?? 0} cortesía · ${data.trials} en prueba` },
         { href: '/admin/negocios?status=pending_payment', label: 'Pagos pendientes', value: String(data.pendingPayment), hint: `${data.pendingInvoices} comprobantes` },
         { href: '/admin/tickets', label: 'Tickets abiertos', value: String(data.openTickets), hint: 'Soporte de los kioscos' },
+        {
+          href: '/admin/vendedores',
+          label: 'Vendedores',
+          value: String(data.sellers?.sellers ?? 0),
+          hint: `${data.sellers?.active ?? 0} activos · saldo ${moneyArs(data.sellers?.balance ?? 0)}`,
+        },
         { href: '/admin/negocios', label: 'Ventas de hoy (todas las cuentas)', value: moneyArs(data.salesToday.amount), hint: `${data.salesToday.count} tickets` },
       ]
     : [];
@@ -62,6 +69,9 @@ function AdminHomeInner() {
       <div className="flex flex-wrap gap-3">
         <Link href="/admin/negocios" className="btn-brand rounded-lg px-4 py-2 text-sm font-medium">
           Ver cuentas
+        </Link>
+        <Link href="/admin/vendedores" className="rounded-lg border border-hair px-4 py-2 text-sm font-medium hover:bg-raised">
+          Vendedores
         </Link>
         <Link href="/admin/tickets" className="rounded-lg border border-hair px-4 py-2 text-sm font-medium hover:bg-raised">
           Ver tickets

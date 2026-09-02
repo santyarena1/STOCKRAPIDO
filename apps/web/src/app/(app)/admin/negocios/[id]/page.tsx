@@ -55,6 +55,7 @@ type Detail = {
     referredBy: { id: string; name: string; code: string; monthsLeft: number } | null;
     referralsMade: Array<{ id: string; businessId: string; name: string; createdAt: string; monthsLeft: number }>;
   };
+  seller?: { id: string; name: string; code: string; active: boolean; attributedAt: string } | null;
   stats: {
     products: number;
     salesTodayCount: number;
@@ -129,7 +130,7 @@ function DetailInner() {
     <Container className="space-y-8">
       <PageHeader
         title={data.name}
-        subtitle={`${data.cuit || 'Sin CUIT'} · alta ${formatWhen(data.createdAt)}`}
+        subtitle={`${data.cuit || 'Sin CUIT'} · alta ${formatWhen(data.createdAt)} · id ${data.id}`}
         actions={
           <Link href="/admin/negocios" className="rounded-lg border border-hair px-3 py-1.5 text-sm hover:bg-raised">
             Volver
@@ -252,6 +253,28 @@ function DetailInner() {
           </ul>
         ) : (
           <p className="mt-2 text-sm text-fg-faint">Todavía no trajo locales nuevos.</p>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-hair-soft bg-surface p-5">
+        <h2 className="font-semibold">Vendedor del sistema</h2>
+        {data.seller ? (
+          <p className="mt-2 text-sm text-fg-muted">
+            Lo trajo{' '}
+            <Link href={`/admin/vendedores/${data.seller.id}`} className="text-brand hover:underline">
+              {data.seller.name}
+            </Link>{' '}
+            ({data.seller.code}) el {formatWhen(data.seller.attributedAt)}
+            {data.seller.active ? '' : ' · vendedor inactivo'}.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-fg-muted">
+            No se registró con código de vendedor. Podés atribuirlo desde{' '}
+            <Link href="/admin/vendedores" className="text-brand hover:underline">
+              Vendedores
+            </Link>
+            .
+          </p>
         )}
       </section>
 

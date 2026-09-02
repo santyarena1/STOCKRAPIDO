@@ -24,12 +24,17 @@ export const CHANGELOG: ChangelogVersion[] = [
   {
     version: 'v1.21',
     date: '2026-09-02',
-    summary: 'Programa de referidos: código por local y $5.000 de descuento por 3 meses para ambos.',
+    summary: 'Referidos entre locales y vendedores del sistema con comisión y cuenta corriente.',
     items: [
       {
         tag: 'NUEVO',
         title: 'Referidos entre locales',
         desc: 'Cada kiosco tiene un código en Plan y facturación. Si un local nuevo se registra con ese código, ambos reciben $5.000 de descuento por mes durante los primeros 3 meses.',
+      },
+      {
+        tag: 'NUEVO',
+        title: 'Vendedores del sistema (admin)',
+        desc: 'En el panel admin podés crear vendedores con un código, comisión en % o monto fijo, y llevarles la cuenta corriente mes a mes.',
       },
     ],
   },
