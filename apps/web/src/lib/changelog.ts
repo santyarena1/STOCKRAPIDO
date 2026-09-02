@@ -61,6 +61,11 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Novedades en el menú lateral',
         desc: 'El acceso a Novedades quedó en el menú, arriba de Cerrar sesión, para no tapar botones del POS ni otras pantallas.',
       },
+      {
+        tag: 'MEJORA',
+        title: 'Catálogo comunitario con tus productos',
+        desc: 'Al abrir Catálogo público se sincronizan automáticamente las fichas de todos los locales (sin precio ni stock). Los productos nuevos o editados también se publican solos.',
+      },
     ],
   },
   {

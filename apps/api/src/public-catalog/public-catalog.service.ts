@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertCatalogImportLimit,
@@ -21,12 +21,36 @@ type PublicProductFields = {
   subcategory?: string | null;
 };
 
+type ProductForCatalog = {
+  id: string;
+  businessId: string;
+  name: string;
+  brand?: string | null;
+  barcode?: string | null;
+  imageUrl?: string | null;
+  unitsPerBox?: string | null;
+  weight?: string | null;
+  format?: string | null;
+  flavor?: string | null;
+  presentation?: string | null;
+  subcategory?: string | null;
+  allCodes?: string | null;
+  category?: { name: string } | null;
+};
+
+const SYNC_BUSINESS_LIMIT = 500;
+const SYNC_GLOBAL_LIMIT = 300;
+
 @Injectable()
 export class PublicCatalogService {
+  private readonly logger = new Logger(PublicCatalogService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async search(businessId: string, opts: { q?: string; limit?: number; offset?: number }) {
     await assertPlanFeatureRead(this.prisma, businessId, 'publicCatalog');
+    await this.syncCommunityCatalog(businessId);
+
     const limit = Math.min(Math.max(opts.limit ?? 40, 1), 100);
     const offset = Math.max(opts.offset ?? 0, 0);
     const q = opts.q?.trim();
@@ -87,6 +111,61 @@ export class PublicCatalogService {
     };
   }
 
+  /** Sincroniza productos locales al catálogo comunitario (backfill + mantenimiento). */
+  async syncCommunityCatalog(requestingBusinessId: string) {
+    try {
+      await this.syncBusinessProducts(requestingBusinessId, SYNC_BUSINESS_LIMIT);
+      await this.syncPendingProducts(SYNC_GLOBAL_LIMIT);
+    } catch (err) {
+      this.logger.warn(
+        `Sync catálogo comunitario parcial: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  async syncBusinessProducts(businessId: string, limit = SYNC_BUSINESS_LIMIT) {
+    await ensureCatalogShareConsent(this.prisma, businessId);
+    const products = await this.prisma.product.findMany({
+      where: {
+        businessId,
+        isActive: true,
+        incomplete: false,
+        sourcePublicProductId: null,
+        publishToCatalog: false,
+      },
+      include: { category: { select: { name: true } } },
+      take: limit,
+      orderBy: { updatedAt: 'desc' },
+    });
+    for (const product of products) {
+      await this.upsertPublicFromProduct(businessId, product);
+    }
+    return { synced: products.length };
+  }
+
+  async syncPendingProducts(limit = SYNC_GLOBAL_LIMIT) {
+    const products = await this.prisma.product.findMany({
+      where: {
+        isActive: true,
+        incomplete: false,
+        sourcePublicProductId: null,
+        publishToCatalog: false,
+      },
+      include: { category: { select: { name: true } } },
+      take: limit,
+      orderBy: { updatedAt: 'desc' },
+    });
+    for (const product of products) {
+      try {
+        await ensureCatalogShareConsent(this.prisma, product.businessId);
+        await this.upsertPublicFromProduct(product.businessId, product);
+      } catch {
+        /* otro negocio sin consentimiento aún */
+      }
+    }
+    return { synced: products.length };
+  }
+
   async publishFromProduct(businessId: string, productId: string) {
     await ensureCatalogShareConsent(this.prisma, businessId);
     const product = await this.prisma.product.findFirst({
@@ -94,7 +173,13 @@ export class PublicCatalogService {
       include: { category: { select: { name: true } } },
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
+    if (!product.isActive || product.incomplete) {
+      throw new NotFoundException('El producto no está listo para compartir en el catálogo.');
+    }
+    return this.upsertPublicFromProduct(businessId, product);
+  }
 
+  private async upsertPublicFromProduct(businessId: string, product: ProductForCatalog) {
     const fields = this.productToPublicFields(product);
     const keywords = [product.name, product.brand, product.barcode, product.allCodes]
       .filter(Boolean)
@@ -104,7 +189,15 @@ export class PublicCatalogService {
       ? await this.prisma.publicProduct.findFirst({
           where: { barcode: product.barcode, publishedByBusinessId: businessId, status: 'active' },
         })
-      : null;
+      : await this.prisma.publicProduct.findFirst({
+          where: {
+            publishedByBusinessId: businessId,
+            status: 'active',
+            barcode: null,
+            name: product.name,
+            brand: product.brand ?? null,
+          },
+        });
 
     const row = existing
       ? await this.prisma.publicProduct.update({
@@ -120,7 +213,7 @@ export class PublicCatalogService {
         });
 
     await this.prisma.product.update({
-      where: { id: productId },
+      where: { id: product.id },
       data: { publishToCatalog: true },
     });
 

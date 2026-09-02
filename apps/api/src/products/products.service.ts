@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, BadRequestException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -9,6 +9,7 @@ import { fuzzyCodeClause } from '../common/fuzzy-code';
 import { assertProductLimit } from '../billing/plan-guard';
 import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
+import { PublicCatalogService } from '../public-catalog/public-catalog.service';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -54,7 +55,29 @@ type ProviderFacetGroup = { sourceProvider: string | null; _count: { _all: numbe
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => PublicCatalogService))
+    private publicCatalog: PublicCatalogService,
+  ) {}
+
+  private queuePublicCatalogSync(businessId: string, productId: string) {
+    void this.publicCatalog.publishFromProduct(businessId, productId).catch((err) => {
+      this.logger.warn(
+        `No se pudo sincronizar producto ${productId} al catálogo: ${err instanceof Error ? err.message : err}`,
+      );
+    });
+  }
+
+  private maybeQueueCatalogSync(
+    businessId: string,
+    product: { id: string; isActive?: boolean; incomplete?: boolean; sourcePublicProductId?: string | null },
+  ) {
+    if (product.sourcePublicProductId) return;
+    if (product.incomplete) return;
+    if (product.isActive === false) return;
+    this.queuePublicCatalogSync(businessId, product.id);
+  }
 
   /**
    * Descuenta stock por lotes (FIFO por vencimiento). Si no hay lotes, descuenta del stock total (legacy).
@@ -795,7 +818,9 @@ export class ProductsService {
       include: { category: true },
     });
     if (initialStock > 0) {
-      return this.adjustStock(product.id, businessId, initialStock, 'stock_inicial');
+      const adjusted = await this.adjustStock(product.id, businessId, initialStock, 'stock_inicial');
+      if (adjusted) this.maybeQueueCatalogSync(businessId, adjusted);
+      return adjusted;
     }
     await this.prisma.stockMove.create({
       data: {
@@ -804,6 +829,7 @@ export class ProductsService {
         reason: 'alta_producto',
       },
     });
+    this.maybeQueueCatalogSync(businessId, product);
     return product;
   }
 
@@ -898,11 +924,13 @@ export class ProductsService {
         ]);
       }
     }
-    return this.prisma.product.update({
+    const updated = await this.prisma.product.update({
       where: { id, businessId },
       data: update,
       include: { category: true, consignmentParty: true },
     });
+    this.maybeQueueCatalogSync(businessId, updated);
+    return updated;
   }
 
   async adjustStock(id: string, businessId: string, qty: number, reason: string, reference?: string) {
