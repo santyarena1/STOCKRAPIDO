@@ -48,30 +48,61 @@ export class PublicCatalogService {
 
   constructor(private prisma: PrismaService) {}
 
-  async search(businessId: string, opts: { q?: string; limit?: number; offset?: number }) {
+  async facets(businessId: string, q?: string) {
+    await assertPlanFeatureRead(this.prisma, businessId, 'publicCatalog');
+    const baseWhere = this.buildSearchWhere(q);
+    const [brandRows, categoryRows] = await Promise.all([
+      this.prisma.publicProduct.findMany({
+        where: { ...baseWhere, brand: { not: null } },
+        distinct: ['brand'],
+        select: { brand: true },
+        orderBy: { brand: 'asc' },
+        take: 100,
+      }),
+      this.prisma.publicProduct.findMany({
+        where: { ...baseWhere, category: { not: null } },
+        distinct: ['category'],
+        select: { category: true },
+        orderBy: { category: 'asc' },
+        take: 100,
+      }),
+    ]);
+    return {
+      brands: brandRows.map((r) => r.brand!).filter(Boolean),
+      categories: categoryRows.map((r) => r.category!).filter(Boolean),
+    };
+  }
+
+  async search(
+    businessId: string,
+    opts: {
+      q?: string;
+      brand?: string;
+      category?: string;
+      imported?: 'yes' | 'no';
+      hasImage?: boolean;
+      sort?: 'newest' | 'name' | 'brand';
+      limit?: number;
+      offset?: number;
+    },
+  ) {
     await assertPlanFeatureRead(this.prisma, businessId, 'publicCatalog');
     await this.syncCommunityCatalog(businessId);
 
-    const limit = Math.min(Math.max(opts.limit ?? 40, 1), 100);
+    const limit = Math.min(Math.max(opts.limit ?? 48, 1), 100);
     const offset = Math.max(opts.offset ?? 0, 0);
-    const q = opts.q?.trim();
-    const where = {
-      status: 'active',
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' as const } },
-              { brand: { contains: q, mode: 'insensitive' as const } },
-              { barcode: q },
-              { keywords: { contains: q, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
-    };
-    const [items, total] = await Promise.all([
+    const where = await this.buildSearchWhereWithFilters(businessId, opts);
+    const orderBy =
+      opts.sort === 'name'
+        ? { name: 'asc' as const }
+        : opts.sort === 'brand'
+          ? { brand: 'asc' as const }
+          : { createdAt: 'desc' as const };
+
+    const [items, total, facets] = await Promise.all([
       this.prisma.publicProduct.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         take: limit,
         skip: offset,
         select: {
@@ -91,6 +122,7 @@ export class PublicCatalogService {
         },
       }),
       this.prisma.publicProduct.count({ where }),
+      this.facets(businessId, opts.q),
     ]);
 
     const imported = await this.prisma.product.findMany({
@@ -109,7 +141,65 @@ export class PublicCatalogService {
         localProductId: importedMap.get(item.id)?.id ?? null,
       })),
       total,
+      facets,
     };
+  }
+
+  private buildSearchWhere(q?: string) {
+    const term = q?.trim();
+    return {
+      status: 'active',
+      ...(term
+        ? {
+            OR: [
+              { name: { contains: term, mode: 'insensitive' as const } },
+              { brand: { contains: term, mode: 'insensitive' as const } },
+              { barcode: term },
+              { keywords: { contains: term, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private async buildSearchWhereWithFilters(
+    businessId: string,
+    opts: {
+      q?: string;
+      brand?: string;
+      category?: string;
+      imported?: 'yes' | 'no';
+      hasImage?: boolean;
+    },
+  ) {
+    const where: Prisma.PublicProductWhereInput = {
+      ...this.buildSearchWhere(opts.q),
+      ...(opts.brand?.trim() ? { brand: { equals: opts.brand.trim(), mode: 'insensitive' } } : {}),
+      ...(opts.category?.trim()
+        ? { category: { equals: opts.category.trim(), mode: 'insensitive' } }
+        : {}),
+      ...(opts.hasImage === true ? { imageUrl: { not: null } } : {}),
+      ...(opts.hasImage === false ? { imageUrl: null } : {}),
+    };
+
+    if (opts.imported === 'yes' || opts.imported === 'no') {
+      const importedRows = await this.prisma.product.findMany({
+        where: { businessId, sourcePublicProductId: { not: null } },
+        select: { sourcePublicProductId: true },
+      });
+      const importedIds = [
+        ...new Set(
+          importedRows.map((r) => r.sourcePublicProductId).filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      if (opts.imported === 'yes') {
+        where.id = importedIds.length ? { in: importedIds } : { in: ['__none__'] };
+      } else {
+        where.id = importedIds.length ? { notIn: importedIds } : undefined;
+      }
+    }
+
+    return where;
   }
 
   /** Sincroniza productos locales al catálogo comunitario (backfill + mantenimiento). */
@@ -293,19 +383,59 @@ export class PublicCatalogService {
     };
   }
 
-  async listImportHistory(businessId: string, limit = 50) {
+  async listImportHistory(
+    businessId: string,
+    opts: { q?: string; limit?: number; offset?: number } = {},
+  ) {
     await assertPlanFeatureRead(this.prisma, businessId, 'publicCatalog');
-    const take = Math.min(Math.max(limit, 1), 100);
-    const logs = await this.prisma.catalogImportLog.findMany({
-      where: { businessId },
-      orderBy: { importedAt: 'desc' },
-      take,
-    });
-    if (!logs.length) return { items: [], total: 0 };
+    const limit = Math.min(Math.max(opts.limit ?? 48, 1), 100);
+    const offset = Math.max(opts.offset ?? 0, 0);
+    const term = opts.q?.trim();
+
+    let where: Prisma.CatalogImportLogWhereInput = { businessId };
+    if (term) {
+      const [pubs, locals] = await Promise.all([
+        this.prisma.publicProduct.findMany({
+          where: {
+            status: 'active',
+            OR: [
+              { name: { contains: term, mode: 'insensitive' } },
+              { brand: { contains: term, mode: 'insensitive' } },
+              { barcode: term },
+            ],
+          },
+          select: { id: true },
+          take: 200,
+        }),
+        this.prisma.product.findMany({
+          where: { businessId, name: { contains: term, mode: 'insensitive' } },
+          select: { id: true },
+          take: 200,
+        }),
+      ]);
+      const pubIds = pubs.map((p) => p.id);
+      const localIds = locals.map((p) => p.id);
+      const or: Prisma.CatalogImportLogWhereInput[] = [];
+      if (pubIds.length) or.push({ publicProductId: { in: pubIds } });
+      if (localIds.length) or.push({ localProductId: { in: localIds } });
+      where = or.length ? { businessId, OR: or } : { businessId, id: { in: [] } };
+    }
+
+    const [logs, total] = await Promise.all([
+      this.prisma.catalogImportLog.findMany({
+        where,
+        orderBy: { importedAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.catalogImportLog.count({ where }),
+    ]);
+
+    if (!logs.length) return { items: [], total };
 
     const pubIds = [...new Set(logs.map((l) => l.publicProductId))];
     const localIds = [...new Set(logs.map((l) => l.localProductId).filter(Boolean))] as string[];
-    const [pubs, locals, total] = await Promise.all([
+    const [pubs, locals] = await Promise.all([
       this.prisma.publicProduct.findMany({
         where: { id: { in: pubIds } },
         select: { id: true, name: true, brand: true, barcode: true, imageUrl: true, category: true },
@@ -314,7 +444,6 @@ export class PublicCatalogService {
         where: { id: { in: localIds } },
         select: { id: true, name: true, brand: true, barcode: true },
       }),
-      this.prisma.catalogImportLog.count({ where: { businessId } }),
     ]);
     const pubMap = new Map(pubs.map((p) => [p.id, p]));
     const localMap = new Map(locals.map((p) => [p.id, p]));

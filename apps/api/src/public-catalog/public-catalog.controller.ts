@@ -10,15 +10,30 @@ type User = { businessId: string };
 export class PublicCatalogController {
   constructor(private catalog: PublicCatalogService) {}
 
+  @Get('facets')
+  facets(@CurrentUser() u: User, @Query('q') q?: string) {
+    return this.catalog.facets(u.businessId, q);
+  }
+
   @Get()
   search(
     @CurrentUser() u: User,
     @Query('q') q?: string,
+    @Query('brand') brand?: string,
+    @Query('category') category?: string,
+    @Query('imported') imported?: string,
+    @Query('hasImage') hasImage?: string,
+    @Query('sort') sort?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     return this.catalog.search(u.businessId, {
       q,
+      brand,
+      category,
+      imported: imported === 'yes' || imported === 'no' ? imported : undefined,
+      hasImage: hasImage === 'true' ? true : hasImage === 'false' ? false : undefined,
+      sort: sort === 'name' || sort === 'brand' || sort === 'newest' ? sort : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
@@ -35,8 +50,17 @@ export class PublicCatalogController {
   }
 
   @Get('import-history')
-  importHistory(@CurrentUser() u: User, @Query('limit') limit?: string) {
-    return this.catalog.listImportHistory(u.businessId, limit ? parseInt(limit, 10) : undefined);
+  importHistory(
+    @CurrentUser() u: User,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.catalog.listImportHistory(u.businessId, {
+      q,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+    });
   }
 
   @Get('import-preview/:publicProductId')

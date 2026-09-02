@@ -43,8 +43,8 @@ export const CHANGELOG: ChangelogVersion[] = [
       },
       {
         tag: 'MEJORA',
-        title: 'Catálogo público en tarjetas',
-        desc: 'Las fichas del catálogo comunitario y el historial de importados se muestran en formato tarjeta, con imagen grande y acciones claras.',
+        title: 'Catálogo público renovado en Productos',
+        desc: 'En Productos → Catálogo público: tarjetas compactas o lista densa, filtros, orden, paginación y barra de acciones al seleccionar fichas.',
       },
     ],
   },
