@@ -29,13 +29,16 @@ export class SalesService {
       cashRegisterId?: string;
       fiscalMode?: 'internal' | 'factura_c';
       sellerId?: string;
+      orderSource?: string;
+      externalOrderId?: string;
     },
   ) {
-    if (!options?.cashRegisterId?.trim()) {
+    let cashRegisterId = options?.cashRegisterId?.trim();
+    if (!cashRegisterId) {
       throw new BadRequestException('Tenés que tener la caja abierta para registrar ventas.');
     }
     const reg = await this.prisma.cashRegister.findFirst({
-      where: { id: options.cashRegisterId.trim(), businessId, closedAt: null },
+      where: { id: cashRegisterId, businessId, closedAt: null },
     });
     if (!reg) throw new BadRequestException('Caja no encontrada o cerrada. Abrí caja desde el menú Caja.');
     if (options?.sellerId) {
@@ -88,8 +91,10 @@ export class SalesService {
         discount: new Decimal(discount),
         totalFinal: new Decimal(totalFinal),
         paymentMethod: options?.paymentMethod,
-        cashRegisterId: options.cashRegisterId.trim(),
+        cashRegisterId,
         sellerId: options?.sellerId ?? null,
+        orderSource: options?.orderSource ?? null,
+        externalOrderId: options?.externalOrderId ?? null,
         items: { create: saleItems },
       },
       include: { items: { include: { product: true } }, customer: true },

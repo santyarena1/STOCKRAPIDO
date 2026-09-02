@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.21',
+    date: '2026-09-02',
+    summary: 'Módulo completo de delivery: Rappi, PedidosYa y central de pedidos.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Central de pedidos delivery',
+        desc: 'Bandeja unificada para Rappi y PedidosYa con estados, acciones y registro de venta con baja de stock.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Landing con delivery integrado',
+        desc: 'La página de inicio muestra la demo de Rappi y PedidosYa, la tabla de planes y preguntas frecuentes sobre la central de pedidos.',
+      },
+    ],
+  },
+  {
     version: 'v1.20',
     date: '2026-09-02',
     summary: 'Landing actualizada con el catálogo comunitario renovado.',

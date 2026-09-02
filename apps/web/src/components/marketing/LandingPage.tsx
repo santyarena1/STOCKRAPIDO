@@ -24,6 +24,7 @@ const COMPARE: { feature: PlanFeature; plans: [boolean, boolean, boolean] }[] = 
   { feature: 'promotions', plans: [true, true, true] },
   { feature: 'reports', plans: [true, true, true] },
   { feature: 'publicCatalog', plans: [true, true, true] },
+  { feature: 'deliveryIntegrations', plans: [false, true, true] },
   { feature: 'fiscal', plans: [false, true, true] },
   { feature: 'sync', plans: [false, false, true] },
   { feature: 'aiPurchases', plans: [false, false, true] },
@@ -38,7 +39,7 @@ const MODULES = [
   {
     plan: 'PRO',
     title: 'Cuando piden factura',
-    text: 'Suma Factura C electrónica al mismo cobro. Cargás CUIT, punto de venta y certificado una vez. Si no hace falta factura, el ticket interno sigue.',
+    text: 'Suma Factura C electrónica al mismo cobro y la central de delivery: Rappi y PedidosYa con módulos separados, bandeja unificada, menú, mapeos y venta con baja de stock.',
   },
   {
     plan: 'PREMIUM',
@@ -54,7 +55,7 @@ const WHY = [
   },
   {
     title: 'Todo en un solo lugar',
-    text: 'Ventas, caja, productos, compras, catálogo comunitario y facturación viven juntos. No hace falta entrar a mil plataformas ni copiar datos de un lado al otro.',
+    text: 'Ventas, caja, productos, compras, catálogo comunitario, delivery (Rappi y PedidosYa) y facturación viven juntos. No hace falta entrar a mil plataformas ni copiar datos de un lado al otro.',
   },
   {
     title: 'Lo hacemos nosotros',
@@ -78,6 +79,10 @@ const FAQ = [
   {
     q: '¿Qué es el catálogo comunitario?',
     a: 'En Productos → Catálogo público ves fichas que otros locales comparten (nombre, marca, categoría, código e imagen, sin precio ni stock). Filtrás, paginás e importás a tu inventario. También podés publicar las tuyas. En BASIC: publicar ilimitado e importar hasta 300 fichas por mes; en PRO y PREMIUM, sin tope.',
+  },
+  {
+    q: '¿Rappi y PedidosYa están integrados?',
+    a: 'Sí, desde PRO y PREMIUM. Tenés una central de pedidos unificada y un módulo dedicado para cada app: conexión API, webhook, menú, mapeo de SKU con tu inventario, aceptar/rechazar, preparar, despachar y convertir en venta con baja de stock. Cada plataforma se configura por separado.',
   },
   {
     q: '¿Tokin, Mondelez o Juntos+ en qué plan están?',
@@ -146,8 +151,8 @@ export function LandingPage() {
         <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[var(--mk-red)]">El sistema</p>
         <h2 className="mk-display mt-2 max-w-[18ch] text-4xl sm:text-5xl">Te ordena el día, desde el mostrador.</h2>
         <p className="mt-3 max-w-2xl text-[var(--mk-ink-2)]">
-          Punto de venta, caja, catálogo comunitario, facturación y listas de mayoristas. Todo adentro. Así no te perdés
-          entre mil pantallas.
+          Punto de venta, caja, catálogo comunitario, Rappi, PedidosYa, facturación y listas de mayoristas. Todo adentro.
+          Así no te perdés entre mil pantallas.
         </p>
         <div className="mt-8">
           <ProductDemos />

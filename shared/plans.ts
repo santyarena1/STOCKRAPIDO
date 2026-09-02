@@ -21,7 +21,8 @@ export type PlanFeature =
   | 'sync'
   | 'aiPurchases'
   | 'publicCatalog'
-  | 'multibranch';
+  | 'multibranch'
+  | 'deliveryIntegrations';
 
 export type PlanLimits = {
   maxUsers: number | null;
@@ -124,7 +125,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
     monthlyPrice: 34900,
     yearlyPrice: 349000,
     cta: 'Sumar facturación',
-    features: [...BASICO, 'fiscal', 'sync', 'multibranch'],
+    features: [...BASICO, 'fiscal', 'sync', 'multibranch', 'deliveryIntegrations'],
     limits: {
       maxUsers: 5,
       maxProducts: null,
@@ -138,6 +139,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
       'Factura electrónica AFIP (Factura C)',
       'Catálogo comunitario ilimitado',
       '1 conexión de proveedor sync',
+      'Rappi y PedidosYa: central de pedidos',
       'Hasta 5 usuarios',
       'Multisucursal (hasta 3 locales, próximamente)',
     ],
@@ -152,7 +154,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
     monthlyPrice: 54900,
     yearlyPrice: 549000,
     cta: 'Pasarme a Pro',
-    features: [...BASICO, 'fiscal', 'sync', 'aiPurchases', 'multibranch'],
+    features: [...BASICO, 'fiscal', 'sync', 'aiPurchases', 'multibranch', 'deliveryIntegrations'],
     limits: {
       maxUsers: null,
       maxProducts: null,
@@ -165,6 +167,7 @@ export const PLAN_CATALOG: PlanDefinition[] = [
       'Todo Fiscal, usuarios sin tope',
       'Sync Tokin, Mondelez y Juntos+ (sin tope de conexiones)',
       'Compras con IA',
+      'Rappi y PedidosYa sin límite',
       'Catálogo comunitario ilimitado',
       'Multisucursal sin tope (próximamente)',
     ],
@@ -189,6 +192,7 @@ export const FEATURE_LABELS: Record<PlanFeature, string> = {
   aiPurchases: 'Compras con IA',
   publicCatalog: 'Catálogo comunitario',
   multibranch: 'Multisucursal',
+  deliveryIntegrations: 'Rappi y PedidosYa',
 };
 
 export type TenantAccessMode = 'full' | 'read_only';

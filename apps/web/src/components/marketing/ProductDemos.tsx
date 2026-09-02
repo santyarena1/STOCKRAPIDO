@@ -5,6 +5,7 @@ import { useState } from 'react';
 const TABS = [
   { id: 'pos', label: 'Punto de venta', plan: 'BASIC' },
   { id: 'catalogo', label: 'Catálogo comunitario', plan: 'BASIC' },
+  { id: 'delivery', label: 'Rappi y PedidosYa', plan: 'PRO' },
   { id: 'caja', label: 'Caja', plan: 'BASIC' },
   { id: 'factura', label: 'Facturación', plan: 'PRO' },
   { id: 'dist', label: 'Distribuidores', plan: 'PREMIUM' },
@@ -35,6 +36,7 @@ export function ProductDemos() {
       <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[var(--mk-line)] bg-white shadow-[0_24px_60px_-28px_rgba(227,28,35,0.35)]">
         {tab === 'pos' ? <PosDemo /> : null}
         {tab === 'catalogo' ? <CatalogoDemo /> : null}
+        {tab === 'delivery' ? <DeliveryDemo /> : null}
         {tab === 'caja' ? <CajaDemo /> : null}
         {tab === 'factura' ? <FacturaDemo /> : null}
         {tab === 'dist' ? <DistDemo /> : null}
@@ -152,6 +154,53 @@ function CatalogoDemo() {
           <span className="rounded-lg border border-[var(--mk-line)] bg-white px-2 py-1">Anterior</span>
           <span className="rounded-lg border border-[var(--mk-line)] bg-white px-2 py-1">Siguiente</span>
         </span>
+      </div>
+    </div>
+  );
+}
+
+function DeliveryDemo() {
+  const orders = [
+    { id: '#R-4821', provider: 'Rappi', customer: 'María G.', total: 8450, status: 'Preparando', items: 4 },
+    { id: '#PY-1093', provider: 'PedidosYa', customer: 'Lucas R.', total: 5200, status: 'Nuevo', items: 2 },
+    { id: '#R-4819', provider: 'Rappi', customer: 'Ana P.', total: 12300, status: 'Listo', items: 6 },
+  ];
+  return (
+    <div className="grid gap-0 lg:grid-cols-[1fr_0.9fr]">
+      <div className="border-b border-black/5 p-5 sm:p-7 lg:border-b-0 lg:border-r">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Central de pedidos · PRO</p>
+        <h3 className="mt-1 text-2xl font-extrabold">Rappi y PedidosYa en un solo lugar</h3>
+        <p className="mt-3 text-[15px] leading-relaxed text-[var(--mk-ink-2)]">
+          Bandeja unificada con filtros por plataforma y estado. Cada app tiene su módulo: conexión, menú, mapeos SKU y
+          control de tienda abierta/cerrada.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm font-semibold text-[var(--mk-ink)]">
+          <li>• Aceptar, rechazar, preparar y despachar</li>
+          <li>• Convertir en venta con baja de stock</li>
+          <li>• Webhook seguro y simulador de pedidos</li>
+        </ul>
+      </div>
+      <div className="bg-[var(--mk-paper)] p-5 sm:p-7">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-ink-3)]">Bandeja activa</p>
+        <ul className="mt-3 divide-y divide-[var(--mk-line)]">
+          {orders.map((o) => (
+            <li key={o.id} className="flex items-center justify-between gap-3 py-3">
+              <div>
+                <p className="font-bold">
+                  {o.id}{' '}
+                  <span className="text-xs font-extrabold text-[var(--mk-ink-3)]">· {o.provider}</span>
+                </p>
+                <p className="text-sm text-[var(--mk-ink-2)]">
+                  {o.customer} · {o.items} ítems
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-mono font-bold tabular-nums">${o.total.toLocaleString('es-AR')}</p>
+                <p className="text-xs font-extrabold text-[var(--mk-red)]">{o.status}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

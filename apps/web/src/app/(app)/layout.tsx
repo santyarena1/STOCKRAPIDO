@@ -5,8 +5,11 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import {
   BarChart3,
+  Bike,
   ChevronDown,
   LayoutDashboard,
+  Menu,
+  Moon,
   Package,
   Receipt,
   ScanLine,
@@ -14,12 +17,19 @@ import {
   Shield,
   SlidersHorizontal,
   ShoppingCart,
-  Menu,
-  Moon,
   Sun,
   Truck,
   X,
 } from 'lucide-react';
+import {
+  PedidosYaIcon,
+  RappiIcon,
+} from '@/components/delivery/DeliveryBrandIcons';
+
+function SidebarDeliveryIcon({ provider }: { provider: 'rappi' | 'pedidosya' }) {
+  const Icon = provider === 'rappi' ? RappiIcon : PedidosYaIcon;
+  return <Icon className="h-4 w-4 shrink-0" />;
+}
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner';
 import { ChangelogNavLink, ChangelogWidget } from '@/components/ChangelogWidget';
@@ -96,6 +106,15 @@ const GROUPS = [
     ],
   },
   {
+    title: 'Delivery apps',
+    icon: Bike,
+    items: [
+      { href: '/delivery', label: 'Central de pedidos' },
+      { href: '/delivery/rappi', label: 'Rappi', deliveryIcon: 'rappi' as const },
+      { href: '/delivery/pedidosya', label: 'PedidosYa', deliveryIcon: 'pedidosya' as const },
+    ],
+  },
+  {
     title: 'Análisis',
     icon: BarChart3,
     items: [{ href: '/reportes', label: 'Reportes' }],
@@ -148,6 +167,8 @@ function isActivePath(pathname: string, href: string) {
     (href === '/admin' && (pathname === '/admin' || pathname.startsWith('/admin/negocios'))) ||
     (href === '/admin/tickets' && pathname.startsWith('/admin/tickets')) ||
     (href === '/soporte' && pathname.startsWith('/soporte')) ||
+    (href === '/delivery' && pathname === '/delivery') ||
+    (href.startsWith('/delivery/') && pathname.startsWith(href)) ||
     (href.startsWith('/config/') && pathname.startsWith(href))
   );
 }
@@ -354,7 +375,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {navGroups.map(({ title, icon: Icon, items }) => {
             const open = openGroups[title] ?? false;
             const groupActive = items.some(({ href }) => isActivePath(pathname, href));
-            return <div key={title}><button type="button" aria-expanded={open} onClick={() => setOpenGroups((current) => (current[title] ? {} : { [title]: true }))} className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg', groupActive ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted')}><Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-fg-muted')} /><span className="min-w-0 flex-1 truncate">{title}</span><ChevronDown className={cn('h-4 w-4 shrink-0 text-fg-faint transition-transform', open && 'rotate-180')} /></button>{open ? <div className="ml-5 mt-0.5 space-y-0.5 border-l border-hair-soft pl-3">{items.map(({ href, label }) => { const active = isActivePath(pathname, href); return <Link key={href} href={href} onClick={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined} className={cn('flex items-center rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors', active ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted hover:bg-raised hover:text-fg')}>{label}</Link>; })}</div> : null}</div>;
+            return (
+              <div key={title}>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenGroups((current) => (current[title] ? {} : { [title]: true }))}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-raised hover:text-fg',
+                    groupActive ? 'text-[color:var(--brand-nav-active,var(--brand-accent))]' : 'text-fg-muted',
+                  )}
+                >
+                  <Icon className={cn('h-[18px] w-[18px] shrink-0', groupActive ? 'text-current' : 'text-fg-muted')} />
+                  <span className="min-w-0 flex-1 truncate">{title}</span>
+                  <ChevronDown className={cn('h-4 w-4 shrink-0 text-fg-faint transition-transform', open && 'rotate-180')} />
+                </button>
+                {open ? (
+                  <div className="ml-5 mt-0.5 space-y-0.5 border-l border-hair-soft pl-3">
+                    {items.map((item) => {
+                      const { href, label } = item;
+                      const deliveryIcon =
+                        'deliveryIcon' in item && (item.deliveryIcon === 'rappi' || item.deliveryIcon === 'pedidosya')
+                          ? item.deliveryIcon
+                          : undefined;
+                      const active = isActivePath(pathname, href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={closeAfterNavigation ? () => setMobileSidebarOpen(false) : undefined}
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg border-r-2 border-transparent px-3 py-2 text-sm transition-colors',
+                            active
+                              ? 'border-[color:var(--brand-nav-active,var(--brand-accent))] bg-[color-mix(in_srgb,var(--brand-nav-active,var(--brand-accent))_18%,transparent)] font-medium text-[color:var(--brand-nav-active,var(--brand-accent))]'
+                              : 'text-fg-muted hover:bg-raised hover:text-fg',
+                          )}
+                        >
+                          {deliveryIcon ? <SidebarDeliveryIcon provider={deliveryIcon} /> : null}
+                          <span>{label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            );
           })}
         </div>
       </nav>

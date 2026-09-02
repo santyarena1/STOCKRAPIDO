@@ -28,6 +28,7 @@ import { PlatformModule } from './platform/platform.module';
 import { PreciosClarosModule } from './precios-claros/precios-claros.module';
 import { ConsignmentModule } from './consignment/consignment.module';
 import { PublicCatalogModule } from './public-catalog/public-catalog.module';
+import { DeliveryModule } from './delivery/delivery.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { PublicCatalogModule } from './public-catalog/public-catalog.module';
     PreciosClarosModule,
     ConsignmentModule,
     PublicCatalogModule,
+    DeliveryModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ReadOnlyGuard },

@@ -72,6 +72,8 @@ model Business {
   consignmentPayments  ConsignmentPayment[]
   publicProducts       PublicProduct[]
   catalogImports       CatalogImportLog[]
+  deliveryIntegrations DeliveryIntegration[]
+  deliveryOrders       DeliveryOrder[]
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 }
 
@@ -212,6 +214,9 @@ model Product {
   purchaseItems PurchaseItem[]
   batches   ProductBatch[]
   consignmentLedger ConsignmentLedgerEntry[]
+  deliveryOrderItems DeliveryOrderItem[]
+  deliveryMappings   DeliveryProductMapping[]
+  deliveryMenuItems  DeliveryMenuItem[]
 
   @@index([businessId, consigned])
   @@index([consignmentPartyId])
@@ -294,6 +299,9 @@ model Sale {
   voidedAt       DateTime?
   voidedById     String?
   sellerId       String?
+  /** pos | rappi | pedidosya */
+  orderSource    String?
+  externalOrderId String?
 
   business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user         User          @relation(fields: [userId], references: [id])
@@ -302,6 +310,10 @@ model Sale {
   items        SaleItem[]
   fiscalDocument FiscalDocument?
   seller       Vendedor?      @relation(fields: [sellerId], references: [id])
+  deliveryOrder DeliveryOrder?
+
+  @@index([businessId, orderSource])
+  @@index([businessId, externalOrderId])
 }
 
 model Vendedor {
@@ -653,6 +665,164 @@ model CatalogImportLog {
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId, importedAt])
+}
+
+// ===== Delivery: Rappi, PedidosYa y central de pedidos =====
+
+model DeliveryIntegration {
+  id                   String    @id @default(cuid())
+  businessId           String
+  provider             String    // rappi | pedidosya
+  name                 String
+  enabled              Boolean   @default(false)
+  storeExternalId      String?
+  chainExternalId      String?
+  countryCode          String    @default("AR")
+  config               Json?
+  credentialsEncrypted String?
+  webhookSecret        String    @default(cuid())
+  webhookToken         String    @default(cuid())
+  storeOpen            Boolean   @default(true)
+  autoAccept           Boolean   @default(false)
+  autoConfirmSale      Boolean   @default(true)
+  prepMinutesDefault   Int       @default(15)
+  lastSyncAt           DateTime?
+  lastError            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  business  Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  orders    DeliveryOrder[]
+  mappings  DeliveryProductMapping[]
+  menuItems DeliveryMenuItem[]
+  events    DeliveryIntegrationEvent[]
+
+  @@unique([businessId, provider])
+  @@index([webhookToken])
+}
+
+model DeliveryOrder {
+  id                String    @id @default(cuid())
+  businessId        String
+  integrationId     String
+  provider          String
+  externalOrderId   String
+  status            String    @default("pending_accept")
+  customerName      String?
+  customerPhone     String?
+  deliveryAddress   String?
+  deliveryNotes     String?
+  paymentMethod     String?
+  subtotal          Decimal   @default(0)
+  deliveryFee       Decimal   @default(0)
+  discount          Decimal   @default(0)
+  total             Decimal   @default(0)
+  currency          String    @default("ARS")
+  scheduledFor      DateTime?
+  placedAt          DateTime?
+  acceptedAt        DateTime?
+  readyAt           DateTime?
+  dispatchedAt      DateTime?
+  deliveredAt       DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  saleId            String?   @unique
+  raw               Json?
+  mappingIssues     Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  business    Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  integration DeliveryIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  sale        Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  items       DeliveryOrderItem[]
+  events      DeliveryOrderEvent[]
+
+  @@unique([businessId, provider, externalOrderId])
+  @@index([businessId, status, createdAt])
+  @@index([integrationId, status])
+}
+
+model DeliveryOrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  externalItemId  String?
+  externalSku     String?
+  name            String
+  qty             Int
+  unitPrice       Decimal
+  subtotal        Decimal
+  notes           String?
+  productId       String?
+  mapped          Boolean @default(false)
+
+  order   DeliveryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+model DeliveryOrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  type      String
+  message   String?
+  payload   Json?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  order DeliveryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model DeliveryProductMapping {
+  id            String   @id @default(cuid())
+  integrationId String
+  externalSku   String
+  externalName  String?
+  productId     String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  integration DeliveryIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  product     Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([integrationId, externalSku])
+}
+
+model DeliveryMenuItem {
+  id              String   @id @default(cuid())
+  integrationId   String
+  externalId      String?
+  externalSku     String?
+  name            String
+  category        String?
+  price           Decimal?
+  available       Boolean  @default(true)
+  imageUrl        String?
+  productId       String?
+  lastSyncedAt    DateTime?
+  raw             Json?
+
+  integration DeliveryIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  product     Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([integrationId, externalSku])
+}
+
+model DeliveryIntegrationEvent {
+  id            String   @id @default(cuid())
+  integrationId String
+  type          String
+  message       String?
+  payload       Json?
+  createdAt     DateTime @default(now())
+
+  integration DeliveryIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, createdAt])
 }
 
 // ===== Módulo de Sincronización con APIs de proveedores =====

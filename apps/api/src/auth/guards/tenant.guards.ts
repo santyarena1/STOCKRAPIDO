@@ -47,6 +47,7 @@ export class ReadOnlyGuard implements CanActivate {
     const path: string = req.path || req.url || '';
     if (WRITE_PREFIX_ALLOW.some((p) => path.startsWith(p))) return true;
     if (path === '/health') return true;
+    if (path.startsWith('/delivery/webhooks/')) return true;
 
     const user = req.user as { businessId?: string; isPlatformAdmin?: boolean; email?: string } | undefined;
     if (!user?.businessId) return true;
