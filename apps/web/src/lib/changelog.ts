@@ -22,6 +22,28 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.19',
+    date: '2026-09-02',
+    summary: 'Catálogo comunitario: historial de importados, aviso de parecidos y modal para completar la ficha.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Historial de importados del catálogo',
+        desc: 'En Productos → Catálogo público → Historial importados ves qué fichas trajiste y cuándo, con enlace al producto local.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Importar con aviso de productos parecidos',
+        desc: 'Al importar una ficha, el sistema te avisa si ya tenés algo similar (mismo código, nombre o marca) antes de confirmar.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Modal para completar al importar',
+        desc: 'Podés cargar código de barras, marca, categoría, precio de venta y costo al importar. Todo opcional: podés importar y completar después.',
+      },
+    ],
+  },
+  {
     version: 'v1.18',
     date: '2026-09-01',
     summary: 'Catálogo comunitario automático, planes ajustados, ventas, usuarios y mejoras de interfaz.',

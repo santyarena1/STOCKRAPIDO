@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertCatalogImportLimit,
@@ -236,10 +237,97 @@ export class PublicCatalogService {
     return { ok: true };
   }
 
-  async importOne(businessId: string, publicProductId: string, price?: number) {
+  async importOne(
+    businessId: string,
+    publicProductId: string,
+    options?: {
+      price?: number;
+      cost?: number;
+      barcode?: string;
+      brand?: string;
+      categoryId?: string;
+    },
+  ) {
     await ensureCatalogShareConsent(this.prisma, businessId);
     await assertCatalogImportLimit(this.prisma, businessId, 1);
-    return this.importOneInternal(businessId, publicProductId, price);
+    return this.importOneInternal(businessId, publicProductId, options);
+  }
+
+  async importPreview(businessId: string, publicProductId: string) {
+    await assertPlanFeatureRead(this.prisma, businessId, 'publicCatalog');
+    const pub = await this.prisma.publicProduct.findFirst({
+      where: { id: publicProductId, status: 'active' },
+    });
+    if (!pub) throw new NotFoundException('Producto del catálogo no encontrado');
+
+    const existing = await this.prisma.product.findFirst({
+      where: { businessId, sourcePublicProductId: publicProductId },
+      select: {
+        id: true,
+        name: true,
+        brand: true,
+        barcode: true,
+        price: true,
+        cost: true,
+        category: { select: { id: true, name: true } },
+      },
+    });
+
+    let categoryId: string | null = null;
+    if (pub.category) {
+      const cat = await this.prisma.category.findFirst({
+        where: { businessId, name: { equals: pub.category, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      categoryId = cat?.id ?? null;
+    }
+
+    const similarProducts = await this.findSimilarProducts(businessId, pub, existing?.id);
+
+    return {
+      publicProduct: pub,
+      alreadyImported: Boolean(existing),
+      localProductId: existing?.id ?? null,
+      suggestedCategoryId: categoryId,
+      similarProducts,
+    };
+  }
+
+  async listImportHistory(businessId: string, limit = 50) {
+    await assertPlanFeatureRead(this.prisma, businessId, 'publicCatalog');
+    const take = Math.min(Math.max(limit, 1), 100);
+    const logs = await this.prisma.catalogImportLog.findMany({
+      where: { businessId },
+      orderBy: { importedAt: 'desc' },
+      take,
+    });
+    if (!logs.length) return { items: [], total: 0 };
+
+    const pubIds = [...new Set(logs.map((l) => l.publicProductId))];
+    const localIds = [...new Set(logs.map((l) => l.localProductId).filter(Boolean))] as string[];
+    const [pubs, locals, total] = await Promise.all([
+      this.prisma.publicProduct.findMany({
+        where: { id: { in: pubIds } },
+        select: { id: true, name: true, brand: true, barcode: true, imageUrl: true, category: true },
+      }),
+      this.prisma.product.findMany({
+        where: { id: { in: localIds } },
+        select: { id: true, name: true, brand: true, barcode: true },
+      }),
+      this.prisma.catalogImportLog.count({ where: { businessId } }),
+    ]);
+    const pubMap = new Map(pubs.map((p) => [p.id, p]));
+    const localMap = new Map(locals.map((p) => [p.id, p]));
+
+    return {
+      items: logs.map((log) => ({
+        id: log.id,
+        importedAt: log.importedAt,
+        publicProduct: pubMap.get(log.publicProductId) ?? null,
+        localProduct: log.localProductId ? localMap.get(log.localProductId) ?? null : null,
+      })),
+      total,
+    };
   }
 
   async importBatch(businessId: string, publicProductIds: string[]) {
@@ -269,7 +357,17 @@ export class PublicCatalogService {
     return { imported, skipped, results };
   }
 
-  private async importOneInternal(businessId: string, publicProductId: string, price?: number) {
+  private async importOneInternal(
+    businessId: string,
+    publicProductId: string,
+    options?: {
+      price?: number;
+      cost?: number;
+      barcode?: string;
+      brand?: string;
+      categoryId?: string;
+    },
+  ) {
     if (!publicProductId?.trim()) throw new NotFoundException('Producto del catálogo no encontrado');
     await assertProductLimit(this.prisma, businessId);
 
@@ -281,19 +379,31 @@ export class PublicCatalogService {
     const existing = await this.prisma.product.findFirst({
       where: { businessId, sourcePublicProductId: publicProductId },
     });
-    if (existing) return { product: existing, created: false };
+    if (existing) {
+      return {
+        product: existing,
+        created: false,
+        similarProducts: await this.findSimilarProducts(businessId, pub, existing.id),
+      };
+    }
 
-    if (pub.barcode) {
+    const barcode = options?.barcode?.trim() || pub.barcode || null;
+    if (barcode) {
       const dup = await this.prisma.product.findFirst({
-        where: { businessId, barcode: pub.barcode },
+        where: { businessId, barcode },
       });
       if (dup) {
-        return { product: dup, created: false, message: 'Ya tenés un producto con ese código.' };
+        return {
+          product: dup,
+          created: false,
+          message: 'Ya tenés un producto con ese código de barras.',
+          similarProducts: await this.findSimilarProducts(businessId, pub, dup.id),
+        };
       }
     }
 
-    let categoryId: string | undefined;
-    if (pub.category) {
+    let categoryId: string | undefined = options?.categoryId || undefined;
+    if (!categoryId && pub.category) {
       const cat = await this.prisma.category.findFirst({
         where: { businessId, name: { equals: pub.category, mode: 'insensitive' } },
       });
@@ -306,12 +416,17 @@ export class PublicCatalogService {
       }
     }
 
+    const brand = options?.brand?.trim() || pub.brand;
+    const price = options?.price != null && options.price >= 0 ? options.price : 0;
+    const cost =
+      options?.cost != null && options.cost >= 0 ? options.cost : undefined;
+
     const product = await this.prisma.product.create({
       data: {
         businessId,
         name: pub.name,
-        brand: pub.brand,
-        barcode: pub.barcode,
+        brand,
+        barcode,
         imageUrl: pub.imageUrl,
         unitsPerBox: pub.unitsPerBox,
         weight: pub.weight,
@@ -320,20 +435,74 @@ export class PublicCatalogService {
         presentation: pub.presentation,
         subcategory: pub.subcategory,
         categoryId,
-        price: price && price > 0 ? price : 0,
+        price,
+        cost: cost != null ? cost : null,
         stock: 0,
         minStock: 0,
         stockControl: true,
         sourcePublicProductId: pub.id,
-        allCodes: pub.barcode || null,
+        allCodes: barcode || null,
       },
+      include: { category: { select: { id: true, name: true } } },
     });
 
     await this.prisma.catalogImportLog.create({
       data: { businessId, publicProductId: pub.id, localProductId: product.id },
     });
 
-    return { product, created: true };
+    return {
+      product,
+      created: true,
+      similarProducts: await this.findSimilarProducts(businessId, pub, product.id),
+    };
+  }
+
+  private async findSimilarProducts(
+    businessId: string,
+    pub: { id: string; name: string; brand?: string | null; barcode?: string | null },
+    excludeProductId?: string,
+  ) {
+    const or: Prisma.ProductWhereInput[] = [];
+    if (pub.barcode) {
+      or.push({ barcode: pub.barcode });
+      or.push({ allCodes: { contains: pub.barcode } });
+    }
+    const name = pub.name.trim();
+    if (name.length >= 3) {
+      or.push({ name: { equals: name, mode: 'insensitive' } });
+      const chunk = name.slice(0, Math.min(28, name.length));
+      or.push({ name: { contains: chunk, mode: 'insensitive' } });
+    }
+    if (pub.brand && name.length >= 3) {
+      or.push({
+        AND: [
+          { brand: { equals: pub.brand, mode: 'insensitive' } },
+          { name: { contains: name.slice(0, Math.min(20, name.length)), mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (!or.length) return [];
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        businessId,
+        isActive: true,
+        ...(excludeProductId ? { NOT: { id: excludeProductId } } : {}),
+        OR: or,
+      },
+      select: {
+        id: true,
+        name: true,
+        brand: true,
+        barcode: true,
+        price: true,
+        cost: true,
+        category: { select: { name: true } },
+      },
+      take: 6,
+      orderBy: { updatedAt: 'desc' },
+    });
+    return products;
   }
 
   private productToPublicFields(product: {

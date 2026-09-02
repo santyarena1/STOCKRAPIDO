@@ -34,12 +34,36 @@ export class PublicCatalogController {
     return this.catalog.unpublish(u.businessId, publicProductId);
   }
 
+  @Get('import-history')
+  importHistory(@CurrentUser() u: User, @Query('limit') limit?: string) {
+    return this.catalog.listImportHistory(u.businessId, limit ? parseInt(limit, 10) : undefined);
+  }
+
+  @Get('import-preview/:publicProductId')
+  importPreview(@CurrentUser() u: User, @Param('publicProductId') publicProductId: string) {
+    return this.catalog.importPreview(u.businessId, publicProductId);
+  }
+
   @Post('import')
   importOne(
     @CurrentUser() u: User,
-    @Body() body: { publicProductId?: string; price?: number },
+    @Body()
+    body: {
+      publicProductId?: string;
+      price?: number;
+      cost?: number;
+      barcode?: string;
+      brand?: string;
+      categoryId?: string;
+    },
   ) {
-    return this.catalog.importOne(u.businessId, body.publicProductId || '', body.price);
+    return this.catalog.importOne(u.businessId, body.publicProductId || '', {
+      price: body.price,
+      cost: body.cost,
+      barcode: body.barcode,
+      brand: body.brand,
+      categoryId: body.categoryId,
+    });
   }
 
   @Post('import-batch')
