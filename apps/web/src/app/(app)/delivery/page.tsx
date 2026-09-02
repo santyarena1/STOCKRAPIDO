@@ -37,7 +37,7 @@ function ProviderStatCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Icon className="h-10 w-10" />
+          <Icon className="h-14 w-14" />
           <div>
             <h3 className="text-lg font-semibold text-fg">{meta.label}</h3>
             <p className="text-sm text-fg-faint">

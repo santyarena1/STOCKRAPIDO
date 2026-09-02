@@ -143,7 +143,7 @@ export function DeliveryProviderModule({
         />
 
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-hair-soft bg-surface p-4">
-          <Icon className="h-12 w-12" />
+          <Icon className="h-16 w-16" />
           <div className="min-w-0 flex-1">
             <p className="text-sm text-fg-faint">Estado de la integración</p>
             <p className="text-lg font-semibold text-fg">

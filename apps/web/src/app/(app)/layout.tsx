@@ -28,7 +28,7 @@ import {
 
 function SidebarDeliveryIcon({ provider }: { provider: 'rappi' | 'pedidosya' }) {
   const Icon = provider === 'rappi' ? RappiIcon : PedidosYaIcon;
-  return <Icon className="h-4 w-4 shrink-0" />;
+  return <Icon className="h-6 w-6 shrink-0" />;
 }
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner';

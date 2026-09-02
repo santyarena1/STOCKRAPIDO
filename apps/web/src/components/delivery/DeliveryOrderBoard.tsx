@@ -39,7 +39,7 @@ export function DeliveryOrderBoard({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  {showProvider && <Icon className="h-6 w-6 shrink-0" />}
+                  {showProvider && <Icon className="h-8 w-8 shrink-0" />}
                   <div>
                     <p className="font-semibold text-fg">{order.customerName || 'Cliente delivery'}</p>
                     <p className="font-mono text-[11px] text-fg-faint">#{order.externalOrderId}</p>

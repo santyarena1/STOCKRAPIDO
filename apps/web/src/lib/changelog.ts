@@ -38,8 +38,8 @@ export const CHANGELOG: ChangelogVersion[] = [
       },
       {
         tag: 'FIX',
-        title: 'Delivery sin recarga molesta',
-        desc: 'La central y los módulos ya no muestran el loader completo cada 30 segundos. Los pedidos se actualizan en segundo plano sin interrumpir lo que estás haciendo.',
+        title: 'Iconos delivery más grandes y limpios',
+        desc: 'Logos de Rappi y PedidosYa agrandados en sidebar, central y módulos. Se eliminaron bordes blancos del logo de Rappi.',
       },
     ],
   },

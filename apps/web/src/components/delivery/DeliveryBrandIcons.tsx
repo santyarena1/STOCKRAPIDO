@@ -5,17 +5,17 @@ const BRAND_LOGOS: Record<DeliveryProvider, { src: string; alt: string }> = {
   pedidosya: { src: '/delivery/pedidosya.png', alt: 'PedidosYa' },
 };
 
-export function RappiIcon({ className = 'h-5 w-5' }: { className?: string }) {
+export function RappiIcon({ className = 'h-7 w-7' }: { className?: string }) {
   return <DeliveryBrandLogo provider="rappi" className={className} />;
 }
 
-export function PedidosYaIcon({ className = 'h-5 w-5' }: { className?: string }) {
+export function PedidosYaIcon({ className = 'h-7 w-7' }: { className?: string }) {
   return <DeliveryBrandLogo provider="pedidosya" className={className} />;
 }
 
 export function DeliveryBrandLogo({
   provider,
-  className = 'h-5 w-5',
+  className = 'h-7 w-7',
 }: {
   provider: DeliveryProvider;
   className?: string;
@@ -23,7 +23,12 @@ export function DeliveryBrandLogo({
   const { src, alt } = BRAND_LOGOS[provider];
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} className={`inline-block object-contain ${className}`} />
+    <img
+      src={src}
+      alt={alt}
+      className={`inline-block shrink-0 object-contain ${className}`}
+      draggable={false}
+    />
   );
 }
 
