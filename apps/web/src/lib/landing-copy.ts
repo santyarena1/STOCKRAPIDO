@@ -72,7 +72,7 @@ export const LANDING_PLAN_META: Record<
       'Catálogo comunitario ilimitado: buscar, filtrar e importar fichas',
       'Costos B2B, pedidos y cuenta del proveedor',
       'Compras con IA: subís el PDF o la foto',
-      'Rappi y PedidosYa: central de pedidos y módulos dedicados',
+      'Rappi y PedidosYa: publicar catálogo, central de pedidos y requisitos en productos',
       'Mapeo de columnas del Excel del mayorista',
     ],
   },

@@ -10,9 +10,15 @@ import type { DeliveryIntegration, DeliveryProvider } from '@/lib/delivery';
 
 type FormState = {
   root: Record<string, string | number | boolean>;
+  config: Record<string, string | number | boolean>;
   credentials: Record<string, string>;
   pricing: Record<string, string | number | boolean>;
 };
+
+function allSchemaFields(provider: DeliveryProvider) {
+  const schema = DELIVERY_CONNECTION_SCHEMA[provider];
+  return [...schema.identityFields, ...schema.credentialFields, ...schema.pricingFields, ...schema.operationFields];
+}
 
 function FieldInput({
   field,
@@ -65,6 +71,8 @@ function FieldInput({
 }
 
 function formFromIntegration(provider: DeliveryProvider, integration: DeliveryIntegration | null): FormState {
+  const configFields = allSchemaFields(provider).filter((f) => f.storage === 'config');
+  const cfg = integration?.config ?? {};
   return {
     root: {
       enabled: integration?.enabled ?? false,
@@ -75,7 +83,14 @@ function formFromIntegration(provider: DeliveryProvider, integration: DeliveryIn
       autoAccept: integration?.autoAccept ?? false,
       autoConfirmSale: integration?.autoConfirmSale ?? true,
     },
-    credentials: Object.fromEntries(DELIVERY_CONNECTION_SCHEMA[provider].credentialFields.map((f) => [f.key, ''])),
+    config: Object.fromEntries(
+      configFields.map((f) => [f.key, (cfg[f.key] as string | number | boolean | undefined) ?? '']),
+    ),
+    credentials: Object.fromEntries(
+      DELIVERY_CONNECTION_SCHEMA[provider].credentialFields
+        .filter((f) => f.storage === 'credentials')
+        .map((f) => [f.key, '']),
+    ),
     pricing: {
       priceMarkupPercent: integration?.priceMarkupPercent ?? 0,
       platformCommissionPercent: integration?.platformCommissionPercent ?? 28,
@@ -111,6 +126,8 @@ export function DeliveryConnectionPanel({
 
   const setRoot = (key: string, value: string | number | boolean) =>
     setForm((f) => ({ ...f, root: { ...f.root, [key]: value } }));
+  const setConfig = (key: string, value: string | number | boolean) =>
+    setForm((f) => ({ ...f, config: { ...f.config, [key]: value } }));
   const setCredential = (key: string, value: string) =>
     setForm((f) => ({ ...f, credentials: { ...f.credentials, [key]: value } }));
   const setPricing = (key: string, value: string | number | boolean) =>
@@ -121,9 +138,16 @@ export function DeliveryConnectionPanel({
       .filter((f) => f.storage === storage)
       .map((field) => {
         const value =
-          storage === 'root' ? form.root[field.key] : storage === 'credentials' ? form.credentials[field.key] : form.pricing[field.key];
+          storage === 'root'
+            ? form.root[field.key]
+            : storage === 'config'
+              ? form.config[field.key]
+              : storage === 'credentials'
+                ? form.credentials[field.key]
+                : form.pricing[field.key];
         const onChange = (v: string | number | boolean) => {
           if (storage === 'root') setRoot(field.key, v);
+          else if (storage === 'config') setConfig(field.key, v);
           else if (storage === 'credentials') setCredential(field.key, String(v));
           else setPricing(field.key, v);
         };
@@ -136,6 +160,12 @@ export function DeliveryConnectionPanel({
       const credentials: Record<string, string> = {};
       for (const [key, value] of Object.entries(form.credentials)) {
         if (String(value).trim()) credentials[key] = String(value).trim();
+      }
+      const config: Record<string, unknown> = { ...(integration?.config ?? {}) };
+      for (const [key, value] of Object.entries(form.config)) {
+        if (typeof value === 'boolean') config[key] = value;
+        else if (String(value).trim()) config[key] = String(value).trim();
+        else delete config[key];
       }
       await api(`/delivery/integrations/${provider}`, {
         method: 'PATCH',
@@ -150,6 +180,7 @@ export function DeliveryConnectionPanel({
           priceMarkupPercent: Number(form.pricing.priceMarkupPercent) || 0,
           platformCommissionPercent: Number(form.pricing.platformCommissionPercent) || 28,
           testMode: Boolean(form.pricing.testMode),
+          config,
           credentials: Object.keys(credentials).length ? credentials : undefined,
         }),
       });
@@ -183,7 +214,10 @@ export function DeliveryConnectionPanel({
 
       <div>
         <h3 className="text-sm font-semibold text-fg">Credenciales API</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">{renderFields(schema.credentialFields, 'credentials')}</div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {renderFields(schema.credentialFields, 'credentials')}
+          {renderFields(allSchemaFields(provider), 'config')}
+        </div>
       </div>
 
       <div>

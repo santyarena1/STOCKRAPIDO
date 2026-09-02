@@ -66,7 +66,17 @@ export class DeliveryIntegrationsService {
     if (body.storeExternalId !== undefined) data.storeExternalId = body.storeExternalId?.trim() || null;
     if (body.chainExternalId !== undefined) data.chainExternalId = body.chainExternalId?.trim() || null;
     if (body.countryCode !== undefined) data.countryCode = body.countryCode?.trim() || 'AR';
-    if (body.config !== undefined) data.config = body.config;
+    if (body.config !== undefined) {
+      const existing = await this.prisma.deliveryIntegration.findUnique({
+        where: { businessId_provider: { businessId, provider } },
+        select: { config: true },
+      });
+      const prev =
+        existing?.config && typeof existing.config === 'object' && !Array.isArray(existing.config)
+          ? (existing.config as Record<string, unknown>)
+          : {};
+      data.config = { ...prev, ...body.config };
+    }
     if (body.storeOpen !== undefined) data.storeOpen = body.storeOpen;
     if (body.autoAccept !== undefined) data.autoAccept = body.autoAccept;
     if (body.autoConfirmSale !== undefined) data.autoConfirmSale = body.autoConfirmSale;

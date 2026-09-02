@@ -22,6 +22,28 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.23',
+    date: '2026-09-02',
+    summary: 'Delivery: API en vivo configurable, landing actualizada y requisitos en productos.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'API partner configurable',
+        desc: 'En Conexión podés pegar la URL base de Rappi o PedidosYa. Con credenciales + URL, las acciones (menú, pedidos, tienda) llaman a la API real en lugar de simular.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Requisitos delivery más claros',
+        desc: 'En lista y edición de productos: obligatorios vs recomendados, dónde completar cada campo y resumen por app.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Landing con publicación E2E',
+        desc: 'La demo y las preguntas frecuentes explican publicar catálogo, precio con comisión y requisitos por producto.',
+      },
+    ],
+  },
+  {
     version: 'v1.22',
     date: '2026-09-02',
     summary: 'Delivery end-to-end: publicar catálogo, precios con comisión y requisitos en productos.',

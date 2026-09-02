@@ -73,6 +73,13 @@ export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnec
         required: true,
         storage: 'credentials',
       },
+      {
+        key: 'apiBaseUrl',
+        label: 'URL base API (opcional)',
+        placeholder: 'https://api.rappi.com/partners',
+        help: 'Si tu cuenta partner usa otro host (sandbox/producción), pegalo acá. Sin esto las llamadas quedan en modo simulado.',
+        storage: 'config',
+      },
     ],
     pricingFields: [
       {
@@ -145,6 +152,13 @@ export const DELIVERY_CONNECTION_SCHEMA: Record<DeliveryProvider, DeliveryConnec
         label: 'Client Secret / Contraseña API',
         type: 'password',
         storage: 'credentials',
+      },
+      {
+        key: 'apiBaseUrl',
+        label: 'URL base API (opcional)',
+        placeholder: 'https://api.pedidosya.com/partners',
+        help: 'Host partner de PedidosYa (staging o producción). Sin esto las llamadas quedan en modo simulado.',
+        storage: 'config',
       },
     ],
     pricingFields: [

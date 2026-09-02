@@ -34,6 +34,29 @@ export function verifySharedSecret(
   return headerSecret === ctx.webhookSecret;
 }
 
+const ACTION_PATHS: Record<string, string> = {
+  accept: 'orders/accept',
+  reject: 'orders/reject',
+  preparing: 'orders/preparing',
+  ready: 'orders/ready',
+  dispatched: 'orders/dispatched',
+  cancel: 'orders/cancel',
+  store_open: 'store/open',
+  store_close: 'store/close',
+  push_menu: 'menu/push',
+};
+
+function authHeaders(creds: Record<string, unknown>): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (creds.apiKey) headers.Authorization = `Bearer ${String(creds.apiKey)}`;
+  else if (creds.accessToken) headers.Authorization = `Bearer ${String(creds.accessToken)}`;
+  else if (creds.clientId && creds.clientSecret) {
+    const token = Buffer.from(`${String(creds.clientId)}:${String(creds.clientSecret)}`).toString('base64');
+    headers.Authorization = `Basic ${token}`;
+  }
+  return headers;
+}
+
 export async function callProviderApi(
   provider: string,
   action: string,
@@ -41,13 +64,41 @@ export async function callProviderApi(
   payload?: Record<string, unknown>,
 ) {
   const creds = ctx.credentials ?? {};
-  const hasCreds = Boolean(creds.clientId || creds.apiKey || creds.accessToken);
-  if (!hasCreds) {
-    logger.log(`[${provider}] ${action} (simulado) order=${payload?.externalOrderId ?? '—'}`);
-    return;
+  const hasCreds = Boolean(creds.clientId || creds.apiKey || creds.accessToken || creds.clientSecret);
+  const apiBaseUrl = str(ctx.config?.apiBaseUrl).replace(/\/$/, '');
+
+  if (!hasCreds || !apiBaseUrl) {
+    logger.log(
+      `[${provider}] ${action} (simulado) order=${payload?.externalOrderId ?? '—'} creds=${hasCreds} baseUrl=${apiBaseUrl ? 'sí' : 'no'}`,
+    );
+    return { ok: true, simulated: true };
   }
-  // Punto de extensión: llamadas HTTP reales a Rappi / PedidosYa cuando hay credenciales.
-  logger.log(`[${provider}] ${action} credenciales presentes — integración lista para API en vivo`);
+
+  const path = ACTION_PATHS[action] ?? action.replace(/_/g, '/');
+  const url = `${apiBaseUrl}/${path}`;
+  const body = { provider, integrationId: ctx.integrationId, ...payload };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: authHeaders(creds),
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      logger.warn(`[${provider}] ${action} HTTP ${res.status}: ${text.slice(0, 300)}`);
+      throw new Error(`API ${provider} respondió ${res.status}`);
+    }
+    logger.log(`[${provider}] ${action} OK → ${url}`);
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return { ok: true, raw: text };
+    }
+  } catch (err) {
+    logger.error(`[${provider}] ${action} error: ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
+  }
 }
 
 export function parseGenericOrder(body: unknown, provider: string): NormalizedDeliveryOrder | null {
@@ -133,8 +184,8 @@ export function createProviderStub(
       await callProviderApi(id, open ? 'store_open' : 'store_close', ctx, { open });
     },
     pushMenu: async (ctx, items) => {
-      await callProviderApi(id, 'push_menu', ctx, { count: items.length });
-      return { ok: true, message: `${items.length} ítems preparados para envío` };
+      await callProviderApi(id, 'push_menu', ctx, { count: items.length, items });
+      return { ok: true, message: `${items.length} ítems enviados a la plataforma` };
     },
     ...overrides,
   };

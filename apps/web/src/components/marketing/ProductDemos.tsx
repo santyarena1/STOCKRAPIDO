@@ -171,13 +171,13 @@ function DeliveryDemo() {
         <p className="text-xs font-extrabold uppercase tracking-wide text-[var(--mk-red)]">Central de pedidos · PREMIUM</p>
         <h3 className="mt-1 text-2xl font-extrabold">Rappi y PedidosYa en un solo lugar</h3>
         <p className="mt-3 text-[15px] leading-relaxed text-[var(--mk-ink-2)]">
-          Bandeja unificada con filtros por plataforma y estado. Cada app tiene su módulo: conexión, menú, mapeos SKU y
-          control de tienda abierta/cerrada.
+          Conectás cada app, elegís categorías y productos, editás la ficha con precio calculado (margen + comisión) y
+          publicás. En Productos ves qué campos faltan para listar en cada app.
         </p>
         <ul className="mt-4 space-y-2 text-sm font-semibold text-[var(--mk-ink)]">
-          <li>• Aceptar, rechazar, preparar y despachar</li>
-          <li>• Convertir en venta con baja de stock</li>
-          <li>• Webhook seguro y simulador de pedidos</li>
+          <li>• Publicar catálogo: categorías, fichas y validación por app</li>
+          <li>• Aceptar, rechazar, preparar y despachar pedidos</li>
+          <li>• Convertir en venta con baja de stock automática</li>
         </ul>
       </div>
       <div className="bg-[var(--mk-paper)] p-5 sm:p-7">

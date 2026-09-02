@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -279,6 +279,15 @@ export default function EditarProductoPage() {
     }
   };
 
+  const loadDeliveryReadiness = useCallback(async () => {
+    try {
+      const delivery = await api<{ byProduct: Record<string, { providers: ProductDeliveryReadiness[] }> }>(`/delivery/readiness/${id}`);
+      setDeliveryProviders(delivery.byProduct[id]?.providers ?? []);
+    } catch {
+      setDeliveryProviders([]);
+    }
+  }, [id]);
+
   useEffect(() => {
     Promise.allSettled([
       api<Product | null>(`/products/${id}`),
@@ -348,6 +357,7 @@ export default function EditarProductoPage() {
         }),
       });
       setProduct((current) => current ? { ...current, ...updated, category: updated.category ?? categories.find((c) => c.id === form.categoryId) ?? current.category } : updated);
+      await loadDeliveryReadiness();
       if (typeof window !== 'undefined' && window.history.length > 1) {
         router.back();
       } else {

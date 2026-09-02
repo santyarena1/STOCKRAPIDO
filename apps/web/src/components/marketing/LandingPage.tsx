@@ -44,7 +44,7 @@ const MODULES = [
   {
     plan: 'PREMIUM',
     title: 'Mayoristas, también acá',
-    text: 'Entran las listas de Tokin, Mondelez y Juntos+. Pedidos, costos y compras con IA: subís el PDF o la foto de la factura y se arma la compra. Además, Rappi y PedidosYa con central de pedidos y módulos dedicados.',
+    text: 'Entran las listas de Tokin, Mondelez y Juntos+. Pedidos, costos y compras con IA: subís el PDF o la foto de la factura y se arma la compra. Además, Rappi y PedidosYa: publicás catálogo con precio calculado, central de pedidos y requisitos visibles en cada producto.',
   },
 ];
 
@@ -82,7 +82,7 @@ const FAQ = [
   },
   {
     q: '¿Rappi y PedidosYa están integrados?',
-    a: 'Sí, en PREMIUM. Tenés una central de pedidos unificada y un módulo dedicado para cada app: conexión API, webhook, menú, mapeo de SKU con tu inventario, aceptar/rechazar, preparar, despachar y convertir en venta con baja de stock. Cada plataforma se configura por separado.',
+    a: 'Sí, en PREMIUM. Conectás cada app por separado, publicás categorías y productos con precio calculado (margen + comisión), validás la ficha y enviás el catálogo. Tenés central de pedidos unificada, módulo dedicado por plataforma, webhook, mapeo SKU y conversión a venta con baja de stock. En Productos ves qué campos son obligatorios o recomendados para cada app activa.',
   },
   {
     q: '¿Tokin, Mondelez o Juntos+ en qué plan están?',
