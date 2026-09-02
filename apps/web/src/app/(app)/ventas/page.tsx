@@ -37,6 +37,7 @@ type Sale = {
   voidedAt?: string | null;
   items: SaleItem[];
   user?: { name: string };
+  seller?: { name: string } | null;
   customer?: { id: string; name: string; balance?: string | number } | null;
   fiscalDocument?: {
     kind: 'INTERNAL' | 'FACTURA_C';
@@ -72,6 +73,10 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 const PAYMENT_OPTIONS = Object.entries(PAYMENT_LABELS);
+
+function saleSellerLabel(sale: Sale) {
+  return sale.seller?.name?.trim() || '—';
+}
 
 type SalesHistoryStats = {
   saleCount: number;
@@ -1482,7 +1487,7 @@ export default function VentasPage() {
                         ${Number(s.totalFinal ?? 0).toFixed(0)}
                       </td>
                       <td className="p-3 text-xs text-fg-muted">
-                        {(s as Sale & { user?: { name: string } }).user?.name ?? '—'}
+                        {saleSellerLabel(s)}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap space-x-2">
                         {!isVoided && (!s.fiscalDocument || s.fiscalDocument.kind === 'INTERNAL') && (
@@ -1580,7 +1585,7 @@ export default function VentasPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1">{isVoided ? <><span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs font-medium text-crit">Anulada</span>{sale.fiscalDocument?.creditNoteNumber != null && <span className="font-mono text-[10px] text-crit">NC {String(sale.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(sale.fiscalDocument.creditNoteNumber).padStart(8, '0')}</span>}</> : isAuthorizedFactura ? <><span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs font-medium text-ok">Factura C</span>{sale.fiscalDocument?.pointOfSale != null && sale.fiscalDocument.receiptNumber != null && <span className="font-mono text-[10px] text-fg-faint">{String(sale.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(sale.fiscalDocument.receiptNumber).padStart(8, '0')}</span>}</> : sale.fiscalDocument?.kind === 'FACTURA_C' ? <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs text-crit">{sale.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}</span> : sale.fiscalDocument?.kind === 'INTERNAL' ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Comprobante interno</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin comprobante</span>}{isDuplicate && <span className="rounded border border-warn/30 bg-[var(--warn-soft)] px-1 text-[10px] text-warn">dup</span>}</div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Forma de pago</span><span className="text-fg-muted">{sale.paymentMethod ? (PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Ítems</span><span className="font-mono text-fg-muted">{itemCount}</span></div><div><span className="block text-xs text-fg-faint">Subtotal</span><span className="font-mono text-fg-muted">${Number(sale.total ?? 0).toFixed(0)}</span></div><div><span className="block text-xs text-fg-faint">Descuento</span><span className="font-mono text-warn">{Number(sale.discount ?? 0) > 0 ? `-$${Number(sale.discount).toFixed(0)}` : '—'}</span></div><div><span className="block text-xs text-fg-faint">Vendedor</span><span className="text-fg-muted">{(sale as Sale & { user?: { name: string } }).user?.name ?? '—'}</span></div><div><span className="block text-xs text-fg-faint">Total</span><span className="font-mono text-lg font-semibold text-brand">${Number(sale.totalFinal ?? 0).toFixed(0)}</span></div></div>
+              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Forma de pago</span><span className="text-fg-muted">{sale.paymentMethod ? (PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Ítems</span><span className="font-mono text-fg-muted">{itemCount}</span></div><div><span className="block text-xs text-fg-faint">Subtotal</span><span className="font-mono text-fg-muted">${Number(sale.total ?? 0).toFixed(0)}</span></div><div><span className="block text-xs text-fg-faint">Descuento</span><span className="font-mono text-warn">{Number(sale.discount ?? 0) > 0 ? `-$${Number(sale.discount).toFixed(0)}` : '—'}</span></div><div><span className="block text-xs text-fg-faint">Vendedor</span><span className="text-fg-muted">{saleSellerLabel(sale)}</span></div><div><span className="block text-xs text-fg-faint">Total</span><span className="font-mono text-lg font-semibold text-brand">${Number(sale.totalFinal ?? 0).toFixed(0)}</span></div></div>
               <div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3">{!isVoided && (!sale.fiscalDocument || sale.fiscalDocument.kind === 'INTERNAL') && <button type="button" onClick={(event) => void handleFacturar(sale.id, event)} className="text-sm text-ok">Facturar</button>}{!isVoided && isAuthorizedFactura && <button type="button" onClick={(event) => void handleAnular(sale.id, event)} className="text-sm text-warn">Anular (NC)</button>}<button type="button" onClick={(event) => void handleReprint(sale.id, event)} className="text-sm text-brand">Reimprimir</button><button type="button" onClick={() => setViewSale(sale)} className="text-sm text-brand">Detalle</button>{!isVoided && <button type="button" onClick={(event) => { event.stopPropagation(); setViewSale(sale); }} className="text-sm text-ok">Editar</button>}{!isVoided && !isAuthorizedFactura && <button type="button" onClick={(event) => void handleDeleteSaleFromRow(sale, event)} className="text-sm text-crit">Eliminar</button>}</div>
             </article>;
           })}

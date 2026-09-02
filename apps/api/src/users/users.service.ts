@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertUserLimit } from '../billing/plan-guard';
@@ -36,13 +36,33 @@ export class UsersService {
   async update(
     id: string,
     businessId: string,
-    data: Partial<{ name: string; role: string; isActive: boolean; password?: string }>,
+    data: Partial<{ name: string; email: string; role: string; isActive: boolean; password?: string }>,
   ) {
-    const update: Record<string, unknown> = { ...data };
-    delete (update as { password?: string }).password;
-    if (data.password) {
-      (update as { passwordHash: string }).passwordHash = await argon2.hash(data.password, { type: 2 });
+    const current = await this.prisma.user.findFirst({ where: { id, businessId } });
+    if (!current) throw new BadRequestException('Usuario no encontrado.');
+
+    const update: Record<string, unknown> = {};
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) throw new BadRequestException('El nombre es obligatorio.');
+      update.name = name;
     }
+    if (data.email !== undefined) {
+      const email = data.email.trim().toLowerCase();
+      if (!email) throw new BadRequestException('El email es obligatorio.');
+      const taken = await this.prisma.user.findFirst({
+        where: { email, NOT: { id } },
+        select: { id: true },
+      });
+      if (taken) throw new ConflictException('Ese email ya está en uso.');
+      update.email = email;
+    }
+    if (data.role !== undefined) update.role = data.role;
+    if (data.isActive !== undefined) update.isActive = data.isActive;
+    if (data.password) {
+      update.passwordHash = await argon2.hash(data.password, { type: 2 });
+    }
+
     return this.prisma.user.update({
       where: { id, businessId },
       data: update,

@@ -46,6 +46,16 @@ export const CHANGELOG: ChangelogVersion[] = [
         title: 'Catálogo comunitario sin paso extra de aceptación',
         desc: 'Compartir fichas queda incluido en el uso de la plataforma. La primera vez que abrís Catálogo público en Productos, un aviso explica cómo funciona.',
       },
+      {
+        tag: 'FIX',
+        title: 'Historial de ventas: columna Vendedor',
+        desc: 'Muestra el vendedor del POS (no el usuario de la cuenta que cobró).',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Editar usuarios',
+        desc: 'En Usuarios podés cambiar nombre y email de cada integrante del equipo.',
+      },
     ],
   },
   {

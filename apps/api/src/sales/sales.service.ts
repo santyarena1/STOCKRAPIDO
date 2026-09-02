@@ -185,14 +185,26 @@ export class SalesService {
       where,
       take: limit,
       orderBy: { createdAt: 'desc' },
-      include: { items: { include: { product: true } }, user: { select: { name: true } }, customer: true, fiscalDocument: true },
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true } },
+        seller: { select: { name: true } },
+        customer: true,
+        fiscalDocument: true,
+      },
     });
   }
 
   async getOne(id: string, businessId: string) {
     return this.prisma.sale.findFirst({
       where: { id, businessId },
-      include: { items: { include: { product: true } }, user: true, customer: true, fiscalDocument: true },
+      include: {
+        items: { include: { product: true } },
+        user: true,
+        seller: { select: { name: true } },
+        customer: true,
+        fiscalDocument: true,
+      },
     });
   }
 

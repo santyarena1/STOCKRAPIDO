@@ -29,7 +29,7 @@ export class UsersController {
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body()
-    body: { name?: string; role?: string; isActive?: boolean; password?: string },
+    body: { name?: string; email?: string; role?: string; isActive?: boolean; password?: string },
   ) {
     return this.users.update(id, user.businessId, body);
   }
