@@ -28,8 +28,8 @@ export const CHANGELOG: ChangelogVersion[] = [
     items: [
       {
         tag: 'NUEVO',
-        title: 'Compras en ARCA',
-        desc: 'Importá el CSV de Mis Comprobantes → Recibidos y mirá en StockRápido las facturas que proveedores emitieron a tu CUIT. Opcional: constatá CAE con el mismo certificado de facturación (WSCDC).',
+        title: 'Facturas ARCA (balance de compras)',
+        desc: 'Importá el CSV de Mis Comprobantes → Recibidos y mirá montos facturados a tu CUIT (totales, IVA, por mes y por proveedor). No carga stock: es para balance de cuánto llevás comprado. Opcional: constatar CAE.',
       },
     ],
   },

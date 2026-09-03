@@ -95,7 +95,7 @@ export class FiscalReceivedService {
   async summary(businessId: string, from?: Date, to?: Date) {
     await assertPlanFeatureRead(this.prisma, businessId, 'fiscal');
     const where = this.buildWhere(businessId, { from, to });
-    const [agg, byStatus, topIssuers] = await Promise.all([
+    const [agg, byStatus, topIssuers, rowsForMonths] = await Promise.all([
       this.prisma.fiscalReceivedInvoice.aggregate({
         where,
         _count: true,
@@ -115,7 +115,24 @@ export class FiscalReceivedService {
         orderBy: { _sum: { totalAmount: 'desc' } },
         take: 8,
       }),
+      this.prisma.fiscalReceivedInvoice.findMany({
+        where,
+        select: { issuedAt: true, totalAmount: true, vatAmount: true },
+        orderBy: { issuedAt: 'asc' },
+      }),
     ]);
+
+    const byMonthMap = new Map<string, { month: string; count: number; totalAmount: number; totalVat: number }>();
+    for (const row of rowsForMonths) {
+      const d = new Date(row.issuedAt);
+      const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const current = byMonthMap.get(month) ?? { month, count: 0, totalAmount: 0, totalVat: 0 };
+      current.count += 1;
+      current.totalAmount += Number(row.totalAmount);
+      current.totalVat += Number(row.vatAmount ?? 0);
+      byMonthMap.set(month, current);
+    }
+
     return {
       count: agg._count,
       totalAmount: Number(agg._sum.totalAmount ?? 0),
@@ -125,6 +142,7 @@ export class FiscalReceivedService {
         count: s._count,
         totalAmount: Number(s._sum.totalAmount ?? 0),
       })),
+      byMonth: [...byMonthMap.values()],
       topIssuers: topIssuers.map((s) => ({
         issuerDocNumber: s.issuerDocNumber,
         issuerName: s.issuerName,

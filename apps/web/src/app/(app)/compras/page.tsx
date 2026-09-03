@@ -298,7 +298,7 @@ export default function ComprasPage() {
             href="/compras/arca"
             className="rounded-xl border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg"
           >
-            Compras ARCA
+            Facturas ARCA
           </Link>
           <Link
             href="/compras/ia"

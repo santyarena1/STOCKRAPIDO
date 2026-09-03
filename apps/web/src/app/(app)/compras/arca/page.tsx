@@ -36,6 +36,7 @@ type SummaryResponse = {
   count: number;
   totalAmount: number;
   totalVat: number;
+  byMonth: { month: string; count: number; totalAmount: number; totalVat: number }[];
   topIssuers: {
     issuerDocNumber: string;
     issuerName: string | null;
@@ -187,17 +188,30 @@ export default function ComprasArcaPage() {
     <PlanGate feature="fiscal">
       <Container className="space-y-6">
         <PageHeader
-          title="Compras en ARCA"
-          subtitle="Comprobantes que proveedores emitieron a tu CUIT (Mis Comprobantes → Recibidos)."
+          title="Facturas ARCA"
+          subtitle="Balance de montos facturados a tu CUIT. No carga stock ni crea compras de productos: solo te muestra cuánto llevás comprado según ARCA."
           actions={
-            <Link
-              href="/config/fiscal"
-              className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg-muted hover:bg-raised2"
-            >
-              Config fiscal
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/compras"
+                className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg-muted hover:bg-raised2"
+              >
+                Compras de stock
+              </Link>
+              <Link
+                href="/config/fiscal"
+                className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm text-fg-muted hover:bg-raised2"
+              >
+                Config fiscal
+              </Link>
+            </div>
           }
         />
+
+        <div className="rounded-xl border border-brand/20 bg-brand-highlight-soft px-4 py-3 text-sm text-fg">
+          <strong className="text-brand">Solo montos.</strong> Esto no suma productos al inventario. Sirve para ver
+          el total facturado por proveedores en el período (y el IVA), y armar un balance de compras.
+        </div>
 
         <section className="space-y-3 rounded-2xl border border-hair-soft bg-surface p-4 sm:p-5">
           <div>
@@ -209,8 +223,9 @@ export default function ComprasArcaPage() {
               <a href="https://arca.gob.ar" target="_blank" rel="noreferrer" className="text-brand hover:underline">
                 arca.gob.ar
               </a>{' '}
-              → Mis Comprobantes → Recibidos → exportá CSV e importalo acá. Usa el mismo CUIT del módulo fiscal
-              {data?.receptorCuit ? ` (${data.receptorCuit})` : ''}.
+              → Mis Comprobantes → Recibidos → exportá CSV e importalo acá. Se guardan fecha, emisor, tipo, CAE y{' '}
+              <strong>montos</strong> (total e IVA). No mueve stock.
+              {data?.receptorCuit ? ` CUIT receptor: ${data.receptorCuit}.` : ''}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -230,7 +245,7 @@ export default function ComprasArcaPage() {
               onClick={() => void importCsv()}
               className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
-              {busy === 'import' ? 'Importando…' : 'Importar a StockRápido'}
+              {busy === 'import' ? 'Importando…' : 'Importar montos'}
             </button>
           </div>
           {csvText ? (
@@ -240,12 +255,12 @@ export default function ComprasArcaPage() {
 
         <section className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-hair-soft bg-surface p-4">
-            <p className="text-xs uppercase text-fg-faint">Comprobantes</p>
+            <p className="text-xs uppercase text-fg-faint">Facturas del período</p>
             <p className="mt-1 font-mono text-2xl font-bold tabular-nums">{summary?.count ?? data?.count ?? 0}</p>
           </div>
           <div className="rounded-2xl border border-hair-soft bg-surface p-4">
-            <p className="text-xs uppercase text-fg-faint">Total compras</p>
-            <p className="mt-1 font-mono text-2xl font-bold tabular-nums">
+            <p className="text-xs uppercase text-fg-faint">Total facturado (compras)</p>
+            <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-brand">
               {money(summary?.totalAmount ?? data?.totalAmount ?? 0)}
             </p>
           </div>
@@ -256,6 +271,33 @@ export default function ComprasArcaPage() {
             </p>
           </div>
         </section>
+
+        {summary?.byMonth?.length ? (
+          <section className="rounded-2xl border border-hair-soft bg-surface p-4">
+            <h2 className="font-semibold text-fg">Balance por mes</h2>
+            <p className="mt-1 text-sm text-fg-muted">Cuánto llevás facturado mes a mes en el rango elegido.</p>
+            <ul className="mt-3 divide-y divide-hair-soft">
+              {[...summary.byMonth].reverse().map((row) => (
+                <li key={row.month} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-fg">
+                      {new Date(`${row.month}-01T12:00:00Z`).toLocaleDateString('es-AR', {
+                        month: 'long',
+                        year: 'numeric',
+                        timeZone: 'UTC',
+                      })}
+                    </p>
+                    <p className="text-xs text-fg-faint">{row.count} factura{row.count === 1 ? '' : 's'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono font-semibold tabular-nums">{money(row.totalAmount)}</p>
+                    <p className="font-mono text-xs text-fg-faint">IVA {money(row.totalVat)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section className="space-y-3 rounded-2xl border border-hair-soft bg-surface p-4">
           <div className="flex flex-wrap items-end gap-2">
@@ -324,7 +366,7 @@ export default function ComprasArcaPage() {
             <Loader />
           ) : !data?.items.length ? (
             <p className="py-10 text-center text-sm text-fg-faint">
-              Todavía no hay comprobantes. Importá el CSV de Mis Comprobantes → Recibidos.
+              Todavía no hay facturas importadas. Traé el CSV de Mis Comprobantes → Recibidos para ver el balance de montos.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -406,7 +448,7 @@ export default function ComprasArcaPage() {
 
         {summary?.topIssuers?.length ? (
           <section className="rounded-2xl border border-hair-soft bg-surface p-4">
-            <h2 className="font-semibold text-fg">Principales emisores del período</h2>
+            <h2 className="font-semibold text-fg">Proveedores a los que más les compraste (monto)</h2>
             <ul className="mt-3 divide-y divide-hair-soft">
               {summary.topIssuers.map((issuer) => (
                 <li key={issuer.issuerDocNumber} className="flex items-center justify-between gap-3 py-2 text-sm">

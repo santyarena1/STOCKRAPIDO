@@ -97,7 +97,7 @@ const GROUPS = [
     icon: Truck,
     items: [
       { href: '/compras', label: 'Compras' },
-      { href: '/compras/arca', label: 'Compras ARCA' },
+      { href: '/compras/arca', label: 'Facturas ARCA' },
       { href: '/proveedores', label: 'Proveedores' },
       { href: '/sincronizaciones', label: 'Sincronización' },
       { href: '/catalogo-proveedor', label: 'Catálogo proveedor' },
@@ -163,7 +163,8 @@ const SIDEBAR_GROUPS_KEY = 'sr-sidebar-groups';
 function isActivePath(pathname: string, href: string) {
   return (
     pathname === href ||
-    (href === '/compras' && pathname.startsWith('/compras')) ||
+    (href === '/compras' && pathname === '/compras') ||
+    (href === '/compras/arca' && pathname.startsWith('/compras/arca')) ||
     (href === '/figuritas' && pathname.startsWith('/figuritas')) ||
     (href === '/admin' && (pathname === '/admin' || pathname.startsWith('/admin/negocios'))) ||
     (href === '/admin/tickets' && pathname.startsWith('/admin/tickets')) ||
