@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertPlanFeature, assertPlanFeatureRead } from '../billing/plan-guard';
 import { parseArgentinaDayEnd, parseArgentinaDayStart } from '../common/argentina-date-range';
 import { decryptFiscalSecret } from './fiscal-crypto';
+import { fetchMisComprobantesRecibidos, formatAfipDateRange } from './afip-sdk-automation';
 
 const WSCDC_SERVICE = 'wscdc';
 
@@ -79,7 +80,16 @@ export class FiscalReceivedService {
       }),
       this.prisma.fiscalConfig.findUnique({
         where: { businessId },
-        select: { cuit: true, enabled: true },
+        select: {
+          cuit: true,
+          enabled: true,
+          portalUsername: true,
+          portalPasswordEncrypted: true,
+          receivedAutoSync: true,
+          receivedLastSyncAt: true,
+          receivedLastSyncError: true,
+          receivedLastSyncCount: true,
+        },
       }),
     ]);
     return {
@@ -88,6 +98,15 @@ export class FiscalReceivedService {
       count: agg._count,
       totalAmount: Number(agg._sum.totalAmount ?? 0),
       totalVat: Number(agg._sum.vatAmount ?? 0),
+      sync: {
+        autoSync: !!config?.receivedAutoSync,
+        hasPortalPassword: !!config?.portalPasswordEncrypted,
+        portalUsername: config?.portalUsername ?? config?.cuit ?? null,
+        lastSyncAt: config?.receivedLastSyncAt ?? null,
+        lastSyncError: config?.receivedLastSyncError ?? null,
+        lastSyncCount: config?.receivedLastSyncCount ?? null,
+        afipSdkConfigured: !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim(),
+      },
       items: items.map((row) => this.serialize(row)),
     };
   }
@@ -161,7 +180,83 @@ export class FiscalReceivedService {
     if (!rows.length) {
       throw new BadRequestException('No se encontraron filas válidas en el CSV.');
     }
+    return this.upsertRows(businessId, rows, 'csv');
+  }
 
+  /**
+   * Sincroniza Mis Comprobantes → Recibidos con Clave Fiscal (automático).
+   * No crea compras de stock: solo montos para balance.
+   */
+  async syncFromArca(businessId: string, from?: Date, to?: Date) {
+    await assertPlanFeature(this.prisma, businessId, 'fiscal');
+    const config = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
+    if (!config) {
+      throw new BadRequestException('Configurá ARCA en Fiscal antes de sincronizar facturas recibidas.');
+    }
+    if (!config.portalPasswordEncrypted) {
+      throw new BadRequestException(
+        'Falta la Clave Fiscal. Guardá usuario y contraseña de ARCA en Config → Fiscal para sincronizar solo.',
+      );
+    }
+
+    const toDate = to ?? new Date();
+    const fromDate =
+      from ??
+      new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate() - 31));
+
+    try {
+      const raw = await fetchMisComprobantesRecibidos({
+        cuit: config.cuit,
+        username: (config.portalUsername || config.cuit).replace(/\D/g, ''),
+        password: decryptFiscalSecret(config.portalPasswordEncrypted),
+        fechaEmision: formatAfipDateRange(fromDate, toDate),
+      });
+      const rows = raw
+        .map((item) => this.parseAutomationItem(item))
+        .filter((row): row is CsvRow => !!row);
+      const result = await this.upsertRows(businessId, rows, 'arca_auto');
+      await this.prisma.fiscalConfig.update({
+        where: { businessId },
+        data: {
+          receivedLastSyncAt: new Date(),
+          receivedLastSyncError: null,
+          receivedLastSyncCount: result.created + result.updated,
+        },
+      });
+      return { ...result, fetched: raw.length };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al sincronizar con ARCA';
+      await this.prisma.fiscalConfig.update({
+        where: { businessId },
+        data: { receivedLastSyncAt: new Date(), receivedLastSyncError: message },
+      }).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  async syncAllAuto() {
+    const configs = await this.prisma.fiscalConfig.findMany({
+      where: { receivedAutoSync: true, portalPasswordEncrypted: { not: null } },
+      select: { businessId: true },
+      take: 25,
+    });
+    const results: Array<{ businessId: string; ok: boolean; created?: number; updated?: number; error?: string }> = [];
+    for (const cfg of configs) {
+      try {
+        const r = await this.syncFromArca(cfg.businessId);
+        results.push({ businessId: cfg.businessId, ok: true, created: r.created, updated: r.updated });
+      } catch (err) {
+        results.push({
+          businessId: cfg.businessId,
+          ok: false,
+          error: err instanceof Error ? err.message : 'error',
+        });
+      }
+    }
+    return { processed: results.length, results };
+  }
+
+  private async upsertRows(businessId: string, rows: CsvRow[], source: string) {
     const batchId = randomUUID();
     let created = 0;
     let updated = 0;
@@ -201,7 +296,7 @@ export class FiscalReceivedService {
           otherTaxes: row.otherTaxes,
           vatAmount: row.vatAmount,
           totalAmount: row.totalAmount,
-          source: 'csv',
+          source,
           importBatchId: batchId,
         };
 
@@ -228,6 +323,7 @@ export class FiscalReceivedService {
 
     return { batchId, parsed: rows.length, created, updated, skipped, errors: errors.slice(0, 25) };
   }
+
 
   async remove(businessId: string, id: string) {
     await assertPlanFeature(this.prisma, businessId, 'fiscal');
@@ -521,6 +617,57 @@ export class FiscalReceivedService {
     const m = String(date.getUTCMonth() + 1).padStart(2, '0');
     const d = String(date.getUTCDate()).padStart(2, '0');
     return `${y}${m}${d}`;
+  }
+
+
+  private parseAutomationItem(item: Record<string, unknown>): CsvRow | null {
+    const get = (...keys: string[]) => {
+      for (const key of keys) {
+        if (item[key] != null && String(item[key]).trim() !== '') return String(item[key]);
+        const found = Object.keys(item).find((k) => k.toLowerCase() === key.toLowerCase());
+        if (found && item[found] != null && String(item[found]).trim() !== '') return String(item[found]);
+      }
+      // fuzzy contains
+      for (const key of keys) {
+        const found = Object.keys(item).find((k) => k.toLowerCase().includes(key.toLowerCase()));
+        if (found && item[found] != null && String(item[found]).trim() !== '') return String(item[found]);
+      }
+      return '';
+    };
+
+    const issuedAt = this.parseDate(get('Fecha de Emisión', 'Fecha Emisión', 'fecha'));
+    const issuerDocNumber = this.digitsOnly(
+      get('Nro. Doc. Emisor', 'Nro Doc Emisor', 'CUIT Emisor', 'Doc Emisor', 'Emisor'),
+    );
+    const pointOfSale = this.parseIntSafe(get('Punto de Venta', 'Pto Venta', 'Punto Venta'));
+    const numberFrom = this.parseIntSafe(get('Número Desde', 'Nro Desde', 'Numero Desde', 'Número Desde'));
+    const numberTo = this.parseIntSafe(get('Número Hasta', 'Nro Hasta', 'Numero Hasta'), numberFrom ?? undefined);
+    const totalAmount = this.parseMoney(get('Imp. Total', 'Importe Total', 'Imp Total', 'Total'));
+    if (!issuedAt || !issuerDocNumber || pointOfSale == null || numberFrom == null || totalAmount == null) {
+      return null;
+    }
+    const voucherRaw = get('Tipo de Comprobante', 'Tipo Comprobante', 'Tipo');
+    const { label, code } = this.parseVoucherType(voucherRaw, get('Cod. Tipo', 'Código Tipo', 'Cod Tipo'));
+    return {
+      issuedAt,
+      voucherType: label || voucherRaw || 'Comprobante',
+      voucherTypeCode: code,
+      pointOfSale,
+      numberFrom,
+      numberTo: numberTo ?? numberFrom,
+      authCode: get('Cód. Autorización', 'Cod. Autorización', 'CAE', 'CAEA', 'Código Autorización') || null,
+      issuerDocType: get('Tipo Doc. Emisor', 'Tipo Doc Emisor') || null,
+      issuerDocNumber,
+      issuerName: get('Denominación Emisor', 'Razón Social', 'Nombre Emisor', 'Denominacion Emisor') || null,
+      currency: get('Moneda') || 'PES',
+      exchangeRate: this.parseMoney(get('Tipo Cambio', 'Tipo de Cambio')) ?? 1,
+      netTaxed: this.parseMoney(get('Imp. Neto Gravado', 'Neto Gravado')),
+      netNotTaxed: this.parseMoney(get('Imp. Neto No Gravado', 'Neto No Gravado')),
+      exemptAmount: this.parseMoney(get('Imp. Op. Exentas', 'Exento')),
+      otherTaxes: this.parseMoney(get('Otros Tributos', 'Otros Impuestos')),
+      vatAmount: this.parseMoney(get('IVA')),
+      totalAmount,
+    };
   }
 
   private serialize(row: {

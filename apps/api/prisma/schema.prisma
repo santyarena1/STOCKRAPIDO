@@ -386,6 +386,14 @@ model FiscalConfig {
   invoiceYearAlertEnabled Boolean  @default(false)
   invoiceYearAlertLimit   Decimal?
   invoiceYearAlertPercent Int      @default(80)
+  /// Clave Fiscal (portal ARCA) para sincronizar Mis Comprobantes → Recibidos.
+  portalUsername              String?
+  portalPasswordEncrypted     String?
+  /// Si true, el cron diario trae facturas recibidas automáticamente.
+  receivedAutoSync            Boolean   @default(false)
+  receivedLastSyncAt          DateTime?
+  receivedLastSyncError       String?
+  receivedLastSyncCount       Int?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

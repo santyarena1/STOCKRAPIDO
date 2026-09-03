@@ -10,10 +10,23 @@
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index.js" }
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.js"
+    }
   ],
   "crons": [
-    { "path": "/sync/cron", "schedule": "0 6 * * *" },
-    { "path": "/data-admin/purge-cron", "schedule": "0 7 * * *" }
+    {
+      "path": "/sync/cron",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/data-admin/purge-cron",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/fiscal/received/cron",
+      "schedule": "30 7 * * *"
+    }
   ]
 }

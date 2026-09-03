@@ -29,6 +29,15 @@ type ListResponse = {
   count: number;
   totalAmount: number;
   totalVat: number;
+  sync?: {
+    autoSync: boolean;
+    hasPortalPassword: boolean;
+    portalUsername: string | null;
+    lastSyncAt: string | null;
+    lastSyncError: string | null;
+    lastSyncCount: number | null;
+    afipSdkConfigured: boolean;
+  };
   items: ReceivedItem[];
 };
 
@@ -84,6 +93,7 @@ export default function ComprasArcaPage() {
   const [csvText, setCsvText] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,6 +163,28 @@ export default function ComprasArcaPage() {
     }
   };
 
+
+  const syncFromArca = async () => {
+    setSyncing(true);
+    setMsg('');
+    try {
+      const res = await api<{ parsed: number; created: number; updated: number; skipped: number; fetched?: number }>(
+        '/fiscal/received/sync',
+        { method: 'POST', body: JSON.stringify({ from, to }) },
+      );
+      setMsg(
+        `Sync ARCA: ${res.created} nuevas, ${res.updated} actualizadas` +
+          (res.fetched != null ? ` (${res.fetched} leídas)` : '') +
+          (res.skipped ? `, ${res.skipped} omitidas` : ''),
+      );
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo sincronizar con ARCA');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const verifySelected = async () => {
     const ids = [...selected];
     if (!ids.length) {
@@ -189,7 +221,7 @@ export default function ComprasArcaPage() {
       <Container className="space-y-6">
         <PageHeader
           title="Facturas ARCA"
-          subtitle="Balance de montos facturados a tu CUIT. No carga stock ni crea compras de productos: solo te muestra cuánto llevás comprado según ARCA."
+          subtitle="Balance automático de montos facturados a tu CUIT. No carga stock: solo cuánto llevás comprado según ARCA."
           actions={
             <div className="flex flex-wrap gap-2">
               <Link
@@ -209,14 +241,52 @@ export default function ComprasArcaPage() {
         />
 
         <div className="rounded-xl border border-brand/20 bg-brand-highlight-soft px-4 py-3 text-sm text-fg">
-          <strong className="text-brand">Solo montos.</strong> Esto no suma productos al inventario. Sirve para ver
+          <strong className="text-brand">Solo montos, y ahora automático.</strong> Esto no suma productos al inventario. Sirve para ver
           el total facturado por proveedores en el período (y el IVA), y armar un balance de compras.
         </div>
+
+        
+        <section className="space-y-3 rounded-2xl border border-brand/30 bg-brand-highlight-soft p-4 sm:p-5">
+          <div>
+            <h2 className="flex items-center gap-2 font-semibold text-fg">
+              <RefreshCw className="h-5 w-5" /> Sincronizar desde ARCA
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-fg-muted">
+              Trae solo los montos de Mis Comprobantes → Recibidos con tu Clave Fiscal. No carga stock.
+              {data?.sync?.lastSyncAt
+                ? ` Último sync: ${new Date(data.sync.lastSyncAt).toLocaleString('es-AR')}.`
+                : ''}
+              {data?.sync?.lastSyncError ? ` Último error: ${data.sync.lastSyncError}` : ''}
+            </p>
+            {!data?.sync?.hasPortalPassword ? (
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                Configurá usuario y contraseña de Clave Fiscal en{' '}
+                <Link href="/config/fiscal" className="underline">
+                  Config → Fiscal
+                </Link>{' '}
+                para poder sincronizar.
+              </p>
+            ) : null}
+            {!data?.sync?.afipSdkConfigured ? (
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                Falta configurar AFIP_SDK_ACCESS_TOKEN en el servidor (la API de ARCA no lista recibidos por sí sola).
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            disabled={!!busy || syncing || !data?.sync?.hasPortalPassword || !data?.sync?.afipSdkConfigured}
+            onClick={() => void syncFromArca()}
+            className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
+          </button>
+        </section>
 
         <section className="space-y-3 rounded-2xl border border-hair-soft bg-surface p-4 sm:p-5">
           <div>
             <h2 className="flex items-center gap-2 font-semibold text-fg">
-              <FileSpreadsheet className="h-5 w-5" /> Importar CSV de ARCA
+              <FileSpreadsheet className="h-5 w-5" /> Respaldo: importar CSV
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-fg-muted">
               En{' '}
@@ -245,7 +315,7 @@ export default function ComprasArcaPage() {
               onClick={() => void importCsv()}
               className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
-              {busy === 'import' ? 'Importando…' : 'Importar montos'}
+              {busy === 'import' ? 'Importando…' : 'Importar CSV'}
             </button>
           </div>
           {csvText ? (

@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.25',
+    date: '2026-09-03',
+    summary: 'Facturas ARCA en automático con Clave Fiscal.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Sync automático de facturas recibidas',
+        desc: 'Configurá tu Clave Fiscal y StockRápido trae solo los montos de Mis Comprobantes → Recibidos (diario o al toque). No carga stock: es para balance de compras. El CSV queda como respaldo.',
+      },
+    ],
+  },
+  {
     version: 'v1.24',
     date: '2026-09-03',
     summary: 'Compras registradas en ARCA a nombre de tu CUIT.',

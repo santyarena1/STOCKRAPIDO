@@ -21,6 +21,13 @@ type FiscalConfig = {
   invoiceYearAlertEnabled?: boolean;
   invoiceYearAlertLimit?: number | null;
   invoiceYearAlertPercent?: number;
+  portalUsername?: string;
+  hasPortalPassword?: boolean;
+  receivedAutoSync?: boolean;
+  receivedLastSyncAt?: string | null;
+  receivedLastSyncError?: string | null;
+  receivedLastSyncCount?: number | null;
+  afipSdkConfigured?: boolean;
 };
 type FiscalForm = {
   enabled: boolean;
@@ -39,6 +46,9 @@ type FiscalForm = {
   invoiceYearAlertEnabled: boolean;
   invoiceYearAlertLimit: string;
   invoiceYearAlertPercent: number;
+  portalUsername: string;
+  portalPassword: string;
+  receivedAutoSync: boolean;
 };
 const empty: FiscalForm = {
   enabled: false,
@@ -57,6 +67,9 @@ const empty: FiscalForm = {
   invoiceYearAlertEnabled: false,
   invoiceYearAlertLimit: '',
   invoiceYearAlertPercent: 80,
+  portalUsername: '',
+  portalPassword: '',
+  receivedAutoSync: false,
 };
 export default function FiscalSettings() {
   const [form, setForm] = useState(empty);
@@ -85,6 +98,9 @@ export default function FiscalSettings() {
           invoiceYearAlertEnabled: !!c.invoiceYearAlertEnabled,
           invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
           invoiceYearAlertPercent: c.invoiceYearAlertPercent ?? 80,
+          portalUsername: c.portalUsername || c.cuit || '',
+          portalPassword: '',
+          receivedAutoSync: !!c.receivedAutoSync,
         }));
       })
       .catch(() => {});
@@ -117,6 +133,9 @@ export default function FiscalSettings() {
         invoiceYearAlertEnabled: form.invoiceYearAlertEnabled,
         invoiceYearAlertLimit: parseMoneyInputArs(form.invoiceYearAlertLimit),
         invoiceYearAlertPercent: form.invoiceYearAlertPercent,
+        portalUsername: form.portalUsername,
+        portalPassword: form.portalPassword || undefined,
+        receivedAutoSync: form.receivedAutoSync,
       };
       const c = await api<FiscalConfig>('/fiscal/config', { method: 'PUT', body: JSON.stringify(body) });
       setMeta(c);
@@ -126,6 +145,7 @@ export default function FiscalSettings() {
         privateKey: '',
         invoiceAlertLimit: formatMoneyInputArs(c.invoiceAlertLimit),
         invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
+        portalPassword: '',
       }));
       setMessage('Configuración fiscal guardada.');
     } catch (err) {
@@ -303,6 +323,59 @@ export default function FiscalSettings() {
           {message}
         </p>
       )}
+      
+      <div className="rounded-lg border border-cyan-800/40 bg-slate-900/40 p-4 space-y-3">
+        <div>
+          <h3 className="font-medium text-cyan-100">Facturas recibidas (automático)</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            ARCA no tiene API oficial para listar compras. Con tu Clave Fiscal sincronizamos Mis Comprobantes → Recibidos
+            (solo montos para balance, sin cargar stock). El CSV queda como respaldo.
+          </p>
+        </div>
+        {!meta?.afipSdkConfigured ? (
+          <p className="text-xs text-amber-300">
+            El servidor todavía no tiene <code>AFIP_SDK_ACCESS_TOKEN</code>. Pedile al admin de plataforma que lo configure para habilitar el sync automático.
+          </p>
+        ) : null}
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm text-slate-400">Usuario Clave Fiscal</label>
+            <input
+              className={input}
+              value={form.portalUsername}
+              onChange={(e) => setForm((f) => ({ ...f, portalUsername: e.target.value }))}
+              placeholder="CUIT (o CUIT del administrador)"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-slate-400">Contraseña Clave Fiscal</label>
+            <input
+              className={input}
+              type="password"
+              autoComplete="new-password"
+              value={form.portalPassword}
+              onChange={(e) => setForm((f) => ({ ...f, portalPassword: e.target.value }))}
+              placeholder={meta?.hasPortalPassword ? '•••••••• (cargada)' : 'Contraseña de ARCA'}
+            />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={form.receivedAutoSync}
+            onChange={(e) => setForm((f) => ({ ...f, receivedAutoSync: e.target.checked }))}
+          />
+          Sincronizar solo todos los días (últimos ~30 días)
+        </label>
+        {meta?.receivedLastSyncAt ? (
+          <p className="text-xs text-slate-500">
+            Último sync: {new Date(meta.receivedLastSyncAt).toLocaleString('es-AR')}
+            {meta.receivedLastSyncCount != null ? ` · ${meta.receivedLastSyncCount} comprobantes` : ''}
+            {meta.receivedLastSyncError ? ` · Error: ${meta.receivedLastSyncError}` : ''}
+          </p>
+        ) : null}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <button disabled={saving} className="px-4 py-2 rounded-lg btn-brand disabled:opacity-50">
           {saving ? 'Guardando...' : 'Guardar ARCA'}

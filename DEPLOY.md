@@ -40,7 +40,8 @@ Dos proyectos en Vercel desde el mismo repo de GitHub:
    | `JWT_REFRESH_SECRET` | otra cadena distinta |
    | `WEB_URL` | URL del frontend, ej. `https://web-six-jet-75.vercel.app` |
    | `NODE_ENV` | `production` |
-   | `CRON_SECRET` | secreto para el cron de sync Mondelez |
+   | `AFIP_SDK_ACCESS_TOKEN` | token Afip SDK para sync automático de facturas recibidas (Mis Comprobantes) |
+| `CRON_SECRET` | secreto para el cron de sync Mondelez |
    | `PUBLIC_API_URL` | URL de este proyecto API (ej. `https://stockrapido-api.vercel.app`) |
 
    Opcionales: `N8N_INVOICE_WEBHOOK_URL`, `AI_INVOICE_WEBHOOK_SECRET`

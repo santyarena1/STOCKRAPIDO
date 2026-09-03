@@ -17,6 +17,11 @@ type SaveConfig = {
   grossIncomeNumber?: string; activityStartDate?: string; address?: string; certificate?: string; privateKey?: string;
   invoiceAlertEnabled?: boolean; invoiceAlertLimit?: number | null; invoiceAlertPercent?: number; invoiceAlertPeriod?: InvoiceAlertPeriod;
   invoiceYearAlertEnabled?: boolean; invoiceYearAlertLimit?: number | null; invoiceYearAlertPercent?: number;
+  /** Usuario Clave Fiscal (suele ser el CUIT). */
+  portalUsername?: string;
+  /** Contraseña Clave Fiscal; si viene vacío se conserva la anterior. */
+  portalPassword?: string;
+  receivedAutoSync?: boolean;
 };
 type SaveInvoiceAlert = {
   invoiceAlertEnabled?: boolean;
@@ -47,6 +52,13 @@ export class FiscalService {
       invoiceYearAlertEnabled: c.invoiceYearAlertEnabled,
       invoiceYearAlertLimit: c.invoiceYearAlertLimit != null ? Number(c.invoiceYearAlertLimit) : null,
       invoiceYearAlertPercent: c.invoiceYearAlertPercent,
+      portalUsername: c.portalUsername ?? '',
+      hasPortalPassword: !!c.portalPasswordEncrypted,
+      receivedAutoSync: !!c.receivedAutoSync,
+      receivedLastSyncAt: c.receivedLastSyncAt,
+      receivedLastSyncError: c.receivedLastSyncError,
+      receivedLastSyncCount: c.receivedLastSyncCount,
+      afipSdkConfigured: !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim(),
     };
   }
 
@@ -144,14 +156,31 @@ export class FiscalService {
     }
     if (dto.certificate?.trim() && dto.privateKey?.trim()) this.validatePair(dto.certificate.trim(), dto.privateKey.trim());
     const alert = this.normalizeAlertFields(dto, previous);
+    let portalPasswordEncrypted = previous?.portalPasswordEncrypted ?? null;
+    if (dto.portalPassword?.trim()) {
+      portalPasswordEncrypted = encryptFiscalSecret(dto.portalPassword.trim());
+    }
+    const portalUsername =
+      dto.portalUsername !== undefined
+        ? dto.portalUsername.replace(/\D/g, '') || null
+        : previous?.portalUsername ?? null;
+    const receivedAutoSync =
+      dto.receivedAutoSync !== undefined ? !!dto.receivedAutoSync : !!previous?.receivedAutoSync;
+    if (receivedAutoSync && !portalPasswordEncrypted) {
+      throw new BadRequestException(
+        'Para el sync automático de facturas recibidas necesitás guardar la Clave Fiscal (usuario y contraseña de ARCA).',
+      );
+    }
     await this.prisma.fiscalConfig.upsert({ where: { businessId }, create: { businessId, enabled: !!dto.enabled,
       environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,
       address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
+      portalUsername: portalUsername || cuit, portalPasswordEncrypted, receivedAutoSync,
       ...alert }, update: {
       enabled: !!dto.enabled, environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,
       address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
+      portalUsername: portalUsername || cuit, portalPasswordEncrypted, receivedAutoSync,
       ...alert } });
     return this.getPublicConfig(businessId);
   }
