@@ -62,6 +62,7 @@ model Business {
   fiscalConfig        FiscalConfig?
   fiscalDocuments     FiscalDocument[]
   externalFiscalEntries ExternalFiscalEntry[]
+  fiscalReceivedInvoices FiscalReceivedInvoice[]
   vendedores          Vendedor[]
   vendedorSessions    VendedorSession[]
   dataBackups          DataBackup[]
@@ -435,6 +436,51 @@ model ExternalFiscalEntry {
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId, invoicedAt])
+}
+
+/**
+ * Comprobantes de compra registrados en ARCA a nombre del CUIT del negocio
+ * (Mis Comprobantes → Recibidos). Se importan desde el CSV oficial o se
+ * verifican con WSCDC usando el mismo certificado de facturación.
+ */
+model FiscalReceivedInvoice {
+  id                   String    @id @default(cuid())
+  businessId           String
+  issuedAt             DateTime
+  voucherType          String
+  voucherTypeCode      Int?
+  pointOfSale          Int
+  numberFrom           Int
+  numberTo             Int
+  authCode             String?
+  issuerDocType        String?
+  issuerDocNumber      String
+  issuerName           String?
+  currency             String    @default("PES")
+  exchangeRate         Decimal   @default(1)
+  netTaxed             Decimal?
+  netNotTaxed          Decimal?
+  exemptAmount         Decimal?
+  otherTaxes           Decimal?
+  vatAmount            Decimal?
+  totalAmount          Decimal
+  /// imported | verified | mismatch | error
+  status               String    @default("imported")
+  verifyResult         Json?
+  verifyMessage        String?
+  verifiedAt           DateTime?
+  source               String    @default("csv")
+  importBatchId        String?
+  notes                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, issuerDocNumber, voucherTypeCode, pointOfSale, numberFrom])
+  @@index([businessId, issuedAt])
+  @@index([businessId, issuerDocNumber])
+  @@index([businessId, status])
 }
 
 model SaleItem {

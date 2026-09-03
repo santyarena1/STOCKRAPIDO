@@ -26,7 +26,8 @@ const SECTIONS = [
   {
     title: 'Facturación',
     desc: 'ARCA y comprobantes electrónicos (plan Fiscal).',
-    items: [{ href: '/config/fiscal', label: 'Fiscal AFIP', hint: 'Certificado y punto de venta', plan: 'PRO' }],
+    items: [{ href: '/config/fiscal', label: 'Fiscal AFIP', hint: 'Certificado y punto de venta', plan: 'PRO' },
+      { href: '/compras/arca', label: 'Compras ARCA', hint: 'Comprobantes recibidos', plan: 'PRO' }],
   },
   {
     title: 'Integraciones',

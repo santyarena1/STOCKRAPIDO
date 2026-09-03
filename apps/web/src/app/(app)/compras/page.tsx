@@ -295,6 +295,12 @@ export default function ComprasPage() {
         subtitle="Registrá ingresos de mercadería y mantené costos y stock actualizados."
         actions={<div className="flex flex-wrap items-center gap-3">
           <Link
+            href="/compras/arca"
+            className="rounded-xl border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg"
+          >
+            Compras ARCA
+          </Link>
+          <Link
             href="/compras/ia"
             className="rounded-xl border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg"
           >

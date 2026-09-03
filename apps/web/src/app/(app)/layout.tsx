@@ -97,6 +97,7 @@ const GROUPS = [
     icon: Truck,
     items: [
       { href: '/compras', label: 'Compras' },
+      { href: '/compras/arca', label: 'Compras ARCA' },
       { href: '/proveedores', label: 'Proveedores' },
       { href: '/sincronizaciones', label: 'Sincronización' },
       { href: '/catalogo-proveedor', label: 'Catálogo proveedor' },

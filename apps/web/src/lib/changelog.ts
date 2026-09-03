@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.24',
+    date: '2026-09-03',
+    summary: 'Compras registradas en ARCA a nombre de tu CUIT.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Compras en ARCA',
+        desc: 'Importá el CSV de Mis Comprobantes → Recibidos y mirá en StockRápido las facturas que proveedores emitieron a tu CUIT. Opcional: constatá CAE con el mismo certificado de facturación (WSCDC).',
+      },
+    ],
+  },
+  {
     version: 'v1.23',
     date: '2026-09-02',
     summary: 'Delivery: API en vivo configurable, landing actualizada y requisitos en productos.',
