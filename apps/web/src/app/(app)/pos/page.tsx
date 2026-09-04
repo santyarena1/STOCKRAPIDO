@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import Link from 'next/link';
 import { api, getApiBaseUrl, getToken } from '@/lib/api';
 import { formatMoneyArs } from '@/lib/units';
@@ -66,6 +66,36 @@ const highlightedName = (name: string, query: string) => {
 
 type SearchMatch = 'nombre' | 'codigo' | 'sku' | 'ref' | 'bulto' | 'marca';
 
+
+const CASH_BILLS = [100, 500, 1000, 2000, 10000, 20000] as const;
+
+/** 3 billetes sugeridos (>= total): el más cercano que alcanza y los siguientes. */
+function suggestCashBills(total: number): number[] {
+  const t = Math.max(0, Math.ceil(Number(total) || 0));
+  const covering = CASH_BILLS.filter((b) => b >= t);
+  const out: number[] = covering.length ? [...covering] : [];
+  if (!out.length) {
+    const base = Math.ceil(t / 20000) * 20000;
+    return [base, base + 20000, base + 40000];
+  }
+  let last = out[out.length - 1]!;
+  while (out.length < 3) {
+    const next = CASH_BILLS.find((b) => b > last);
+    if (next) {
+      out.push(next);
+      last = next;
+    } else {
+      last += 20000;
+      out.push(last);
+    }
+  }
+  return out.slice(0, 3);
+}
+
+function moneyArs(n: number) {
+  return n.toLocaleString('es-AR');
+}
+
 const PAYMENT_METHODS = [
   { id: 'efectivo', label: 'Efectivo' },
   { id: 'tarjeta_debito', label: 'Tarjeta débito' },
@@ -78,10 +108,10 @@ const PAYMENT_METHODS = [
 const SHORTCUTS = [
   { key: 'F2', desc: 'Foco en búsqueda' },
   { key: '↑ / ↓', desc: 'Navegar resultados de búsqueda' },
-  { key: 'ENTER', desc: 'Con resultados: agregar. Código de barras completo: se agrega solo. Sin búsqueda: doble ENTER para cobrar' },
+  { key: 'ENTER', desc: 'Búsqueda: agregar. En cobro: confirmar forma de pago. Sin búsqueda: doble ENTER para abrir cobro' },
   { key: 'F4', desc: 'Aplicar descuento' },
   { key: 'F5', desc: 'Cobrar / Confirmar cuenta corriente' },
-  { key: '1-6', desc: 'En cobro: elegir forma de pago' },
+  { key: '1-6', desc: 'En cobro: elegir forma de pago (1 Efectivo … 6 Cuenta corriente). Después ENTER confirma' },
   { key: 'F6', desc: 'Pausar venta / Nueva venta' },
   { key: 'ESC', desc: 'Cerrar modal' },
   { key: 'Ctrl+Backspace', desc: 'Quitar último ítem' },
@@ -230,7 +260,8 @@ export default function POSPage() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   /** Transferencia / MP / tarjetas: primero elegís método (cliente ve alias o QR), luego "Confirmar cobro" */
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
-  const [cashPaid, setCashPaid] = useState<number | null>(null); // con cuánto pagó en efectivo (para el vuelto)
+  const [cashPaidText, setCashPaidText] = useState(''); // billete/monto con el que pagó (texto)
+  const cashPaidInputRef = useRef<HTMLInputElement>(null);
   const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'>('internal');
   const [invoiceAlertBanner,setInvoiceAlertBanner]=useState<string|null>(null);
   const [printEnabled,setPrintEnabled]=useState(true);
@@ -296,12 +327,21 @@ export default function POSPage() {
     return()=>{cancelled=true};
   },[fiscalMode]);
   useEffect(() => {
-    api<{ posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')
-      .then((business) => {
-        const ids = business.posConfig?.hiddenCategoryIds;
-        setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
-      })
-      .catch(() => setHiddenCategoryIds([]));
+    let cancelled = false;
+    const load = () => {
+      api<{ posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')
+        .then((business) => {
+          if (cancelled) return;
+          const ids = business.posConfig?.hiddenCategoryIds;
+          setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+        })
+        .catch(() => { if (!cancelled) setHiddenCategoryIds([]); });
+    };
+    const t = window.setTimeout(load, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, []);
   useEffect(() => {
     resultsRef.current?.querySelector<HTMLElement>(`[data-result-index="${selectedResultIndex}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -355,7 +395,7 @@ export default function POSPage() {
   }, [cart, discountTotal, showPayment, paymentMethodPending, selectedCustomer?.name]);
 
   useEffect(() => {
-    if (!showPayment) { setPaymentMethodPending(null); setCashPaid(null); }
+    if (!showPayment) { setPaymentMethodPending(null); setCashPaidText(''); }
   }, [showPayment]);
 
   const refreshOpenCashRegister = useCallback(async (): Promise<string | null> => {
@@ -441,12 +481,27 @@ export default function POSPage() {
     }
   }, []);
 
-  useEffect(()=>{void fetchPaused()},[fetchPaused]);
   useEffect(() => {
-    Promise.allSettled([api<Vendedor | null>('/vendedores/active'), api<Vendedor[]>('/vendedores')]).then(([activeResult, sellersResult]) => {
-      if (activeResult.status === 'fulfilled') setActiveSeller(activeResult.value);
-      if (sellersResult.status === 'fulfilled') setSellers(sellersResult.value);
-    });
+    let cancelled = false;
+    const t = window.setTimeout(() => { if (!cancelled) void fetchPaused(); }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [fetchPaused]);
+  useEffect(() => {
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      Promise.allSettled([api<Vendedor | null>('/vendedores/active'), api<Vendedor[]>('/vendedores')]).then(([activeResult, sellersResult]) => {
+        if (cancelled) return;
+        if (activeResult.status === 'fulfilled') setActiveSeller(activeResult.value);
+        if (sellersResult.status === 'fulfilled') setSellers(sellersResult.value);
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, []);
 
   const addToCart = useCallback(
@@ -587,7 +642,6 @@ export default function POSPage() {
       })
       .catch(() => setCustomers([]));
   }, []);
-  useEffect(() => { loadCustomers(); }, [loadCustomers]);
   useEffect(() => { if (showCustomer) loadCustomers(); }, [showCustomer, loadCustomers]);
 
   useEffect(() => {
@@ -597,7 +651,8 @@ export default function POSPage() {
       return;
     }
     const term = search.trim();
-    let cancelled = false;
+    const ac = new AbortController();
+    const delay = looksLikeProductCode(term) ? 40 : 220;
     const t = setTimeout(async () => {
       setLoading(true);
       try {
@@ -621,14 +676,15 @@ export default function POSPage() {
             cost?: unknown;
           }>
         >('/products/search', {
+          signal: ac.signal,
           params: {
             q: term,
-            limit: '40',
+            limit: looksLikeProductCode(term) ? '8' : '28',
             excludeCombos: '1',
             excludeCategoryIds: hiddenCategoryIds.length ? hiddenCategoryIds.join(',') : undefined,
           },
         });
-        if (cancelled) return;
+        if (ac.signal.aborted) return;
         const list = Array.isArray(data) ? data : [];
         const mapped = list.map((p) => ({
           id: p.id,
@@ -652,19 +708,22 @@ export default function POSPage() {
           addToCart(mapped[0], 1);
           return;
         }
-        setResults(mapped);
-        setSelectedResultIndex(0);
-      } catch {
-        if (!cancelled) {
+        startTransition(() => {
+          setResults(mapped);
+          setSelectedResultIndex(0);
+        });
+      } catch (err) {
+        if (ac.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
+        startTransition(() => {
           setResults([]);
           setSelectedResultIndex(0);
-        }
+        });
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!ac.signal.aborted) setLoading(false);
       }
-    }, 150);
+    }, delay);
     return () => {
-      cancelled = true;
+      ac.abort();
       clearTimeout(t);
     };
   }, [search, addToCart, hiddenCategoryIds]);
@@ -793,13 +852,15 @@ export default function POSPage() {
         return;
       }
       if (id === 'efectivo') {
-        setCashPaid(null);
+        setCashPaidText('');
         setPaymentMethodPending('efectivo');
+        queueMicrotask(() => cashPaidInputRef.current?.focus());
         return;
       }
-      paymentNeedsCustomerConfirmStep(id) ? setPaymentMethodPending(id) : void handleCobrar(id);
+      // Siempre dejar pendiente: Enter (o botón) confirma la venta.
+      setPaymentMethodPending(id);
     },
-    [openCashRegisterId, handleCobrar, selectedCustomer],
+    [openCashRegisterId, selectedCustomer],
   );
   const confirmPendingPayment = useCallback(() => {
     if (paymentMethodPending && openCashRegisterId) void handleCobrar(paymentMethodPending);
@@ -832,8 +893,11 @@ export default function POSPage() {
           showPayment &&
           e.key === 'Enter' &&
           paymentMethodPending &&
-          openCashRegisterId
+          openCashRegisterId &&
+          !cobrandoBusy
         ) {
+          // En el input de billete el Enter lo maneja el propio campo.
+          if (active === cashPaidInputRef.current) return;
           e.preventDefault();
           confirmPendingPayment();
           return;
@@ -951,6 +1015,7 @@ export default function POSPage() {
     addToCart,
     selectedCustomer,
     handleCobrar,
+    cobrandoBusy,
   ]);
 
   const updateQty = useCallback((productId: string, delta: number) => {
@@ -1493,11 +1558,10 @@ export default function POSPage() {
 
       {showPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowPayment(false)}>
-          <div className={`max-h-[92vh] w-full ${paymentMethodPending === 'efectivo' ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6`} onClick={(e) => e.stopPropagation()}>
+          <div className={`max-h-[92vh] w-full max-w-md overflow-y-auto rounded-xl border border-hair bg-surface p-5 sm:p-6`} onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-2 text-lg font-bold text-fg">¿Cómo pagó el cliente?</h2>
             <p className="mb-4 text-sm text-fg-muted">
-              Total a cobrar: ${total.toFixed(0)} · Efectivo/Fiado cierra en un paso · Transferencia, MP o tarjeta: elegí método
-              (el cliente ve datos en la pantalla) y después «Confirmar cobro» o Enter
+              Total a cobrar: ${total.toFixed(0)} · Teclas 1-6 eligen el medio · Enter confirma · En efectivo podés tipar el billete para ver el vuelto
             </p>
             {!openCashRegisterId && (
               <div className="mb-4 space-y-2 rounded-lg border border-warn/30 bg-[var(--warn-soft)] p-3 text-sm text-warn">
@@ -1531,60 +1595,77 @@ export default function POSPage() {
                 </button>
               ))}
             </div>
-            {paymentMethodPending === 'efectivo' && (
-              <div className="mb-4 space-y-4 rounded-xl border border-[color:var(--ok)] bg-[var(--ok-soft)] p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-base font-bold text-ok">💵 Vuelto — ¿con cuánto pagó?</p>
-                  <span className="rounded-lg bg-surface px-3 py-1 text-sm text-fg-muted">Total: <span className="font-mono font-bold text-fg">${total.toLocaleString('es-AR')}</span></span>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                  {(() => {
-                    const start = Math.max(1000, Math.ceil(total / 1000) * 1000);
-                    const amounts: number[] = [];
-                    for (let a = start; a <= 20000; a += 1000) amounts.push(a);
-                    if (amounts.length === 0) amounts.push(start); // total ≥ 20.000
-                    return amounts.map((a) => (
-                      <button key={a} type="button" onClick={() => setCashPaid(a)}
-                        className={`rounded-xl border-2 px-2 py-3 text-center transition ${cashPaid === a ? 'border-[color:var(--ok)] bg-surface shadow-sm' : 'border-hair bg-raised hover:border-[color:var(--ok)]'}`}>
-                        <span className="block font-mono text-base font-bold text-fg">${a.toLocaleString('es-AR')}</span>
-                        <span className="mt-0.5 block text-xs text-fg-muted">vuelto <span className="font-mono font-semibold text-ok">${(a - total).toLocaleString('es-AR')}</span></span>
-                      </button>
-                    ));
-                  })()}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-fg-muted">Pagó con otro monto:</span>
-                  <input type="text" inputMode="numeric" placeholder="$ escribí el monto"
-                    value={cashPaid != null ? String(cashPaid) : ''}
-                    onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ''); setCashPaid(v ? Number(v) : null); }}
-                    className="w-40 rounded-lg border-2 border-hair bg-surface px-3 py-2.5 font-mono text-lg text-fg outline-none focus-brand" />
-                </div>
-                <div className="rounded-xl bg-surface px-4 py-3 text-center">
-                  {cashPaid == null ? (
-                    <span className="text-sm text-fg-faint">Elegí un monto o escribilo para ver el vuelto</span>
+            {paymentMethodPending === 'efectivo' && (() => {
+              const paid = Number(cashPaidText.replace(/\D/g, '')) || 0;
+              const suggestions = suggestCashBills(total);
+              const change = paid > 0 ? paid - total : null;
+              return (
+              <div className="mb-4 space-y-3 rounded-xl border border-[color:var(--ok)] bg-[var(--ok-soft)] p-4">
+                <p className="text-sm font-semibold text-ok">Efectivo — escribí con cuánto pagó</p>
+                <label className="block text-sm text-fg-muted">
+                  Billete / monto recibido
+                  <input
+                    ref={cashPaidInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Ej: 10000"
+                    value={cashPaidText}
+                    onChange={(e) => setCashPaidText(e.target.value.replace(/[^\d]/g, ''))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && openCashRegisterId && !cobrandoBusy) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleCobrar('efectivo');
+                      }
+                    }}
+                    className="mt-1 w-full rounded-lg border border-hair bg-surface px-3 py-2.5 font-mono text-lg text-fg outline-none focus-brand"
+                  />
+                </label>
+                <p className="text-sm text-fg-muted">
+                  Sugeridos:{' '}
+                  {suggestions.map((a, i) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setCashPaidText(String(a))}
+                      className={`font-mono font-semibold text-ok underline-offset-2 hover:underline ${cashPaidText === String(a) ? 'underline' : ''}`}
+                    >
+                      ${moneyArs(a)}{i < suggestions.length - 1 ? ' · ' : ''}
+                    </button>
+                  ))}
+                </p>
+                <p className="text-sm text-fg">
+                  {paid <= 0 ? (
+                    <span className="text-fg-faint">Vuelto: —</span>
+                  ) : change != null && change >= 0 ? (
+                    <>Vuelto: <span className="font-mono text-lg font-bold text-ok">${moneyArs(change)}</span></>
                   ) : (
-                    <>
-                      <span className="text-base text-fg-muted">Vuelto a dar: </span>
-                      <span className={`font-mono text-3xl font-extrabold ${cashPaid >= total ? 'text-ok' : 'text-crit'}`}>${Math.max(0, cashPaid - total).toLocaleString('es-AR')}</span>
-                      {cashPaid < total && <div className="mt-1 text-sm font-semibold text-crit">⚠ Falta ${(total - cashPaid).toLocaleString('es-AR')}</div>}
-                    </>
+                    <span className="font-semibold text-crit">Falta ${moneyArs(Math.abs(change ?? 0))}</span>
                   )}
-                </div>
+                  <span className="ml-2 text-fg-faint">· Total ${moneyArs(total)}</span>
+                </p>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => void handleCobrar('efectivo')} disabled={cobrandoBusy}
-                    className="flex-1 rounded-xl btn-brand py-3.5 text-base font-bold disabled:opacity-50">
-                    {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro'}
+                    className="flex-1 rounded-xl btn-brand py-3 text-base font-bold disabled:opacity-50">
+                    {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro (Enter)'}
                   </button>
-                  <button type="button" onClick={() => { setPaymentMethodPending(null); setCashPaid(null); }}
-                    className="rounded-xl border border-hair px-5 py-3.5 text-sm font-medium text-fg-muted hover:bg-raised">Cambiar</button>
+                  <button type="button" onClick={() => { setPaymentMethodPending(null); setCashPaidText(''); }}
+                    className="rounded-xl border border-hair px-4 py-3 text-sm font-medium text-fg-muted hover:bg-raised">Cambiar</button>
                 </div>
               </div>
-            )}
-            {paymentMethodPending && paymentNeedsCustomerConfirmStep(paymentMethodPending) && (
+              );
+            })()}
+            {paymentMethodPending && paymentMethodPending !== 'efectivo' && (
               <div className="mb-4 space-y-2 rounded-lg border border-ok/30 bg-[var(--ok-soft)] p-3">
-                <p className="text-sm text-ok">
-                  Pantalla cliente mostrando datos de pago. Cuando el cliente haya pagado, confirmá acá.
-                </p>
+                {paymentNeedsCustomerConfirmStep(paymentMethodPending) ? (
+                  <p className="text-sm text-ok">
+                    Pantalla cliente mostrando datos de pago. Cuando el cliente haya pagado, confirmá con Enter.
+                  </p>
+                ) : (
+                  <p className="text-sm text-ok">
+                    Medio elegido: {PAYMENT_METHODS.find((m) => m.id === paymentMethodPending)?.label ?? paymentMethodPending}. Enter confirma la venta.
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1592,7 +1673,7 @@ export default function POSPage() {
                     disabled={cobrandoBusy}
                     className="flex-1 py-3 rounded-lg btn-brand font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro'}
+                    {cobrandoBusy ? 'Registrando…' : 'Confirmar cobro (Enter)'}
                   </button>
                   <button
                     type="button"
@@ -1602,7 +1683,9 @@ export default function POSPage() {
                     Cambiar método
                   </button>
                 </div>
-<button type="button" onClick={()=>void savePaused(paymentMethodPending,'awaiting_payment')} className="w-full rounded-lg border border-warn/40 bg-[var(--warn-soft)] py-3 font-semibold text-warn">Dejar esperando y atender otro</button>
+                {paymentNeedsCustomerConfirmStep(paymentMethodPending) ? (
+                  <button type="button" onClick={()=>void savePaused(paymentMethodPending,'awaiting_payment')} className="w-full rounded-lg border border-warn/40 bg-[var(--warn-soft)] py-3 font-semibold text-warn">Dejar esperando y atender otro</button>
+                ) : null}
               </div>
             )}
             <button type="button" onClick={() => setShowPayment(false)} className="w-full rounded-lg border border-hair py-2 text-fg-muted hover:bg-raised hover:text-fg">

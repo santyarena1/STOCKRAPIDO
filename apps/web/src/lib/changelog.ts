@@ -22,6 +22,28 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.27',
+    date: '2026-09-04',
+    summary: 'POS más ágil: vuelto simple y cobro con teclado.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Vuelto en efectivo más simple',
+        desc: 'Se sacó la tabla de vueltos. Escribís el billete que te dejaron y ves el vuelto al toque, con 3 sugerencias de billetes cercanos (100, 500, 1000, 2000, 10000, 20000).',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Cobrar con números y Enter',
+        desc: 'En el modal de cobro: teclas 1–6 eligen la forma de pago y Enter confirma la venta. Así el flujo queda más rápido sin tocar el mouse.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Búsqueda y cargas más livianas en el POS',
+        desc: 'La búsqueda cancela pedidos viejos, prioriza códigos de barras y deja en segundo plano cosas que no hacen falta al abrir (clientes, pausadas, vendedores).',
+      },
+    ],
+  },
+  {
     version: 'v1.26',
     date: '2026-09-04',
     summary: 'Filtros que cargan bien al entrar a cada pantalla.',

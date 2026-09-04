@@ -6,12 +6,20 @@ En la pantalla **POS** podés usar el teclado y el escáner para cobrar rápido.
 |-------|--------|
 | **F2** | Poner el foco en la búsqueda (código de barras o nombre) |
 | **F4** | Abrir modal de descuento total (monto fijo) |
-| **F5** | Cobrar (registrar la venta) |
+| **F5** | Cobrar (abrir modal de formas de pago / confirmar cuenta corriente) |
 | **F6** | Pausar venta / Ver ventas en espera (guardar o retomar) |
 | **?** | Ver esta ayuda de atajos |
 | **ESC** | Cerrar el modal abierto |
-| **ENTER** | Con el foco en búsqueda: agregar el primer resultado al carrito |
+| **ENTER** | Con el foco en búsqueda: agregar el resultado seleccionado. Sin resultados: doble ENTER abre cobro. En cobro: confirma la forma de pago elegida |
+| **1–6** | En el modal de cobro: elegir forma de pago (1 Efectivo … 6 Cuenta corriente). Después **ENTER** confirma |
 | **Ctrl + Backspace** | Quitar el último ítem del carrito |
+
+## Cobro rápido
+
+1. Abrí cobro (F5 o doble Enter con búsqueda vacía).
+2. Tocá **1–6** para elegir el medio.
+3. **Enter** confirma la venta.
+4. En **efectivo**: tipá el billete recibido (hay 3 sugerencias cercanas) y Enter confirma; el vuelto se calcula solo.
 
 ## Modo ráfaga
 
@@ -28,4 +36,4 @@ Si el producto no tiene código: botón **Producto manual**, ingresá nombre y p
 
 ## Descuento
 
-- **F4** o botón “Pausar” en el panel derecho: aplicá un descuento en **monto fijo** sobre el total del carrito.
+- **F4** o botón de descuento: aplicá un descuento en **monto fijo** sobre el total del carrito.
