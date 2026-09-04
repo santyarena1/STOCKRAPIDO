@@ -42,10 +42,11 @@ function CatalogScreen() {
   const { connection } = useSyncProvider();
   const [items, setItems] = useState<Synced[]>([]);
   const [loading, setLoading] = useState(false);
-  const [q, setQ] = usePersistedState('sr-filters:sync-catalog:q', '');
-  const [onlyWithCost, setOnlyWithCost] = usePersistedState('sr-filters:sync-catalog:cost', false);
-  const [showInternal, setShowInternal] = usePersistedState('sr-filters:sync-catalog:internal', false);
+  const [q, setQ, qReady] = usePersistedState('sr-filters:sync-catalog:q', '');
+  const [onlyWithCost, setOnlyWithCost, costReady] = usePersistedState('sr-filters:sync-catalog:cost', false);
+  const [showInternal, setShowInternal, internalReady] = usePersistedState('sr-filters:sync-catalog:internal', false);
   const [view, setView] = usePersistedState<'cards' | 'list'>('sr-syncprod-view', 'cards');
+  const catalogFiltersReady = qReady && costReady && internalReady;
   const [detail, setDetail] = useState<Synced | null>(null);
   const [history, setHistory] = useState<History[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -64,7 +65,7 @@ function CatalogScreen() {
 
   const loadItems = useCallback(async () => { if (!connection) return setItems([]); setLoading(true); try { setItems(await api<Synced[]>(`/sync/connections/${connection.id}/products`, { params: { q: q || undefined, onlyWithCost: onlyWithCost ? 'true' : undefined } })); } finally { setLoading(false); } }, [connection, q, onlyWithCost]);
   const loadChanges = useCallback(async () => { if (!connection) return setChanges([]); setChangesLoading(true); try { setChanges(await api<Change[]>(`/sync/connections/${connection.id}/price-changes`, { params: { days: String(days), threshold: String(threshold) } })); } catch { setChanges([]); } finally { setChangesLoading(false); } }, [connection, days, threshold]);
-  useEffect(() => { void loadItems(); }, [loadItems]);
+  useEffect(() => { if (!catalogFiltersReady) return; void loadItems(); }, [catalogFiltersReady, loadItems]);
   useEffect(() => {
     if (!connection) return setRawColumns([]);
     api<{ columns: RawColumnMeta[] }>(`/sync/connections/${connection.id}/raw-columns`)

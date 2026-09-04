@@ -23,9 +23,10 @@ export default function MovimientosPage() {
   const [moves, setMoves] = useState<Move[]>([]);
   const [loading, setLoading] = useState(true);
   /** all = últimos movimientos de todo tipo; altas = solo productos nuevos (no quedan ocultos tras muchas ventas) */
-  const [kind, setKind] = usePersistedState<'all' | 'altas'>('sr-filters:movimientos:kind', 'altas');
+  const [kind, setKind, kindReady] = usePersistedState<'all' | 'altas'>('sr-filters:movimientos:kind', 'altas');
 
   useEffect(() => {
+    if (!kindReady) return;
     setLoading(true);
     api<Move[]>('/products/stock-moves', {
       params: {
@@ -36,7 +37,7 @@ export default function MovimientosPage() {
       .then((data) => setMoves(Array.isArray(data) ? data : []))
       .catch(() => setMoves([]))
       .finally(() => setLoading(false));
-  }, [kind]);
+  }, [kindReady, kind]);
 
   const reasonLabel = (r: string) => STOCK_REASONS.find((x) => x.value === r)?.label ?? r;
 

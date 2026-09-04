@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader, Spinner } from '@/components/ui/Loader';
-import { usePersistedState } from '@/lib/use-persisted-state';
+import { localYmd, usePersistedState } from '@/lib/use-persisted-state';
 
 type CajaPreview = {
   openingEfectivo: number;
@@ -57,10 +57,11 @@ export default function CajaPage() {
   const defaultHistoryFrom = (() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
+    return localYmd(d);
   })();
-  const [historyFrom, setHistoryFrom] = usePersistedState('sr-filters:caja:from', defaultHistoryFrom);
-  const [historyTo, setHistoryTo] = usePersistedState('sr-filters:caja:to', new Date().toISOString().slice(0, 10));
+  const [historyFrom, setHistoryFrom, historyFromReady] = usePersistedState('sr-filters:caja:from', defaultHistoryFrom);
+  const [historyTo, setHistoryTo, historyToReady] = usePersistedState('sr-filters:caja:to', localYmd());
+  const historyReady = historyFromReady && historyToReady;
 
   const fetchOpen = async () => {
     try {
@@ -93,8 +94,9 @@ export default function CajaPage() {
   }, []);
 
   useEffect(() => {
-    fetchHistory();
-  }, [historyFrom, historyTo]);
+    if (!historyReady) return;
+    void fetchHistory();
+  }, [historyReady, historyFrom, historyTo]);
 
   const handleOpen = async (e: React.FormEvent) => {
     e.preventDefault();

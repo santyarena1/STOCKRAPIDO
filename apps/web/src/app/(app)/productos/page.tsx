@@ -145,7 +145,7 @@ export default function ProductosPage() {
   const [stockSummary, setStockSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
-  const [filters, setFilters] = usePersistedState<Filters>('sr-filters:productos:catalog', EMPTY_FILTERS);
+  const [filters, setFilters, filtersReady] = usePersistedState<Filters>('sr-filters:productos:catalog', EMPTY_FILTERS);
   const [searchInput, setSearchInput] = useState('');
   const [sectionTab, setSectionTab] = useState<'inventory' | 'community'>('inventory');
   const [mode, setMode] = useState<'catalog' | 'stock'>('catalog');
@@ -244,7 +244,7 @@ export default function ProductosPage() {
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-views', JSON.stringify(views)); }, [hydrated, views]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-hide-cats-on', String(hideCategories)); }, [hydrated, hideCategories]);
   useEffect(() => { if (hydrated) localStorage.setItem('sr-prod-hidden-cats', JSON.stringify(hiddenCategoryIds)); }, [hydrated, hiddenCategoryIds]);
-  useEffect(() => { if (hydrated && searchInput !== filters.q) setSearchInput(filters.q); }, [hydrated, filters.q]);
+  useEffect(() => { if (hydrated && filtersReady && searchInput !== filters.q) setSearchInput(filters.q); }, [hydrated, filtersReady, filters.q]);
   useEffect(() => { const timer = window.setTimeout(() => setFilters((current) => ({ ...current, q: searchInput.trim() })), 300); return () => window.clearTimeout(timer); }, [searchInput]);
 
   const updateColumns = (updater: SetStateAction<ColumnSetting[]>) => {
@@ -258,7 +258,7 @@ export default function ProductosPage() {
     return () => window.clearTimeout(timer);
   }, [columnsSavedFlash]);
   const fetchProducts = useCallback(async () => {
-    if (!hydrated) return;
+    if (!hydrated || !filtersReady) return;
     setLoading(true);
     try {
       const result = await api<{ items: Product[]; total: number; page: number; pageSize: number; totalPages: number }>('/products/catalog', {
@@ -274,7 +274,7 @@ export default function ProductosPage() {
       setProducts(result.items); setTotal(result.total); setTotalPages(result.totalPages);
     } catch (error) { alert(error instanceof Error ? error.message : 'Error al cargar productos'); }
     finally { setLoading(false); }
-  }, [hydrated, filters, hideCategories, hiddenCategoryIds, sort, dir, page, pageSize]);
+  }, [hydrated, filtersReady, filters, hideCategories, hiddenCategoryIds, sort, dir, page, pageSize]);
 
   const loadIncompleteProducts = useCallback(async () => {
     try {

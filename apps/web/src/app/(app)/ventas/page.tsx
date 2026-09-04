@@ -191,8 +191,8 @@ export default function VentasPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [stats, setStats] = useState<SalesHistoryStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [listTab, setListTab] = usePersistedState<'todas' | 'facturas'>('sr-filters:ventas:tab', 'todas');
-  const [facturasView, setFacturasView] = usePersistedState<'emitidas' | 'pendientes'>(
+  const [listTab, setListTab, listTabReady] = usePersistedState<'todas' | 'facturas'>('sr-filters:ventas:tab', 'todas');
+  const [facturasView, setFacturasView, facturasViewReady] = usePersistedState<'emitidas' | 'pendientes'>(
     'sr-filters:ventas:facturas-view',
     'emitidas',
   );
@@ -225,7 +225,7 @@ export default function VentasPage() {
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [includeVoidedInvoices, setIncludeVoidedInvoices] = useState(false);
-  const [filters, setFilters] = usePersistedState('sr-filters:ventas:list', {
+  const [filters, setFilters, filtersReady] = usePersistedState('sr-filters:ventas:list', {
     from: '',
     to: '',
     customerId: '',
@@ -233,8 +233,9 @@ export default function VentasPage() {
   });
   const [productSearch, setProductSearch] = useState('');
   const [productHits, setProductHits] = useState<ProductHit[]>([]);
-  const [selectedProduct, setSelectedProduct] = usePersistedState<{ id: string; name: string } | null>('sr-filters:ventas:product', null);
-  const [activeDatePreset, setActiveDatePreset] = usePersistedState<VentasDatePresetId | null>('sr-filters:ventas:date-preset', null);
+  const [selectedProduct, setSelectedProduct, selectedProductReady] = usePersistedState<{ id: string; name: string } | null>('sr-filters:ventas:product', null);
+  const [activeDatePreset, setActiveDatePreset, datePresetReady] = usePersistedState<VentasDatePresetId | null>('sr-filters:ventas:date-preset', null);
+  const filtersHydrated = listTabReady && facturasViewReady && filtersReady && selectedProductReady && datePresetReady;
   const [viewSale, setViewSale] = useState<Sale | null>(null);
 
   const [saleEditDiscount, setSaleEditDiscount] = useState('');
@@ -559,9 +560,17 @@ export default function VentasPage() {
     }
   };
 
+  // Reaplicar preset relativo (Hoy / Semana / Mes) al entrar, para no usar fechas viejas de LS.
   useEffect(() => {
-    fetchSales();
-  }, [fetchSales]);
+    if (!filtersHydrated || !activeDatePreset) return;
+    const r = rangeForVentasDatePreset(activeDatePreset);
+    setFilters((f) => (f.from === r.from && f.to === r.to ? f : { ...f, from: r.from, to: r.to }));
+  }, [filtersHydrated, activeDatePreset, setFilters]);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    void fetchSales();
+  }, [filtersHydrated, fetchSales]);
 
   useEffect(() => {
     if (!productSearch.trim() || selectedProduct) {

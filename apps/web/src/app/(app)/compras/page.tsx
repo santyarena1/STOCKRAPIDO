@@ -84,7 +84,7 @@ export default function ComprasPage() {
   const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
   const [searchResults, setSearchResults] = useState<Record<number, Product[]>>({});
   const [searchingResults, setSearchingResults] = useState<Record<number, boolean>>({});
-  const [historyFilters, setHistoryFilters] = usePersistedState('sr-filters:compras:history', {
+  const [historyFilters, setHistoryFilters, historyFiltersReady] = usePersistedState('sr-filters:compras:history', {
     supplierId: '',
     from: '',
     to: '',
@@ -121,8 +121,9 @@ export default function ComprasPage() {
   }, []);
 
   useEffect(() => {
-    fetchPurchases();
-  }, [fetchPurchases]);
+    if (!historyFiltersReady) return;
+    void fetchPurchases();
+  }, [historyFiltersReady, fetchPurchases]);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];

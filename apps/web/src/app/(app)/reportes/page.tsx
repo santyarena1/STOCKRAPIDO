@@ -76,13 +76,14 @@ function Table({ headers, children, empty }: { headers: string[]; children: Reac
 }
 
 export default function ReportesPage() {
-  const [period, setPeriod] = usePersistedState<Period>('sr-filters:reportes:period', 'today');
+  const [period, setPeriod, periodReady] = usePersistedState<Period>('sr-filters:reportes:period', 'today');
   const [activeTab, setActiveTab] = usePersistedState<(typeof TABS)[number][0]>('sr-filters:reportes:tab', 'sales');
   const [data, setData] = useState<ReportData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!periodReady) return;
     let cancelled = false;
     setLoading(true);
     const requests: Array<[keyof ReportData, Promise<unknown>]> = [
@@ -121,7 +122,7 @@ export default function ReportesPage() {
       setData(next); setFailed(failures);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [period]);
+  }, [periodReady, period]);
 
   const handleExportCsv = async () => {
     try {

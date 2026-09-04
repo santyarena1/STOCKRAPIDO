@@ -128,19 +128,20 @@ export function PublicCatalogPanel() {
   const [showIntro, setShowIntro] = useState(false);
   const [importModalId, setImportModalId] = useState<string | null>(null);
 
-  const [q, setQ] = usePersistedState('sr-filters:public-catalog:q', '');
-  const [brand, setBrand] = usePersistedState('sr-filters:public-catalog:brand', '');
-  const [category, setCategory] = usePersistedState('sr-filters:public-catalog:category', '');
-  const [importedFilter, setImportedFilter] = usePersistedState<ImportedFilter>(
+  const [q, setQ, qReady] = usePersistedState('sr-filters:public-catalog:q', '');
+  const [brand, setBrand, brandReady] = usePersistedState('sr-filters:public-catalog:brand', '');
+  const [category, setCategory, categoryReady] = usePersistedState('sr-filters:public-catalog:category', '');
+  const [importedFilter, setImportedFilter, importedReady] = usePersistedState<ImportedFilter>(
     'sr-filters:public-catalog:imported',
     '',
   );
-  const [hasImage, setHasImage] = usePersistedState('sr-filters:public-catalog:hasImage', false);
-  const [sort, setSort] = usePersistedState<SortOption>('sr-filters:public-catalog:sort', 'newest');
+  const [hasImage, setHasImage, hasImageReady] = usePersistedState('sr-filters:public-catalog:hasImage', false);
+  const [sort, setSort, sortReady] = usePersistedState<SortOption>('sr-filters:public-catalog:sort', 'newest');
   const [view, setView] = usePersistedState<ViewMode>('sr-filters:public-catalog:view', 'cards');
-  const [pageSize, setPageSize] = usePersistedState('sr-filters:public-catalog:pageSize', 48);
+  const [pageSize, setPageSize, pageSizeReady] = usePersistedState('sr-filters:public-catalog:pageSize', 48);
+  const catalogReady = qReady && brandReady && categoryReady && importedReady && hasImageReady && sortReady && pageSizeReady;
 
-  const [searchInput, setSearchInput] = useState(q);
+  const [searchInput, setSearchInput] = useState('');
   const [historyInput, setHistoryInput] = useState('');
   const [historyQ, setHistoryQ] = useState('');
   const [page, setPage] = useState(1);
@@ -168,9 +169,10 @@ export function PublicCatalogPanel() {
   }, []);
 
   useEffect(() => {
+    if (!catalogReady) return;
     const t = setTimeout(() => setQ(searchInput), 250);
     return () => clearTimeout(t);
-  }, [searchInput, setQ]);
+  }, [catalogReady, searchInput, setQ]);
 
   useEffect(() => {
     const t = setTimeout(() => setHistoryQ(historyInput), 250);
@@ -211,7 +213,13 @@ export function PublicCatalogPanel() {
     setShowIntro(false);
   };
 
+  useEffect(() => {
+    if (!catalogReady) return;
+    setSearchInput(q);
+  }, [catalogReady, q]);
+
   const fetchList = useCallback(async () => {
+    if (!catalogReady) return;
     setLoading(true);
     try {
       const data = await api<{ items: CatalogItem[]; total: number; facets: Facets }>('/public-catalog', {
@@ -236,7 +244,7 @@ export function PublicCatalogPanel() {
     } finally {
       setLoading(false);
     }
-  }, [q, brand, category, importedFilter, hasImage, sort, pageSize, page]);
+  }, [catalogReady, q, brand, category, importedFilter, hasImage, sort, pageSize, page]);
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -259,9 +267,9 @@ export function PublicCatalogPanel() {
   }, [historyQ, historyPage, pageSize]);
 
   useEffect(() => {
-    if (tab !== 'search') return;
+    if (!catalogReady || tab !== 'search') return;
     void fetchList();
-  }, [fetchList, tab]);
+  }, [catalogReady, fetchList, tab]);
 
   useEffect(() => {
     if (tab === 'history') void fetchHistory();

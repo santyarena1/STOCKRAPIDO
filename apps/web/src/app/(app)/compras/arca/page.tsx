@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
+import { localYmd } from '@/lib/use-persisted-state';
 import { PlanGate } from '@/components/billing/PlanGate';
 
 type ReceivedItem = {
@@ -73,12 +74,12 @@ function money(n: number) {
 }
 
 function ymd(d = new Date()) {
-  return d.toISOString().slice(0, 10);
+  return localYmd(d);
 }
 
 function monthStart() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  return localYmd(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 
 export default function ComprasArcaPage() {

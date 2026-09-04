@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.26',
+    date: '2026-09-04',
+    summary: 'Filtros que cargan bien al entrar a cada pantalla.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Filtros al entrar a la pantalla',
+        desc: 'Ya no hace falta volver a tocar el filtro: la lista espera a leer el filtro guardado (y en Ventas recalcula Hoy/Semana/Mes) antes de pedir datos. Así no aparece un histórico viejo por error.',
+      },
+    ],
+  },
+  {
     version: 'v1.25',
     date: '2026-09-03',
     summary: 'Facturas ARCA en automático con Clave Fiscal.',
