@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.29',
+    date: '2026-09-05',
+    summary: 'Token Afip SDK desde Config → Fiscal.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'API key de Afip SDK en la config ARCA',
+        desc: 'Ya no hace falta pedirle al admin que cargue el token solo en el servidor: lo pegás en Config → Fiscal (Facturas recibidas), junto con la Clave Fiscal del portal, y listo para sincronizar compras.',
+      },
+    ],
+  },
+  {
     version: 'v1.28',
     date: '2026-09-05',
     summary: 'Filtros de ventas más firmes y Facturas ARCA más claras.',

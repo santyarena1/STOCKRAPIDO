@@ -8,13 +8,15 @@ export type MisComprobantesParams = {
   password: string;
   /** Rango dd/mm/yyyy - dd/mm/yyyy */
   fechaEmision: string;
+  /** Token Afip SDK del negocio (o del servidor). */
+  accessToken?: string | null;
 };
 
-function accessToken() {
-  const token = process.env.AFIP_SDK_ACCESS_TOKEN?.trim();
+function resolveAccessToken(explicit?: string | null) {
+  const token = (explicit || process.env.AFIP_SDK_ACCESS_TOKEN || '').trim();
   if (!token) {
     throw new BadRequestException(
-      'Falta AFIP_SDK_ACCESS_TOKEN en el servidor. Sin eso no se puede sincronizar Mis Comprobantes automáticamente (ARCA no tiene API oficial de recibidos).',
+      'Falta el access token de Afip SDK. Cargalo en Config → Fiscal (Facturas recibidas) o pedí al admin que configure AFIP_SDK_ACCESS_TOKEN en el servidor. ARCA no tiene API oficial de recibidos.',
     );
   }
   return token;
@@ -30,11 +32,11 @@ function isError(status: AutomationStatus) {
   return ['error', 'failed', 'fail'].includes(s);
 }
 
-async function afipFetch(path: string, init?: RequestInit) {
+async function afipFetch(path: string, token: string, init?: RequestInit) {
   const response = await fetch(`https://app.afipsdk.com/api/${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${accessToken()}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       'sdk-library': 'javascript',
       'sdk-version-number': 'stockrapido',
@@ -54,7 +56,7 @@ async function afipFetch(path: string, init?: RequestInit) {
 
 /**
  * Baja Mis Comprobantes (recibidos) vía automatización Afip SDK.
- * ARCA no publica WS oficial para listar recibidos; esto usa Clave Fiscal.
+ * ARCA no publica WS oficial para listar recibidos; esto usa Clave Fiscal + token Afip SDK.
  */
 export async function fetchMisComprobantesRecibidos(
   params: MisComprobantesParams,
@@ -62,8 +64,9 @@ export async function fetchMisComprobantesRecibidos(
 ) {
   const waitMs = opts.waitMs ?? 110_000;
   const pollMs = opts.pollMs ?? 5_000;
+  const token = resolveAccessToken(params.accessToken);
 
-  const created = await afipFetch('v1/automations', {
+  const created = await afipFetch('v1/automations', token, {
     method: 'POST',
     body: JSON.stringify({
       automation: 'mis-comprobantes',
@@ -85,7 +88,7 @@ export async function fetchMisComprobantesRecibidos(
     await new Promise((r) => setTimeout(r, pollMs));
     const id = String(current.id || '');
     if (!id) throw new BadRequestException('Afip SDK no devolvió id de automatización.');
-    current = await afipFetch(`v1/automations/${id}`);
+    current = await afipFetch(`v1/automations/${id}`, token);
   }
 
   if (!isTerminal(String(current.status || ''))) {
@@ -117,4 +120,8 @@ export function formatAfipDateRange(from: Date, to: Date) {
       year: 'numeric',
     }).format(d);
   return `${fmt(from)} - ${fmt(to)}`;
+}
+
+export function isAfipSdkEnvConfigured() {
+  return !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim();
 }

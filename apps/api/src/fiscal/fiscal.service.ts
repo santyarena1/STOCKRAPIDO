@@ -21,6 +21,8 @@ type SaveConfig = {
   portalUsername?: string;
   /** Contraseña Clave Fiscal; si viene vacío se conserva la anterior. */
   portalPassword?: string;
+  /** Access token de Afip SDK; si viene vacío se conserva el anterior. */
+  afipSdkAccessToken?: string;
   receivedAutoSync?: boolean;
 };
 type SaveInvoiceAlert = {
@@ -54,11 +56,13 @@ export class FiscalService {
       invoiceYearAlertPercent: c.invoiceYearAlertPercent,
       portalUsername: c.portalUsername ?? '',
       hasPortalPassword: !!c.portalPasswordEncrypted,
+      hasAfipSdkAccessToken: !!c.afipSdkAccessTokenEncrypted,
       receivedAutoSync: !!c.receivedAutoSync,
       receivedLastSyncAt: c.receivedLastSyncAt,
       receivedLastSyncError: c.receivedLastSyncError,
       receivedLastSyncCount: c.receivedLastSyncCount,
-      afipSdkConfigured: !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim(),
+      afipSdkConfigured:
+        !!c.afipSdkAccessTokenEncrypted || !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim(),
     };
   }
 
@@ -160,27 +164,38 @@ export class FiscalService {
     if (dto.portalPassword?.trim()) {
       portalPasswordEncrypted = encryptFiscalSecret(dto.portalPassword.trim());
     }
+    let afipSdkAccessTokenEncrypted = previous?.afipSdkAccessTokenEncrypted ?? null;
+    if (dto.afipSdkAccessToken?.trim()) {
+      afipSdkAccessTokenEncrypted = encryptFiscalSecret(dto.afipSdkAccessToken.trim());
+    }
     const portalUsername =
       dto.portalUsername !== undefined
         ? dto.portalUsername.replace(/\D/g, '') || null
         : previous?.portalUsername ?? null;
     const receivedAutoSync =
       dto.receivedAutoSync !== undefined ? !!dto.receivedAutoSync : !!previous?.receivedAutoSync;
+    const hasAfipSdkToken =
+      !!afipSdkAccessTokenEncrypted || !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim();
     if (receivedAutoSync && !portalPasswordEncrypted) {
       throw new BadRequestException(
-        'Para el sync automático de facturas recibidas necesitás guardar la Clave Fiscal (usuario y contraseña de ARCA).',
+        'Para el sync automático de facturas recibidas necesitás guardar la Clave Fiscal (usuario y contraseña del portal ARCA).',
+      );
+    }
+    if (receivedAutoSync && !hasAfipSdkToken) {
+      throw new BadRequestException(
+        'Para el sync automático necesitás cargar el access token de Afip SDK (Config → Fiscal) o pedirle al admin que configure AFIP_SDK_ACCESS_TOKEN en el servidor.',
       );
     }
     await this.prisma.fiscalConfig.upsert({ where: { businessId }, create: { businessId, enabled: !!dto.enabled,
       environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,
       address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
-      portalUsername: portalUsername || cuit, portalPasswordEncrypted, receivedAutoSync,
+      portalUsername: portalUsername || cuit, portalPasswordEncrypted, afipSdkAccessTokenEncrypted, receivedAutoSync,
       ...alert }, update: {
       enabled: !!dto.enabled, environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,
       address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
-      portalUsername: portalUsername || cuit, portalPasswordEncrypted, receivedAutoSync,
+      portalUsername: portalUsername || cuit, portalPasswordEncrypted, afipSdkAccessTokenEncrypted, receivedAutoSync,
       ...alert } });
     return this.getPublicConfig(businessId);
   }

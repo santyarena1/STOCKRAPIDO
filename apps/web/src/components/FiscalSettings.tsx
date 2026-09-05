@@ -23,6 +23,7 @@ type FiscalConfig = {
   invoiceYearAlertPercent?: number;
   portalUsername?: string;
   hasPortalPassword?: boolean;
+  hasAfipSdkAccessToken?: boolean;
   receivedAutoSync?: boolean;
   receivedLastSyncAt?: string | null;
   receivedLastSyncError?: string | null;
@@ -48,6 +49,7 @@ type FiscalForm = {
   invoiceYearAlertPercent: number;
   portalUsername: string;
   portalPassword: string;
+  afipSdkAccessToken: string;
   receivedAutoSync: boolean;
 };
 const empty: FiscalForm = {
@@ -69,6 +71,7 @@ const empty: FiscalForm = {
   invoiceYearAlertPercent: 80,
   portalUsername: '',
   portalPassword: '',
+  afipSdkAccessToken: '',
   receivedAutoSync: false,
 };
 export default function FiscalSettings() {
@@ -135,6 +138,7 @@ export default function FiscalSettings() {
         invoiceYearAlertPercent: form.invoiceYearAlertPercent,
         portalUsername: form.portalUsername,
         portalPassword: form.portalPassword || undefined,
+        afipSdkAccessToken: form.afipSdkAccessToken || undefined,
         receivedAutoSync: form.receivedAutoSync,
       };
       const c = await api<FiscalConfig>('/fiscal/config', { method: 'PUT', body: JSON.stringify(body) });
@@ -146,6 +150,7 @@ export default function FiscalSettings() {
         invoiceAlertLimit: formatMoneyInputArs(c.invoiceAlertLimit),
         invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
         portalPassword: '',
+        afipSdkAccessToken: '',
       }));
       setMessage('Configuración fiscal guardada.');
     } catch (err) {
@@ -326,26 +331,34 @@ export default function FiscalSettings() {
       
       <div className="rounded-lg border border-cyan-800/40 bg-slate-900/40 p-4 space-y-3">
         <div>
-          <h3 className="font-medium text-cyan-100">Facturas recibidas (automático)</h3>
+          <h3 className="font-medium text-cyan-100">Facturas recibidas (compras / balance)</h3>
           <p className="text-xs text-slate-500 mt-1">
-            ARCA <strong>no tiene API oficial</strong> para listar compras recibidas. Para el sync automático
-            hace falta: (1) tu <strong>Clave Fiscal</strong> (usuario/contraseña del portal) acá abajo, y
-            (2) un token de <strong>Afip SDK</strong> en el servidor (lo configura el admin de la plataforma).
-            El CSV de Mis Comprobantes queda como respaldo. Solo montos para balance, sin stock.
+            ARCA no tiene API oficial para listar Mis Comprobantes → Recibidos. Acá cargás el{' '}
+            <strong>access token de Afip SDK</strong> (afipsdk.com) y tu Clave Fiscal del portal.
+            Con eso sincronizamos solo montos (sin stock). El CSV queda como respaldo.
           </p>
         </div>
-        {!meta?.afipSdkConfigured ? (
-          <p className="text-xs text-amber-300">
-            El servidor todavía no tiene <code>AFIP_SDK_ACCESS_TOKEN</code> (token de{' '}
-            <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline">
+        <div>
+          <label className="text-sm text-slate-400">Access token Afip SDK (API key)</label>
+          <input
+            className={input}
+            type="password"
+            autoComplete="off"
+            value={form.afipSdkAccessToken}
+            onChange={(e) => setForm((f) => ({ ...f, afipSdkAccessToken: e.target.value }))}
+            placeholder={meta?.hasAfipSdkAccessToken || meta?.afipSdkConfigured ? '•••••••• (cargado)' : 'Pegá el access token de afipsdk.com'}
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            Se obtiene en{' '}
+            <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline text-cyan-300">
               afipsdk.com
             </a>
-            , no de ARCA). Pedile al admin de plataforma que lo configure.
+            . No es un token de ARCA.
           </p>
-        ) : null}
+        </div>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-sm text-slate-400">Usuario Clave Fiscal</label>
+            <label className="text-sm text-slate-400">Usuario Clave Fiscal (portal)</label>
             <input
               className={input}
               value={form.portalUsername}
@@ -361,7 +374,7 @@ export default function FiscalSettings() {
               autoComplete="new-password"
               value={form.portalPassword}
               onChange={(e) => setForm((f) => ({ ...f, portalPassword: e.target.value }))}
-              placeholder={meta?.hasPortalPassword ? '•••••••• (cargada)' : 'Contraseña de ARCA'}
+              placeholder={meta?.hasPortalPassword ? '•••••••• (cargada)' : 'Contraseña del portal ARCA'}
             />
           </div>
         </div>
@@ -378,6 +391,11 @@ export default function FiscalSettings() {
             Último sync: {new Date(meta.receivedLastSyncAt).toLocaleString('es-AR')}
             {meta.receivedLastSyncCount != null ? ` · ${meta.receivedLastSyncCount} comprobantes` : ''}
             {meta.receivedLastSyncError ? ` · Error: ${meta.receivedLastSyncError}` : ''}
+          </p>
+        ) : null}
+        {!meta?.afipSdkConfigured ? (
+          <p className="text-xs text-amber-300">
+            Todavía falta el access token de Afip SDK para poder sincronizar.
           </p>
         ) : null}
       </div>

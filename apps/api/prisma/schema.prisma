@@ -389,6 +389,9 @@ model FiscalConfig {
   /// Clave Fiscal (portal ARCA) para sincronizar Mis Comprobantes → Recibidos.
   portalUsername              String?
   portalPasswordEncrypted     String?
+  /// Access token de Afip SDK (cifrado). Permite sync automático de recibidos.
+  /// ARCA no tiene API oficial para listar Mis Comprobantes → Recibidos.
+  afipSdkAccessTokenEncrypted String?
   /// Si true, el cron diario trae facturas recibidas automáticamente.
   receivedAutoSync            Boolean   @default(false)
   receivedLastSyncAt          DateTime?

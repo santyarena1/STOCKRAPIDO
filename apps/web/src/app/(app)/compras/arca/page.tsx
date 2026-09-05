@@ -33,6 +33,7 @@ type ListResponse = {
   sync?: {
     autoSync: boolean;
     hasPortalPassword: boolean;
+    hasAfipSdkAccessToken?: boolean;
     portalUsername: string | null;
     lastSyncAt: string | null;
     lastSyncError: string | null;
@@ -261,26 +262,29 @@ export default function ComprasArcaPage() {
             </p>
             <p className="mt-2 text-xs text-fg-muted">
               ARCA no publica una API oficial para listar comprobantes recibidos. StockRápido usa{' '}
-              <strong className="text-fg">Afip SDK</strong> (servicio de terceros) + tu{' '}
-              <strong className="text-fg">Clave Fiscal</strong> del portal.
+              <strong className="text-fg">Afip SDK</strong> + tu <strong className="text-fg">Clave Fiscal</strong> del
+              portal. El access token se carga en Config → Fiscal.
             </p>
-            {!data?.sync?.hasPortalPassword ? (
+            {!data?.sync?.afipSdkConfigured ? (
               <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                Configurá usuario y contraseña de Clave Fiscal en{' '}
+                Falta el access token de Afip SDK. Cargalo en{' '}
                 <Link href="/config/fiscal" className="underline">
                   Config → Fiscal
                 </Link>{' '}
-                (la del portal ARCA / AFIP, no un token de API).
-              </p>
-            ) : null}
-            {!data?.sync?.afipSdkConfigured ? (
-              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                Falta el token de <strong>Afip SDK</strong> en el servidor (
-                <code>AFIP_SDK_ACCESS_TOKEN</code>). No es una API de ARCA: se obtiene en{' '}
+                (lo sacás de{' '}
                 <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline">
                   afipsdk.com
-                </a>{' '}
-                y lo carga el admin de la plataforma.
+                </a>
+                ; no es un token de ARCA).
+              </p>
+            ) : null}
+            {!data?.sync?.hasPortalPassword ? (
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                También hace falta usuario y contraseña de Clave Fiscal (portal ARCA) en{' '}
+                <Link href="/config/fiscal" className="underline">
+                  Config → Fiscal
+                </Link>
+                .
               </p>
             ) : null}
           </div>

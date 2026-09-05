@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertPlanFeature, assertPlanFeatureRead } from '../billing/plan-guard';
 import { parseArgentinaDayEnd, parseArgentinaDayStart } from '../common/argentina-date-range';
 import { decryptFiscalSecret } from './fiscal-crypto';
-import { fetchMisComprobantesRecibidos, formatAfipDateRange } from './afip-sdk-automation';
+import { fetchMisComprobantesRecibidos, formatAfipDateRange, isAfipSdkEnvConfigured } from './afip-sdk-automation';
 
 const WSCDC_SERVICE = 'wscdc';
 
@@ -85,6 +85,7 @@ export class FiscalReceivedService {
           enabled: true,
           portalUsername: true,
           portalPasswordEncrypted: true,
+          afipSdkAccessTokenEncrypted: true,
           receivedAutoSync: true,
           receivedLastSyncAt: true,
           receivedLastSyncError: true,
@@ -101,11 +102,13 @@ export class FiscalReceivedService {
       sync: {
         autoSync: !!config?.receivedAutoSync,
         hasPortalPassword: !!config?.portalPasswordEncrypted,
+        hasAfipSdkAccessToken: !!config?.afipSdkAccessTokenEncrypted,
         portalUsername: config?.portalUsername ?? config?.cuit ?? null,
         lastSyncAt: config?.receivedLastSyncAt ?? null,
         lastSyncError: config?.receivedLastSyncError ?? null,
         lastSyncCount: config?.receivedLastSyncCount ?? null,
-        afipSdkConfigured: !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim(),
+        afipSdkConfigured:
+          !!config?.afipSdkAccessTokenEncrypted || isAfipSdkEnvConfigured(),
       },
       items: items.map((row) => this.serialize(row)),
     };
@@ -205,11 +208,20 @@ export class FiscalReceivedService {
       new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate() - 31));
 
     try {
+      const accessToken = config.afipSdkAccessTokenEncrypted
+        ? decryptFiscalSecret(config.afipSdkAccessTokenEncrypted)
+        : process.env.AFIP_SDK_ACCESS_TOKEN?.trim() || null;
+      if (!accessToken) {
+        throw new BadRequestException(
+          'Falta el access token de Afip SDK. Cargalo en Config → Fiscal (Facturas recibidas).',
+        );
+      }
       const raw = await fetchMisComprobantesRecibidos({
         cuit: config.cuit,
         username: (config.portalUsername || config.cuit).replace(/\D/g, ''),
         password: decryptFiscalSecret(config.portalPasswordEncrypted),
         fechaEmision: formatAfipDateRange(fromDate, toDate),
+        accessToken,
       });
       const rows = raw
         .map((item) => this.parseAutomationItem(item))
