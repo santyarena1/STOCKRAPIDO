@@ -30,6 +30,11 @@ export class PlatformController {
     return this.platform.getBusiness(id);
   }
 
+  @Get('businesses/:id/sales-audit')
+  salesAudit(@Param('id') id: string) {
+    return this.platform.salesAudit(id);
+  }
+
   @Patch('businesses/:id')
   update(@Param('id') id: string, @Body() dto: UpdateBusinessPlanDto) {
     return this.platform.updateBusiness(id, dto);

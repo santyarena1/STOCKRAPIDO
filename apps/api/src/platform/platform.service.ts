@@ -291,6 +291,269 @@ export class PlatformService {
     });
   }
 
+  /**
+   * Auditoría exhaustiva del historial de ventas de un negocio:
+   * sumas ítems↔cabecera, descuentos, precios vs catálogo, huérfanos, vacías, etc.
+   */
+  async salesAudit(businessId: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Cuenta no encontrada');
+
+    const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const differs = (a: number, b: number) => Math.abs(money(a) - money(b)) > 0.02;
+
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            productName: true,
+            qty: true,
+            unitPrice: true,
+            subtotal: true,
+            discount: true,
+            product: { select: { id: true, name: true, price: true, isActive: true } },
+          },
+        },
+        user: { select: { name: true, email: true } },
+      },
+    });
+
+    const byStatus: Record<string, { count: number; sumTotalFinal: number }> = {};
+    const byPayment: Record<string, { count: number; sumTotalFinal: number }> = {};
+
+    const itemSubtotalMismatch: Array<Record<string, unknown>> = [];
+    const saleTotalMismatch: Array<Record<string, unknown>> = [];
+    const saleFinalMismatch: Array<Record<string, unknown>> = [];
+    const priceVsCatalog: Array<Record<string, unknown>> = [];
+    const orphanProduct: Array<Record<string, unknown>> = [];
+    const emptySales: Array<Record<string, unknown>> = [];
+    const negativeOrOdd: Array<Record<string, unknown>> = [];
+
+    let completedCount = 0;
+    let sumTotal = 0;
+    let sumDiscount = 0;
+    let sumTotalFinal = 0;
+    let sumItemsSubtotal = 0;
+    let unitsSold = 0;
+    let manualLines = 0;
+    let catalogLines = 0;
+
+    for (const sale of sales) {
+      const status = sale.status || 'unknown';
+      const pay = sale.paymentMethod || '(sin medio)';
+      const total = Number(sale.total);
+      const discount = Number(sale.discount);
+      const totalFinal = Number(sale.totalFinal);
+
+      if (!byStatus[status]) byStatus[status] = { count: 0, sumTotalFinal: 0 };
+      byStatus[status].count += 1;
+      byStatus[status].sumTotalFinal = money(byStatus[status].sumTotalFinal + totalFinal);
+
+      if (status === 'completed') {
+        completedCount += 1;
+        sumTotal = money(sumTotal + total);
+        sumDiscount = money(sumDiscount + discount);
+        sumTotalFinal = money(sumTotalFinal + totalFinal);
+        if (!byPayment[pay]) byPayment[pay] = { count: 0, sumTotalFinal: 0 };
+        byPayment[pay].count += 1;
+        byPayment[pay].sumTotalFinal = money(byPayment[pay].sumTotalFinal + totalFinal);
+      }
+
+      if (!sale.items.length) {
+        emptySales.push({ saleId: sale.id, createdAt: sale.createdAt, status, totalFinal });
+      }
+
+      if (total < 0 || discount < 0 || totalFinal < 0 || discount > total + 0.02) {
+        negativeOrOdd.push({
+          saleId: sale.id,
+          createdAt: sale.createdAt,
+          status,
+          total,
+          discount,
+          totalFinal,
+        });
+      }
+
+      let itemsSum = 0;
+      for (const item of sale.items) {
+        const qty = item.qty;
+        const unitPrice = Number(item.unitPrice);
+        const subtotal = Number(item.subtotal);
+        const itemDiscount = Number(item.discount || 0);
+        const expectedPlain = money(qty * unitPrice);
+        const expectedWithItemDisc = money(qty * unitPrice - itemDiscount);
+        itemsSum = money(itemsSum + subtotal);
+        unitsSold += qty;
+        if (item.productId) catalogLines += 1;
+        else manualLines += 1;
+
+        if (differs(expectedPlain, subtotal) && differs(expectedWithItemDisc, subtotal)) {
+          itemSubtotalMismatch.push({
+            saleId: sale.id,
+            itemId: item.id,
+            productId: item.productId,
+            name: item.product?.name || item.productName,
+            qty,
+            unitPrice,
+            itemDiscount,
+            subtotal,
+            expectedQtyTimesPrice: expectedPlain,
+            createdAt: sale.createdAt,
+          });
+        }
+
+        if (item.productId && !item.product) {
+          orphanProduct.push({
+            saleId: sale.id,
+            itemId: item.id,
+            productId: item.productId,
+            productName: item.productName,
+            unitPrice,
+            qty,
+            createdAt: sale.createdAt,
+          });
+        }
+
+        if (item.product && status === 'completed') {
+          const catalogPrice = Number(item.product.price);
+          const diff = money(unitPrice - catalogPrice);
+          if (Math.abs(diff) >= 1 && (catalogPrice === 0 || Math.abs(diff) / Math.max(catalogPrice, 1) >= 0.05)) {
+            priceVsCatalog.push({
+              saleId: sale.id,
+              itemId: item.id,
+              productId: item.productId,
+              name: item.product.name,
+              soldUnitPrice: unitPrice,
+              catalogPriceNow: catalogPrice,
+              diff,
+              qty,
+              createdAt: sale.createdAt,
+            });
+          }
+        }
+      }
+
+      if (status === 'completed') sumItemsSubtotal = money(sumItemsSubtotal + itemsSum);
+
+      if (differs(itemsSum, total)) {
+        saleTotalMismatch.push({
+          saleId: sale.id,
+          createdAt: sale.createdAt,
+          status,
+          itemsSum,
+          saleTotal: total,
+          diff: money(itemsSum - total),
+          itemCount: sale.items.length,
+        });
+      }
+
+      const expectedFinal = money(total - discount);
+      if (differs(expectedFinal, totalFinal)) {
+        saleFinalMismatch.push({
+          saleId: sale.id,
+          createdAt: sale.createdAt,
+          status,
+          total,
+          discount,
+          totalFinal,
+          expectedFinal,
+          diff: money(totalFinal - expectedFinal),
+        });
+      }
+    }
+
+    const completed = sales.filter((s) => s.status === 'completed');
+    const possibleDuplicates: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < completed.length; i++) {
+      for (let j = i + 1; j < completed.length; j++) {
+        const a = completed[i];
+        const b = completed[j];
+        const dt = Math.abs(a.createdAt.getTime() - b.createdAt.getTime());
+        if (dt > 30_000) {
+          if (b.createdAt.getTime() - a.createdAt.getTime() > 30_000) break;
+          continue;
+        }
+        if (
+          Number(a.totalFinal) === Number(b.totalFinal) &&
+          a.userId === b.userId &&
+          (a.paymentMethod || '') === (b.paymentMethod || '')
+        ) {
+          possibleDuplicates.push({
+            a: a.id,
+            b: b.id,
+            totalFinal: Number(a.totalFinal),
+            paymentMethod: a.paymentMethod,
+            secondsApart: money(dt / 1000),
+            createdAtA: a.createdAt,
+            createdAtB: b.createdAt,
+          });
+        }
+      }
+    }
+
+    priceVsCatalog.sort((a, b) => Math.abs(Number(b.diff)) - Math.abs(Number(a.diff)));
+    const first = sales[0]?.createdAt ?? null;
+    const last = sales[sales.length - 1]?.createdAt ?? null;
+
+    return {
+      business: { id: business.id, name: business.name },
+      generatedAt: new Date().toISOString(),
+      summary: {
+        salesTotal: sales.length,
+        completedCount,
+        voidedOrOther: sales.length - completedCount,
+        dateRange: { from: first, to: last },
+        sumTotal,
+        sumDiscount,
+        sumTotalFinal,
+        sumItemsSubtotal,
+        itemsVsHeaderOk: Math.abs(sumItemsSubtotal - sumTotal) <= 0.02,
+        unitsSold,
+        catalogLines,
+        manualLines,
+        averageTicket: completedCount ? money(sumTotalFinal / completedCount) : 0,
+      },
+      byStatus,
+      byPayment,
+      issues: {
+        itemSubtotalMismatch: { count: itemSubtotalMismatch.length, samples: itemSubtotalMismatch.slice(0, 50) },
+        saleTotalMismatch: { count: saleTotalMismatch.length, samples: saleTotalMismatch.slice(0, 50) },
+        saleFinalMismatch: { count: saleFinalMismatch.length, samples: saleFinalMismatch.slice(0, 50) },
+        emptySales: { count: emptySales.length, samples: emptySales.slice(0, 50) },
+        negativeOrOdd: { count: negativeOrOdd.length, samples: negativeOrOdd.slice(0, 50) },
+        orphanProduct: { count: orphanProduct.length, samples: orphanProduct.slice(0, 50) },
+        possibleDuplicates: { count: possibleDuplicates.length, samples: possibleDuplicates.slice(0, 50) },
+        priceVsCatalogNow: {
+          count: priceVsCatalog.length,
+          note: 'Compara precio cobrado vs precio actual del producto (el catálogo pudo cambiar después de la venta).',
+          topDiffs: priceVsCatalog.slice(0, 40),
+        },
+      },
+      verdict: {
+        mathOk:
+          itemSubtotalMismatch.length === 0 &&
+          saleTotalMismatch.length === 0 &&
+          saleFinalMismatch.length === 0 &&
+          negativeOrOdd.length === 0,
+        dataQualityNotes: [
+          emptySales.length ? `${emptySales.length} ventas sin ítems` : null,
+          orphanProduct.length ? `${orphanProduct.length} ítems con productId huérfano` : null,
+          possibleDuplicates.length ? `${possibleDuplicates.length} posibles duplicados (<30s)` : null,
+          priceVsCatalog.length
+            ? `${priceVsCatalog.length} líneas con precio distinto al catálogo actual (≥$1 y ≥5%)`
+            : null,
+        ].filter(Boolean),
+      },
+    };
+  }
+
   private paymentStatus(planStatus: string, trialActive: boolean, hasPending: boolean) {
     if (planStatus === 'complimentary') return { key: 'complimentary', label: 'Cortesía · no se cobra' };
     if (hasPending || planStatus === 'pending_payment') return { key: 'pending', label: 'Pago pendiente' };
