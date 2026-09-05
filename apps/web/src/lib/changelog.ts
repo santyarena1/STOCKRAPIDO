@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.30',
+    date: '2026-09-05',
+    summary: 'Ver facturas ARCA recibidas como PDF.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Botón PDF en Facturas ARCA',
+        desc: 'En cada factura recibida podés abrir un resumen imprimible (Guardar como PDF del navegador) con emisor, CAE e importes. Es un resumen para archivo: el PDF oficial del proveedor sigue siendo el del portal ARCA o el que te mande el emisor.',
+      },
+    ],
+  },
+  {
     version: 'v1.29',
     date: '2026-09-05',
     summary: 'Token Afip SDK desde Config → Fiscal.',

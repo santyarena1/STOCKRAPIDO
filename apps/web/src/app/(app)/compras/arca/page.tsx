@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { FileSpreadsheet, RefreshCw, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { FileSpreadsheet, FileText, RefreshCw, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
 import { localYmd } from '@/lib/use-persisted-state';
 import { PlanGate } from '@/components/billing/PlanGate';
+import { printReceivedInvoice } from '@/lib/received-invoice-print';
 
 type ReceivedItem = {
   id: string;
@@ -16,9 +17,16 @@ type ReceivedItem = {
   voucherType: string;
   pointOfSale: number;
   numberFrom: number;
+  numberTo?: number;
   authCode: string | null;
+  issuerDocType?: string | null;
   issuerDocNumber: string;
   issuerName: string | null;
+  netTaxed?: number | null;
+  netNotTaxed?: number | null;
+  exemptAmount?: number | null;
+  otherTaxes?: number | null;
+  vatAmount?: number | null;
   totalAmount: number;
   status: string;
   verifyMessage: string | null;
@@ -513,15 +521,31 @@ export default function ComprasArcaPage() {
                         ) : null}
                       </td>
                       <td className="py-2">
-                        <button
-                          type="button"
-                          disabled={busy === item.id}
-                          onClick={() => void removeOne(item.id)}
-                          className="rounded-lg p-1.5 text-fg-faint hover:bg-raised hover:text-crit"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              printReceivedInvoice({
+                                ...item,
+                                receptorCuit: data?.receptorCuit ?? null,
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg border border-hair px-2 py-1 text-xs font-medium text-fg-muted hover:bg-raised hover:text-brand"
+                            title="Ver PDF / imprimir"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            PDF
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy === item.id}
+                            onClick={() => void removeOne(item.id)}
+                            className="rounded-lg p-1.5 text-fg-faint hover:bg-raised hover:text-crit"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
