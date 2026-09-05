@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.28',
+    date: '2026-09-05',
+    summary: 'Filtros de ventas más firmes y Facturas ARCA más claras.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Historros del historial de ventas',
+        desc: 'Al entrar con Hoy/Semana/Mes ya no se pide la lista con fechas viejas: primero se actualiza el rango (día fiscal Argentina) y recién ahí se cargan las ventas. También se ignoran respuestas viejas si pediste otra cosa después.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Textos más claros en Facturas ARCA',
+        desc: 'Quedó explicado que ARCA no tiene API oficial para listar compras recibidas: hace falta Clave Fiscal del portal + token de Afip SDK en el servidor (no es un token de ARCA).',
+      },
+    ],
+  },
+  {
     version: 'v1.27',
     date: '2026-09-04',
     summary: 'POS más ágil: vuelto simple y cobro con teclado.',

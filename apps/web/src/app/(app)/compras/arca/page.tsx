@@ -253,11 +253,16 @@ export default function ComprasArcaPage() {
               <RefreshCw className="h-5 w-5" /> Sincronizar desde ARCA
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-              Trae solo los montos de Mis Comprobantes → Recibidos con tu Clave Fiscal. No carga stock.
+              Trae solo los montos de Mis Comprobantes → Recibidos. No carga stock.
               {data?.sync?.lastSyncAt
                 ? ` Último sync: ${new Date(data.sync.lastSyncAt).toLocaleString('es-AR')}.`
                 : ''}
               {data?.sync?.lastSyncError ? ` Último error: ${data.sync.lastSyncError}` : ''}
+            </p>
+            <p className="mt-2 text-xs text-fg-muted">
+              ARCA no publica una API oficial para listar comprobantes recibidos. StockRápido usa{' '}
+              <strong className="text-fg">Afip SDK</strong> (servicio de terceros) + tu{' '}
+              <strong className="text-fg">Clave Fiscal</strong> del portal.
             </p>
             {!data?.sync?.hasPortalPassword ? (
               <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
@@ -265,12 +270,17 @@ export default function ComprasArcaPage() {
                 <Link href="/config/fiscal" className="underline">
                   Config → Fiscal
                 </Link>{' '}
-                para poder sincronizar.
+                (la del portal ARCA / AFIP, no un token de API).
               </p>
             ) : null}
             {!data?.sync?.afipSdkConfigured ? (
               <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                Falta configurar AFIP_SDK_ACCESS_TOKEN en el servidor (la API de ARCA no lista recibidos por sí sola).
+                Falta el token de <strong>Afip SDK</strong> en el servidor (
+                <code>AFIP_SDK_ACCESS_TOKEN</code>). No es una API de ARCA: se obtiene en{' '}
+                <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline">
+                  afipsdk.com
+                </a>{' '}
+                y lo carga el admin de la plataforma.
               </p>
             ) : null}
           </div>

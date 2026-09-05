@@ -108,11 +108,13 @@ export async function fetchMisComprobantesRecibidos(
 }
 
 export function formatAfipDateRange(from: Date, to: Date) {
-  const fmt = (d: Date) => {
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const yyyy = d.getUTCFullYear();
-    return `${dd}/${mm}/${yyyy}`;
-  };
+  // Afip SDK espera dd/mm/yyyy en día fiscal AR; no usar UTC (corre el día al cruzar medianoche).
+  const fmt = (d: Date) =>
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(d);
   return `${fmt(from)} - ${fmt(to)}`;
 }

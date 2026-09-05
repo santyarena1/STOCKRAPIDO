@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { printFiscalReceipt } from '@/components/FiscalCheckout';
@@ -92,6 +92,22 @@ function formatMoneyArs(n: number) {
   return formatMoneyArsShared(n, 0);
 }
 
+/** Día comercial AR (America/Argentina/Buenos_Aires) como YYYY-MM-DD. */
+function todayYmdArgentina(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+/** Parsea YYYY-MM-DD a Date local a medianoche (sin UTC). */
+function parseYmdLocal(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 /** Fecha local YYYY-MM-DD (inputs type="date"). */
 function localYMD(d: Date): string {
   const y = d.getFullYear();
@@ -135,8 +151,8 @@ const VENTAS_DATE_PRESETS: { id: VentasDatePresetId; label: string; title?: stri
 ];
 
 function rangeForVentasDatePreset(id: VentasDatePresetId): { from: string; to: string } {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Anclar presets al día fiscal argentino (no al timezone del navegador/servidor).
+  const today = parseYmdLocal(todayYmdArgentina());
 
   switch (id) {
     case 'hoy':
@@ -297,7 +313,10 @@ export default function VentasPage() {
     }
   };
 
+  const fetchSeqRef = useRef(0);
+
   const fetchSales = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       const params: Record<string, string> = { limit: filters.limit };
@@ -340,6 +359,7 @@ export default function VentasPage() {
           }>('/fiscal/invoices/summary', { params: summaryParams }),
           api<ExternalFiscalEntry[]>('/fiscal/external-invoices', { params: summaryParams }),
         ]);
+        if (seq !== fetchSeqRef.current) return;
         const listed =
           salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : [];
         setSales(listed);
@@ -386,6 +406,7 @@ export default function VentasPage() {
         api<Sale[]>('/sales', { params }),
         api<SalesHistoryStats>('/reports/sales-history-stats', { params: statsParams }),
       ]);
+      if (seq !== fetchSeqRef.current) return;
       setSales(
         salesRes.status === 'fulfilled' && Array.isArray(salesRes.value) ? salesRes.value : [],
       );
@@ -396,10 +417,11 @@ export default function VentasPage() {
           : null,
       );
     } catch {
+      if (seq !== fetchSeqRef.current) return;
       setSales([]);
       setStats(null);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [
     filters.from,
@@ -561,16 +583,18 @@ export default function VentasPage() {
   };
 
   // Reaplicar preset relativo (Hoy / Semana / Mes) al entrar, para no usar fechas viejas de LS.
-  useEffect(() => {
-    if (!filtersHydrated || !activeDatePreset) return;
-    const r = rangeForVentasDatePreset(activeDatePreset);
-    setFilters((f) => (f.from === r.from && f.to === r.to ? f : { ...f, from: r.from, to: r.to }));
-  }, [filtersHydrated, activeDatePreset, setFilters]);
-
+  // Luego fetchear solo cuando las fechas ya coinciden con el preset (evita carrera: 1er fetch con fechas viejas).
   useEffect(() => {
     if (!filtersHydrated) return;
+    if (activeDatePreset) {
+      const r = rangeForVentasDatePreset(activeDatePreset);
+      if (filters.from !== r.from || filters.to !== r.to) {
+        setFilters((f) => ({ ...f, from: r.from, to: r.to }));
+        return;
+      }
+    }
     void fetchSales();
-  }, [filtersHydrated, fetchSales]);
+  }, [filtersHydrated, activeDatePreset, filters.from, filters.to, fetchSales, setFilters]);
 
   useEffect(() => {
     if (!productSearch.trim() || selectedProduct) {

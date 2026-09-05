@@ -328,13 +328,19 @@ export default function FiscalSettings() {
         <div>
           <h3 className="font-medium text-cyan-100">Facturas recibidas (automático)</h3>
           <p className="text-xs text-slate-500 mt-1">
-            ARCA no tiene API oficial para listar compras. Con tu Clave Fiscal sincronizamos Mis Comprobantes → Recibidos
-            (solo montos para balance, sin cargar stock). El CSV queda como respaldo.
+            ARCA <strong>no tiene API oficial</strong> para listar compras recibidas. Para el sync automático
+            hace falta: (1) tu <strong>Clave Fiscal</strong> (usuario/contraseña del portal) acá abajo, y
+            (2) un token de <strong>Afip SDK</strong> en el servidor (lo configura el admin de la plataforma).
+            El CSV de Mis Comprobantes queda como respaldo. Solo montos para balance, sin stock.
           </p>
         </div>
         {!meta?.afipSdkConfigured ? (
           <p className="text-xs text-amber-300">
-            El servidor todavía no tiene <code>AFIP_SDK_ACCESS_TOKEN</code>. Pedile al admin de plataforma que lo configure para habilitar el sync automático.
+            El servidor todavía no tiene <code>AFIP_SDK_ACCESS_TOKEN</code> (token de{' '}
+            <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline">
+              afipsdk.com
+            </a>
+            , no de ARCA). Pedile al admin de plataforma que lo configure.
           </p>
         ) : null}
         <div className="grid sm:grid-cols-2 gap-3">
