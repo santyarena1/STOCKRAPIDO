@@ -731,24 +731,39 @@ export default function POSPage() {
   const handleCobrar = useCallback(
     async (paymentMethod: string) => {
       if (!cart.length || isSubmittingRef.current) return;
+      // Marcar YA: evita doble Enter / doble click antes del primer await.
+      isSubmittingRef.current = true;
+      setCobrandoBusy(true);
+      const clientRequestId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `pos-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const token = getToken();
-      if (!token) return;
+      if (!token) {
+        isSubmittingRef.current = false;
+        setCobrandoBusy(false);
+        return;
+      }
       const total = Math.max(0, cart.reduce((n, i) => n + i.subtotal, 0) - discountTotal);
       const isFiado = paymentMethod === 'fiado';
       if (isFiado && !selectedCustomer?.id) {
+        isSubmittingRef.current = false;
+        setCobrandoBusy(false);
         setCustomerSearch('');
         setShowCustomer(true);
         return;
       }
       if (fiscalMode === 'factura_c' && !isFiado) {
         const ok = await confirmInvoiceAlertIfNeeded(total);
-        if (!ok) return;
+        if (!ok) {
+          isSubmittingRef.current = false;
+          setCobrandoBusy(false);
+          return;
+        }
       }
       // Cuenta corriente: nunca abrir ventana de ticket (aunque la impresión esté activada).
       const shouldPrint = printEnabled && !isFiado;
       const popup = shouldPrint ? window.open('', '_blank', 'width=420,height=720') : null;
-      isSubmittingRef.current = true;
-      setCobrandoBusy(true);
       let saleSaved = false;
       try {
         const crId = await refreshOpenCashRegister();
@@ -778,6 +793,7 @@ export default function POSPage() {
             // En fiado preferimos interno: se factura después desde Clientes / Ventas.
             fiscalMode: isFiado ? 'internal' : fiscalMode,
             sellerId: activeSeller?.id ?? null,
+            clientRequestId,
           }),
         });
         if (!res.ok) {

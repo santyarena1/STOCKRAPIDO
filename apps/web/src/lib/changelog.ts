@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.31',
+    date: '2026-09-07',
+    summary: 'Sin ventas duplicadas por doble cobro.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'El POS ya no genera ventas duplicadas',
+        desc: 'Si se toca dos veces Cobrar/Enter o se reenvía el mismo cobro en pocos segundos, la API reutiliza la venta ya creada en lugar de anotarla otra vez. También se refuerza el bloqueo en pantalla mientras cobra.',
+      },
+    ],
+  },
+  {
     version: 'v1.30',
     date: '2026-09-05',
     summary: 'Ver facturas ARCA recibidas como PDF.',

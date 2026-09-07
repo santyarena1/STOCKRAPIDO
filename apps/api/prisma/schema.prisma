@@ -304,6 +304,8 @@ model Sale {
   /** pos | rappi | pedidosya */
   orderSource    String?
   externalOrderId String?
+  /** UUID del intento de cobro (anti doble-submit). Único por negocio. */
+  clientRequestId String?
 
   business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user         User          @relation(fields: [userId], references: [id])
@@ -314,8 +316,10 @@ model Sale {
   seller       Vendedor?      @relation(fields: [sellerId], references: [id])
   deliveryOrder DeliveryOrder?
 
+  @@unique([businessId, clientRequestId])
   @@index([businessId, orderSource])
   @@index([businessId, externalOrderId])
+  @@index([businessId, userId, createdAt])
 }
 
 model Vendedor {

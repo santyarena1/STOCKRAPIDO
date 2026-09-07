@@ -266,7 +266,7 @@ export default function VentasPage() {
 
   const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
 
-  /** IDs de ventas que parecen duplicadas: mismo totalFinal + paymentMethod dentro de 30 s */
+  /** IDs de ventas que parecen duplicadas: mismo carrito + medio dentro de 15 s */
   const duplicateIds = useMemo<Set<string>>(() => {
     if (sales.length < 2) return new Set();
     const sorted = [...sales].sort(
@@ -277,7 +277,7 @@ export default function VentasPage() {
       for (let j = i + 1; j < sorted.length; j++) {
         const diffS =
           (new Date(sorted[j].createdAt).getTime() - new Date(sorted[i].createdAt).getTime()) / 1000;
-        if (diffS > 30) break;
+        if (diffS > 15) break;
         const sameTotal = String(sorted[i].totalFinal) === String(sorted[j].totalFinal);
         const sameMethod = sorted[i].paymentMethod === sorted[j].paymentMethod;
         const sameItems =

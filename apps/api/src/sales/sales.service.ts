@@ -4,10 +4,61 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { ProductsService } from '../products/products.service';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { ConsignmentService } from '../consignment/consignment.service';
+import { createHash } from 'crypto';
 
 export type SaleItemInput =
   | { productId: string; qty: number; unitPrice: number; silentTicket?: boolean }
   | { productId?: string; name?: string; qty: number; unitPrice: number; silentTicket?: boolean };
+
+/** Ventana anti-duplicado al crear: cobros idénticos en pocos segundos = el mismo cobro. */
+const DEDUPE_WINDOW_MS = 8_000;
+
+function moneyKey(n: number) {
+  return (Math.round((Number(n) + Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
+function itemFingerprint(items: SaleItemInput[]) {
+  return items
+    .map((i) => {
+      const isManual = !i.productId || String(i.productId).startsWith('manual-');
+      const key = isManual
+        ? `m:${((i as { name?: string }).name || 'Producto manual').trim().toLowerCase()}`
+        : `p:${(i as { productId: string }).productId}`;
+      return `${key}|${i.qty}|${moneyKey(i.unitPrice)}`;
+    })
+    .sort()
+    .join(';');
+}
+
+function saleFingerprint(input: {
+  paymentMethod?: string | null;
+  discount: number;
+  totalFinal: number;
+  customerId?: string | null;
+  sellerId?: string | null;
+  items: SaleItemInput[];
+}) {
+  return [
+    input.paymentMethod || '',
+    moneyKey(input.discount),
+    moneyKey(input.totalFinal),
+    input.customerId || '',
+    input.sellerId || '',
+    itemFingerprint(input.items),
+  ].join('#');
+}
+
+function storedItemsFingerprint(
+  items: Array<{ productId: string | null; productName: string | null; qty: number; unitPrice: unknown }>,
+) {
+  return items
+    .map((i) => {
+      const key = i.productId ? `p:${i.productId}` : `m:${(i.productName || 'Producto manual').trim().toLowerCase()}`;
+      return `${key}|${i.qty}|${moneyKey(Number(i.unitPrice))}`;
+    })
+    .sort()
+    .join(';');
+}
 
 @Injectable()
 export class SalesService {
@@ -31,8 +82,13 @@ export class SalesService {
       sellerId?: string;
       orderSource?: string;
       externalOrderId?: string;
+      clientRequestId?: string;
     },
   ) {
+    if (!items?.length) {
+      throw new BadRequestException('La venta no tiene ítems.');
+    }
+
     let cashRegisterId = options?.cashRegisterId?.trim();
     if (!cashRegisterId) {
       throw new BadRequestException('Tenés que tener la caja abierta para registrar ventas.');
@@ -81,22 +137,120 @@ export class SalesService {
       };
     });
     const totalFinal = total - discount;
+    const clientRequestId = options?.clientRequestId?.trim() || null;
+    const fingerprint = saleFingerprint({
+      paymentMethod: options?.paymentMethod,
+      discount,
+      totalFinal,
+      customerId: options?.customerId,
+      sellerId: options?.sellerId,
+      items,
+    });
 
-    const sale = await this.prisma.sale.create({
-      data: {
-        businessId,
-        userId,
-        customerId: options?.customerId,
-        total: new Decimal(total),
-        discount: new Decimal(discount),
-        totalFinal: new Decimal(totalFinal),
-        paymentMethod: options?.paymentMethod,
-        cashRegisterId,
-        sellerId: options?.sellerId ?? null,
-        orderSource: options?.orderSource ?? null,
-        externalOrderId: options?.externalOrderId ?? null,
-        items: { create: saleItems },
-      },
+    // Pedidos externos: no duplicar el mismo pedido de Rappi/PedidosYa.
+    if (options?.orderSource && options?.externalOrderId) {
+      const byExternal = await this.prisma.sale.findFirst({
+        where: {
+          businessId,
+          orderSource: options.orderSource,
+          externalOrderId: options.externalOrderId,
+          status: 'completed',
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (byExternal) {
+        const existing = await this.getOne(byExternal.id, businessId);
+        if (!existing) throw new NotFoundException('Venta no encontrada');
+        return existing;
+      }
+    }
+
+    // Serializa cobros concurrentes con la misma huella (anti doble-submit).
+    const lockKey = createHash('sha256')
+      .update(`${businessId}|${userId}|${fingerprint}`)
+      .digest();
+    const lockA = lockKey.readInt32BE(0);
+    const lockB = lockKey.readInt32BE(4);
+
+    const existingId = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockA}, ${lockB})`;
+
+      if (clientRequestId) {
+        const byClient = await tx.sale.findFirst({
+          where: { businessId, clientRequestId },
+          select: { id: true },
+        });
+        if (byClient) return byClient.id;
+      }
+
+      const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
+      const recent = await tx.sale.findMany({
+        where: {
+          businessId,
+          userId,
+          createdAt: { gte: since },
+          status: 'completed',
+          paymentMethod: options?.paymentMethod ?? null,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: {
+          items: { select: { productId: true, productName: true, qty: true, unitPrice: true } },
+        },
+      });
+
+      for (const sale of recent) {
+        if (moneyKey(Number(sale.totalFinal)) !== moneyKey(totalFinal)) continue;
+        if (moneyKey(Number(sale.discount)) !== moneyKey(discount)) continue;
+        if ((sale.customerId || null) !== (options?.customerId || null)) continue;
+        if ((sale.sellerId || null) !== (options?.sellerId || null)) continue;
+        if (storedItemsFingerprint(sale.items) !== itemFingerprint(items)) continue;
+        return sale.id;
+      }
+
+      try {
+        const created = await tx.sale.create({
+          data: {
+            businessId,
+            userId,
+            customerId: options?.customerId,
+            total: new Decimal(total),
+            discount: new Decimal(discount),
+            totalFinal: new Decimal(totalFinal),
+            paymentMethod: options?.paymentMethod,
+            cashRegisterId,
+            sellerId: options?.sellerId ?? null,
+            orderSource: options?.orderSource ?? null,
+            externalOrderId: options?.externalOrderId ?? null,
+            clientRequestId,
+            items: { create: saleItems },
+          },
+          select: { id: true },
+        });
+        return `new:${created.id}`;
+      } catch (err) {
+        // Carrera residual con el mismo clientRequestId: devolver la venta ya creada.
+        if (clientRequestId) {
+          const byClient = await tx.sale.findFirst({
+            where: { businessId, clientRequestId },
+            select: { id: true },
+          });
+          if (byClient) return byClient.id;
+        }
+        throw err;
+      }
+    });
+
+    if (!existingId.startsWith('new:')) {
+      // Mismo cobro reenviado: devolver la venta ya persistida (sin volver a descontar stock).
+      const existing = await this.getOne(existingId, businessId);
+      if (!existing) throw new NotFoundException('Venta no encontrada');
+      return existing;
+    }
+
+    const saleId = existingId.slice(4);
+    const sale = await this.prisma.sale.findFirstOrThrow({
+      where: { id: saleId, businessId },
       include: { items: { include: { product: true } }, customer: true },
     });
 
@@ -485,26 +639,39 @@ export class SalesService {
     return { removed: true as const, saleDeleted: false, sale: await this.getOne(saleId, businessId) };
   }
 
-  async cleanupDuplicates(businessId: string, windowSeconds = 30): Promise<{ deleted: number; ids: string[] }> {
+  async cleanupDuplicates(businessId: string, windowSeconds = 15): Promise<{ deleted: number; ids: string[] }> {
     const sales = await this.prisma.sale.findMany({
-      where: { businessId },
+      where: { businessId, status: 'completed' },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, userId: true, totalFinal: true, paymentMethod: true, createdAt: true },
+      select: {
+        id: true,
+        userId: true,
+        totalFinal: true,
+        discount: true,
+        paymentMethod: true,
+        customerId: true,
+        sellerId: true,
+        createdAt: true,
+        items: { select: { productId: true, productName: true, qty: true, unitPrice: true } },
+      },
     });
 
     const toDelete = new Set<string>();
     for (let i = 0; i < sales.length; i++) {
       if (toDelete.has(sales[i].id)) continue;
+      const fpI = storedItemsFingerprint(sales[i].items);
       for (let j = i + 1; j < sales.length; j++) {
         const diffSeconds = (sales[j].createdAt.getTime() - sales[i].createdAt.getTime()) / 1000;
         if (diffSeconds > windowSeconds) break;
-        if (
-          sales[j].userId === sales[i].userId &&
-          String(sales[j].totalFinal) === String(sales[i].totalFinal) &&
-          sales[j].paymentMethod === sales[i].paymentMethod
-        ) {
-          toDelete.add(sales[j].id);
-        }
+        if (toDelete.has(sales[j].id)) continue;
+        if (sales[j].userId !== sales[i].userId) continue;
+        if (sales[j].paymentMethod !== sales[i].paymentMethod) continue;
+        if (moneyKey(Number(sales[j].totalFinal)) !== moneyKey(Number(sales[i].totalFinal))) continue;
+        if (moneyKey(Number(sales[j].discount)) !== moneyKey(Number(sales[i].discount))) continue;
+        if ((sales[j].customerId || null) !== (sales[i].customerId || null)) continue;
+        if ((sales[j].sellerId || null) !== (sales[i].sellerId || null)) continue;
+        if (storedItemsFingerprint(sales[j].items) !== fpI) continue;
+        toDelete.add(sales[j].id);
       }
     }
 
