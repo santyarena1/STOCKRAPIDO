@@ -183,6 +183,14 @@ export class PlatformService {
           status: true,
           createdAt: true,
           user: { select: { name: true, email: true } },
+          items: {
+            select: {
+              productName: true,
+              qty: true,
+              unitPrice: true,
+              product: { select: { name: true } },
+            },
+          },
         },
       }),
       this.prisma.cashRegister.findMany({
@@ -226,12 +234,86 @@ export class PlatformService {
       recentSales: lastSales.map((s) => ({
         ...s,
         totalFinal: Number(s.totalFinal),
+        items: (s as { items?: Array<{ productName: string | null; qty: number; unitPrice: unknown; product: { name: string } | null }> }).items?.map(
+          (it) => ({
+            name: it.product?.name || it.productName || '—',
+            qty: it.qty,
+            unitPrice: Number(it.unitPrice),
+          }),
+        ),
       })),
       openCajas: openCajas.map((c) => ({
         id: c.id,
         openedAt: c.openedAt,
         openingCash: Number(c.openingCash),
         userId: c.userId,
+      })),
+    };
+  }
+
+  /** Búsqueda de productos de un negocio (soporte / diagnóstico POS). */
+  async searchProducts(businessId: string, q?: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Cuenta no encontrada');
+
+    const term = (q || '').trim();
+    const where = {
+      businessId,
+      ...(term
+        ? {
+            OR: [
+              { name: { contains: term, mode: 'insensitive' as const } },
+              { brand: { contains: term, mode: 'insensitive' as const } },
+              { barcode: { contains: term, mode: 'insensitive' as const } },
+              { allCodes: { contains: term, mode: 'insensitive' as const } },
+              { supplierSku: { contains: term, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const products = await this.prisma.product.findMany({
+      where,
+      take: term ? 40 : 20,
+      orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
+      include: {
+        category: { select: { id: true, name: true } },
+        _count: { select: { saleItems: true, batches: true } },
+      },
+    });
+
+    const num = (v: unknown) => (v == null ? null : Number(v));
+    return {
+      business,
+      q: term || null,
+      count: products.length,
+      items: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        brand: p.brand,
+        barcode: p.barcode,
+        allCodes: p.allCodes,
+        eanBox: p.eanBox,
+        supplierSku: p.supplierSku,
+        price: num(p.price),
+        cost: num(p.cost),
+        stock: p.stock,
+        minStock: p.minStock,
+        stockControl: p.stockControl,
+        isActive: p.isActive,
+        incomplete: p.incomplete,
+        silent: p.silent,
+        consigned: p.consigned,
+        categoryId: p.categoryId,
+        categoryName: p.category?.name ?? null,
+        imageUrl: p.imageUrl,
+        saleItemsCount: p._count.saleItems,
+        batchesCount: p._count.batches,
+        updatedAt: p.updatedAt,
+        createdAt: p.createdAt,
       })),
     };
   }
