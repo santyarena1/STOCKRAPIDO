@@ -4,7 +4,6 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { ProductsService } from '../products/products.service';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { ConsignmentService } from '../consignment/consignment.service';
-import { createHash } from 'crypto';
 
 export type SaleItemInput =
   | { productId: string; qty: number; unitPrice: number; silentTicket?: boolean }
@@ -30,24 +29,6 @@ function itemFingerprint(items: SaleItemInput[]) {
     .join(';');
 }
 
-function saleFingerprint(input: {
-  paymentMethod?: string | null;
-  discount: number;
-  totalFinal: number;
-  customerId?: string | null;
-  sellerId?: string | null;
-  items: SaleItemInput[];
-}) {
-  return [
-    input.paymentMethod || '',
-    moneyKey(input.discount),
-    moneyKey(input.totalFinal),
-    input.customerId || '',
-    input.sellerId || '',
-    itemFingerprint(input.items),
-  ].join('#');
-}
-
 function storedItemsFingerprint(
   items: Array<{ productId: string | null; productName: string | null; qty: number; unitPrice: unknown }>,
 ) {
@@ -60,6 +41,11 @@ function storedItemsFingerprint(
     .join(';');
 }
 
+function isUniqueViolation(err: unknown) {
+  const e = err as { code?: string; meta?: { target?: string[] } };
+  return e?.code === 'P2002';
+}
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -68,6 +54,12 @@ export class SalesService {
     private fiscal: FiscalService,
     private consignment: ConsignmentService,
   ) {}
+
+  private async returnExistingSale(saleId: string, businessId: string) {
+    const existing = await this.getOne(saleId, businessId);
+    if (!existing) throw new NotFoundException('Venta no encontrada');
+    return existing;
+  }
 
   async create(
     businessId: string,
@@ -138,14 +130,7 @@ export class SalesService {
     });
     const totalFinal = total - discount;
     const clientRequestId = options?.clientRequestId?.trim() || null;
-    const fingerprint = saleFingerprint({
-      paymentMethod: options?.paymentMethod,
-      discount,
-      totalFinal,
-      customerId: options?.customerId,
-      sellerId: options?.sellerId,
-      items,
-    });
+    const itemsFp = itemFingerprint(items);
 
     // Pedidos externos: no duplicar el mismo pedido de Rappi/PedidosYa.
     if (options?.orderSource && options?.externalOrderId) {
@@ -158,101 +143,74 @@ export class SalesService {
         },
         orderBy: { createdAt: 'asc' },
       });
-      if (byExternal) {
-        const existing = await this.getOne(byExternal.id, businessId);
-        if (!existing) throw new NotFoundException('Venta no encontrada');
-        return existing;
-      }
+      if (byExternal) return this.returnExistingSale(byExternal.id, businessId);
     }
 
-    // Serializa cobros concurrentes con la misma huella (anti doble-submit).
-    const lockKey = createHash('sha256')
-      .update(`${businessId}|${userId}|${fingerprint}`)
-      .digest();
-    const lockA = lockKey.readInt32BE(0);
-    const lockB = lockKey.readInt32BE(4);
+    // Mismo intento de cobro (reintento de red / doble submit con el mismo UUID).
+    if (clientRequestId) {
+      const byClient = await this.prisma.sale.findFirst({
+        where: { businessId, clientRequestId },
+        select: { id: true },
+      });
+      if (byClient) return this.returnExistingSale(byClient.id, businessId);
+    }
 
-    const existingId = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockA}, ${lockB})`;
+    // Cobro idéntico en los últimos segundos (doble Enter con otro UUID).
+    const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
+    const recent = await this.prisma.sale.findMany({
+      where: {
+        businessId,
+        userId,
+        createdAt: { gte: since },
+        status: 'completed',
+        paymentMethod: options?.paymentMethod ?? null,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: {
+        items: { select: { productId: true, productName: true, qty: true, unitPrice: true } },
+      },
+    });
+    for (const sale of recent) {
+      if (moneyKey(Number(sale.totalFinal)) !== moneyKey(totalFinal)) continue;
+      if (moneyKey(Number(sale.discount)) !== moneyKey(discount)) continue;
+      if ((sale.customerId || null) !== (options?.customerId || null)) continue;
+      if ((sale.sellerId || null) !== (options?.sellerId || null)) continue;
+      if (storedItemsFingerprint(sale.items) !== itemsFp) continue;
+      return this.returnExistingSale(sale.id, businessId);
+    }
 
-      if (clientRequestId) {
-        const byClient = await tx.sale.findFirst({
+    let sale;
+    try {
+      sale = await this.prisma.sale.create({
+        data: {
+          businessId,
+          userId,
+          customerId: options?.customerId,
+          total: new Decimal(total),
+          discount: new Decimal(discount),
+          totalFinal: new Decimal(totalFinal),
+          paymentMethod: options?.paymentMethod,
+          cashRegisterId,
+          sellerId: options?.sellerId ?? null,
+          orderSource: options?.orderSource ?? null,
+          externalOrderId: options?.externalOrderId ?? null,
+          clientRequestId,
+          items: { create: saleItems },
+        },
+        include: { items: { include: { product: true } }, customer: true },
+      });
+    } catch (err) {
+      // Carrera: otro request creó la misma venta un instante antes.
+      if (clientRequestId && isUniqueViolation(err)) {
+        const byClient = await this.prisma.sale.findFirst({
           where: { businessId, clientRequestId },
           select: { id: true },
         });
-        if (byClient) return byClient.id;
+        if (byClient) return this.returnExistingSale(byClient.id, businessId);
       }
-
-      const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
-      const recent = await tx.sale.findMany({
-        where: {
-          businessId,
-          userId,
-          createdAt: { gte: since },
-          status: 'completed',
-          paymentMethod: options?.paymentMethod ?? null,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        include: {
-          items: { select: { productId: true, productName: true, qty: true, unitPrice: true } },
-        },
-      });
-
-      for (const sale of recent) {
-        if (moneyKey(Number(sale.totalFinal)) !== moneyKey(totalFinal)) continue;
-        if (moneyKey(Number(sale.discount)) !== moneyKey(discount)) continue;
-        if ((sale.customerId || null) !== (options?.customerId || null)) continue;
-        if ((sale.sellerId || null) !== (options?.sellerId || null)) continue;
-        if (storedItemsFingerprint(sale.items) !== itemFingerprint(items)) continue;
-        return sale.id;
-      }
-
-      try {
-        const created = await tx.sale.create({
-          data: {
-            businessId,
-            userId,
-            customerId: options?.customerId,
-            total: new Decimal(total),
-            discount: new Decimal(discount),
-            totalFinal: new Decimal(totalFinal),
-            paymentMethod: options?.paymentMethod,
-            cashRegisterId,
-            sellerId: options?.sellerId ?? null,
-            orderSource: options?.orderSource ?? null,
-            externalOrderId: options?.externalOrderId ?? null,
-            clientRequestId,
-            items: { create: saleItems },
-          },
-          select: { id: true },
-        });
-        return `new:${created.id}`;
-      } catch (err) {
-        // Carrera residual con el mismo clientRequestId: devolver la venta ya creada.
-        if (clientRequestId) {
-          const byClient = await tx.sale.findFirst({
-            where: { businessId, clientRequestId },
-            select: { id: true },
-          });
-          if (byClient) return byClient.id;
-        }
-        throw err;
-      }
-    });
-
-    if (!existingId.startsWith('new:')) {
-      // Mismo cobro reenviado: devolver la venta ya persistida (sin volver a descontar stock).
-      const existing = await this.getOne(existingId, businessId);
-      if (!existing) throw new NotFoundException('Venta no encontrada');
-      return existing;
+      throw err;
     }
-
-    const saleId = existingId.slice(4);
-    const sale = await this.prisma.sale.findFirstOrThrow({
-      where: { id: saleId, businessId },
-      include: { items: { include: { product: true } }, customer: true },
-    });
 
     // Todo lo que sigue es post-persistencia: si falla, la venta YA existe.
     // Nunca devolvemos 500 después de crear la venta (evita “error” fantasma en el POS).

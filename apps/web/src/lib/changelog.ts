@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.32',
+    date: '2026-09-08',
+    summary: 'Arreglo urgente: ventas otra vez.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Error al cobrar / registrar ventas',
+        desc: 'Se rompió el cobro con un “Internal server error” por un lock de base de datos incompatible con el servidor. Ya se puede vender de nuevo; el freno a duplicados sigue activo de forma más simple.',
+      },
+    ],
+  },
+  {
     version: 'v1.31',
     date: '2026-09-07',
     summary: 'Sin ventas duplicadas por doble cobro.',
