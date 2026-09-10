@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.34',
+    date: '2026-09-10',
+    summary: 'Sync de facturas recibidas sin Afip SDK (runner local).',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Runner local Mis Comprobantes Recibidos',
+        desc: 'Podés bajar las facturas de compra desde el portal ARCA con Clave Fiscal en tu PC (sync-runner), sin pagar Afip SDK. El sync en la nube con token SDK sigue disponible.',
+      },
+    ],
+  },
+  {
     version: 'v1.33',
     date: '2026-09-10',
     summary: 'Las ventas anuladas ya no suman al total.',

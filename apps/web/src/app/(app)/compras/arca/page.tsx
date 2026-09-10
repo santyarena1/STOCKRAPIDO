@@ -269,9 +269,11 @@ export default function ComprasArcaPage() {
               {data?.sync?.lastSyncError ? ` Último error: ${data.sync.lastSyncError}` : ''}
             </p>
             <p className="mt-2 text-xs text-fg-muted">
-              ARCA no publica una API oficial para listar comprobantes recibidos. StockRápido usa{' '}
-              <strong className="text-fg">Afip SDK</strong> + tu <strong className="text-fg">Clave Fiscal</strong> del
-              portal. El access token se carga en Config → Fiscal.
+              ARCA no publica una API oficial para listar comprobantes recibidos. En la nube StockRápido usa{' '}
+              <strong className="text-fg">Afip SDK</strong> + tu <strong className="text-fg">Clave Fiscal</strong>.
+              Alternativa local sin SDK: el runner <code className="text-fg">arca_recibidos_sync_runner.py</code> en{' '}
+              <code className="text-fg">sync-runner/</code> (login al portal y mismos llamados ajax). El access token
+              SDK se carga en Config → Fiscal.
             </p>
             {!data?.sync?.afipSdkConfigured ? (
               <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
