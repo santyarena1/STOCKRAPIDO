@@ -60,7 +60,11 @@ export class CajaService {
   async getOpen(businessId: string, userId: string) {
     const reg = await this.prisma.cashRegister.findFirst({
       where: { businessId, closedAt: null },
-      include: { movements: true, sales: true },
+      include: {
+        movements: true,
+        // Anuladas con NC no deben sumar al esperado de caja.
+        sales: { where: { status: 'completed' } },
+      },
       orderBy: { openedAt: 'desc' },
     });
     if (!reg) return null;
@@ -123,7 +127,10 @@ export class CajaService {
   ) {
     const reg = await this.prisma.cashRegister.findFirst({
       where: { id: cashRegisterId, businessId, closedAt: null },
-      include: { movements: true, sales: true },
+      include: {
+        movements: true,
+        sales: { where: { status: 'completed' } },
+      },
     });
     if (!reg) throw new BadRequestException('Caja no encontrada o ya cerrada');
 

@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.33',
+    date: '2026-09-10',
+    summary: 'Las ventas anuladas ya no suman al total.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Total cobrado sin ventas anuladas',
+        desc: 'Si anulás una factura con nota de crédito, esa venta deja de contar en el Total cobrado del historial y en el esperado de caja. Antes seguía sumando aunque estuviera anulada.',
+      },
+    ],
+  },
+  {
     version: 'v1.32',
     date: '2026-09-08',
     summary: 'Arreglo urgente: ventas otra vez.',

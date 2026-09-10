@@ -324,10 +324,10 @@ export class ReportsService {
   }
 
   /**
-   * Estadísticas del historial de ventas con los mismos filtros que GET /sales (sin límite de filas).
+   * Estadísticas del historial de ventas (solo cobros vigentes: no suma anuladas/NC).
    */
   async salesHistoryStats(businessId: string, from?: Date, to?: Date, customerId?: string, productId?: string) {
-    const where: Record<string, unknown> = { businessId };
+    const where: Record<string, unknown> = { businessId, status: 'completed' };
     if (from || to) {
       where.createdAt = {};
       if (from) (where.createdAt as Record<string, Date>).gte = from;

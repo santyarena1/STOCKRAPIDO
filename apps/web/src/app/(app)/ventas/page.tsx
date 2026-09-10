@@ -1641,8 +1641,15 @@ export default function VentasPage() {
               ) : (
                 <>
                   Total descuentos: -$
-                  {sales.reduce((s, v) => s + Number(v.discount ?? 0), 0).toFixed(0)} · Total cobrado (filas): $
-                  {sales.reduce((s, v) => s + Number(v.totalFinal ?? 0), 0).toFixed(0)}
+                  {sales
+                    .filter((v) => v.status !== 'voided')
+                    .reduce((s, v) => s + Number(v.discount ?? 0), 0)
+                    .toFixed(0)}{' '}
+                  · Total cobrado (filas): $
+                  {sales
+                    .filter((v) => v.status !== 'voided')
+                    .reduce((s, v) => s + Number(v.totalFinal ?? 0), 0)
+                    .toFixed(0)}
                 </>
               )}
             </span>
