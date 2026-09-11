@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.36',
+    date: '2026-09-11',
+    summary: 'Sync online de facturas ARCA sin Afip SDK (portal propio).',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Sincronizar facturas recibidas online sin Afip SDK',
+        desc: 'StockRápido entra al portal ARCA con tu Clave Fiscal (como hacía Afip SDK, pero nuestro) y trae Mis Comprobantes → Recibidos. Configurás usuario/contraseña en Config → Fiscal y tocás Sincronizar en Compras → Facturas ARCA.',
+      },
+    ],
+  },
+  {
     version: 'v1.35',
     date: '2026-09-11',
     summary: 'Facturas ARCA sin Afip SDK: solo CSV o runner en tu PC.',
