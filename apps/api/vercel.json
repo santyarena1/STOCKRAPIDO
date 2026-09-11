@@ -5,8 +5,9 @@
   "outputDirectory": "public",
   "functions": {
     "api/index.js": {
-      "includeFiles": "dist/**",
-      "maxDuration": 120
+      "includeFiles": "{dist/**,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}",
+      "maxDuration": 120,
+      "memory": 1024
     }
   },
   "rewrites": [

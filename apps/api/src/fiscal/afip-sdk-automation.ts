@@ -1,3 +1,4 @@
+/** @deprecated Reemplazado por arca-portal-client.ts (sync propio con Clave Fiscal). */
 import { BadRequestException } from '@nestjs/common';
 
 type AutomationStatus = string;
