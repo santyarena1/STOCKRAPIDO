@@ -21,14 +21,6 @@ type FiscalConfig = {
   invoiceYearAlertEnabled?: boolean;
   invoiceYearAlertLimit?: number | null;
   invoiceYearAlertPercent?: number;
-  portalUsername?: string;
-  hasPortalPassword?: boolean;
-  hasAfipSdkAccessToken?: boolean;
-  receivedAutoSync?: boolean;
-  receivedLastSyncAt?: string | null;
-  receivedLastSyncError?: string | null;
-  receivedLastSyncCount?: number | null;
-  afipSdkConfigured?: boolean;
 };
 type FiscalForm = {
   enabled: boolean;
@@ -47,10 +39,6 @@ type FiscalForm = {
   invoiceYearAlertEnabled: boolean;
   invoiceYearAlertLimit: string;
   invoiceYearAlertPercent: number;
-  portalUsername: string;
-  portalPassword: string;
-  afipSdkAccessToken: string;
-  receivedAutoSync: boolean;
 };
 const empty: FiscalForm = {
   enabled: false,
@@ -69,10 +57,6 @@ const empty: FiscalForm = {
   invoiceYearAlertEnabled: false,
   invoiceYearAlertLimit: '',
   invoiceYearAlertPercent: 80,
-  portalUsername: '',
-  portalPassword: '',
-  afipSdkAccessToken: '',
-  receivedAutoSync: false,
 };
 export default function FiscalSettings() {
   const [form, setForm] = useState(empty);
@@ -101,10 +85,7 @@ export default function FiscalSettings() {
           invoiceYearAlertEnabled: !!c.invoiceYearAlertEnabled,
           invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
           invoiceYearAlertPercent: c.invoiceYearAlertPercent ?? 80,
-          portalUsername: c.portalUsername || c.cuit || '',
-          portalPassword: '',
-          receivedAutoSync: !!c.receivedAutoSync,
-        }));
+                }));
       })
       .catch(() => {});
   }, []);
@@ -136,10 +117,6 @@ export default function FiscalSettings() {
         invoiceYearAlertEnabled: form.invoiceYearAlertEnabled,
         invoiceYearAlertLimit: parseMoneyInputArs(form.invoiceYearAlertLimit),
         invoiceYearAlertPercent: form.invoiceYearAlertPercent,
-        portalUsername: form.portalUsername,
-        portalPassword: form.portalPassword || undefined,
-        afipSdkAccessToken: form.afipSdkAccessToken || undefined,
-        receivedAutoSync: form.receivedAutoSync,
       };
       const c = await api<FiscalConfig>('/fiscal/config', { method: 'PUT', body: JSON.stringify(body) });
       setMeta(c);
@@ -149,9 +126,7 @@ export default function FiscalSettings() {
         privateKey: '',
         invoiceAlertLimit: formatMoneyInputArs(c.invoiceAlertLimit),
         invoiceYearAlertLimit: formatMoneyInputArs(c.invoiceYearAlertLimit),
-        portalPassword: '',
-        afipSdkAccessToken: '',
-      }));
+                  }));
       setMessage('Configuración fiscal guardada.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error al guardar');
@@ -329,76 +304,14 @@ export default function FiscalSettings() {
         </p>
       )}
       
-      <div className="rounded-lg border border-cyan-800/40 bg-slate-900/40 p-4 space-y-3">
-        <div>
-          <h3 className="font-medium text-cyan-100">Facturas recibidas (compras / balance)</h3>
-          <p className="text-xs text-slate-500 mt-1">
-            ARCA no tiene API oficial para listar Mis Comprobantes → Recibidos. Para sync en la
-            nube cargá el <strong>access token de Afip SDK</strong> (afipsdk.com) y tu Clave Fiscal.
-            Alternativa gratis en tu PC: el runner <code className="text-cyan-200">sync-runner/arca_recibidos_sync_runner.py</code>{' '}
-            (login portal + mismos llamados ajax, sin SDK). El CSV manual sigue como respaldo.
-          </p>
-        </div>
-        <div>
-          <label className="text-sm text-slate-400">Access token Afip SDK (API key)</label>
-          <input
-            className={input}
-            type="password"
-            autoComplete="off"
-            value={form.afipSdkAccessToken}
-            onChange={(e) => setForm((f) => ({ ...f, afipSdkAccessToken: e.target.value }))}
-            placeholder={meta?.hasAfipSdkAccessToken || meta?.afipSdkConfigured ? '•••••••• (cargado)' : 'Pegá el access token de afipsdk.com'}
-          />
-          <p className="text-[11px] text-slate-500 mt-1">
-            Se obtiene en{' '}
-            <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline text-cyan-300">
-              afipsdk.com
-            </a>
-            . No es un token de ARCA.
-          </p>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm text-slate-400">Usuario Clave Fiscal (portal)</label>
-            <input
-              className={input}
-              value={form.portalUsername}
-              onChange={(e) => setForm((f) => ({ ...f, portalUsername: e.target.value }))}
-              placeholder="CUIT (o CUIT del administrador)"
-            />
-          </div>
-          <div>
-            <label className="text-sm text-slate-400">Contraseña Clave Fiscal</label>
-            <input
-              className={input}
-              type="password"
-              autoComplete="new-password"
-              value={form.portalPassword}
-              onChange={(e) => setForm((f) => ({ ...f, portalPassword: e.target.value }))}
-              placeholder={meta?.hasPortalPassword ? '•••••••• (cargada)' : 'Contraseña del portal ARCA'}
-            />
-          </div>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            checked={form.receivedAutoSync}
-            onChange={(e) => setForm((f) => ({ ...f, receivedAutoSync: e.target.checked }))}
-          />
-          Sincronizar solo todos los días (últimos ~30 días)
-        </label>
-        {meta?.receivedLastSyncAt ? (
-          <p className="text-xs text-slate-500">
-            Último sync: {new Date(meta.receivedLastSyncAt).toLocaleString('es-AR')}
-            {meta.receivedLastSyncCount != null ? ` · ${meta.receivedLastSyncCount} comprobantes` : ''}
-            {meta.receivedLastSyncError ? ` · Error: ${meta.receivedLastSyncError}` : ''}
-          </p>
-        ) : null}
-        {!meta?.afipSdkConfigured ? (
-          <p className="text-xs text-amber-300">
-            Todavía falta el access token de Afip SDK para poder sincronizar.
-          </p>
-        ) : null}
+      <div className="rounded-lg border border-cyan-800/40 bg-slate-900/40 p-4 space-y-2">
+        <h3 className="font-medium text-cyan-100">Facturas recibidas (compras / balance)</h3>
+        <p className="text-xs text-slate-500">
+          Ya no usamos Afip SDK (tiene límite de automatizaciones). Para traer facturas de compra:
+          andá a <strong>Compras → Facturas ARCA</strong> e importá el CSV de Mis Comprobantes → Recibidos
+          (lo bajás desde afip.gob.ar con tu Clave Fiscal). Opcional en tu PC: doble clic en
+          <code className="text-cyan-200">Sincronizar-ARCA.command</code> / <code className="text-cyan-200">Sincronizar-ARCA.bat</code>.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">

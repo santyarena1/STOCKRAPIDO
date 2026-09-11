@@ -10,8 +10,8 @@ hack_mis_comprobantes / automatizaciones del navegador):
   3) ajax.do?f=generarConsulta&t=R + listaResultados
   4) Armar CSV e importar a StockRápido POST /fiscal/received/import
 
-Corre en tu PC (Vercel no puede abrir Chromium). Afip SDK sigue siendo
-la opción cloud; este runner es la alternativa local gratis.
+Corre en tu PC (Vercel no puede abrir Chromium). Afip SDK ya no se usa en
+StockRápido: este runner o el CSV manual son el camino soportado.
 
 Config (sync-runner/.env):
   SR_API=https://api.stockrapido.store

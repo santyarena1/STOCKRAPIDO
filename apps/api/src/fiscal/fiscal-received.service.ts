@@ -8,7 +8,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertPlanFeature, assertPlanFeatureRead } from '../billing/plan-guard';
 import { parseArgentinaDayEnd, parseArgentinaDayStart } from '../common/argentina-date-range';
 import { decryptFiscalSecret } from './fiscal-crypto';
-import { fetchMisComprobantesRecibidos, formatAfipDateRange, isAfipSdkEnvConfigured } from './afip-sdk-automation';
 
 const WSCDC_SERVICE = 'wscdc';
 
@@ -107,8 +106,7 @@ export class FiscalReceivedService {
         lastSyncAt: config?.receivedLastSyncAt ?? null,
         lastSyncError: config?.receivedLastSyncError ?? null,
         lastSyncCount: config?.receivedLastSyncCount ?? null,
-        afipSdkConfigured:
-          !!config?.afipSdkAccessTokenEncrypted || isAfipSdkEnvConfigured(),
+        afipSdkConfigured: false,
       },
       items: items.map((row) => this.serialize(row)),
     };
@@ -190,82 +188,18 @@ export class FiscalReceivedService {
    * Sincroniza Mis Comprobantes → Recibidos con Clave Fiscal (automático).
    * No crea compras de stock: solo montos para balance.
    */
-  async syncFromArca(businessId: string, from?: Date, to?: Date) {
-    await assertPlanFeature(this.prisma, businessId, 'fiscal');
-    const config = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
-    if (!config) {
-      throw new BadRequestException('Configurá ARCA en Fiscal antes de sincronizar facturas recibidas.');
-    }
-    if (!config.portalPasswordEncrypted) {
-      throw new BadRequestException(
-        'Falta la Clave Fiscal. Guardá usuario y contraseña de ARCA en Config → Fiscal para sincronizar solo.',
-      );
-    }
-
-    const toDate = to ?? new Date();
-    const fromDate =
-      from ??
-      new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate() - 31));
-
-    try {
-      const accessToken = config.afipSdkAccessTokenEncrypted
-        ? decryptFiscalSecret(config.afipSdkAccessTokenEncrypted)
-        : process.env.AFIP_SDK_ACCESS_TOKEN?.trim() || null;
-      if (!accessToken) {
-        throw new BadRequestException(
-          'Falta el access token de Afip SDK. Cargalo en Config → Fiscal (Facturas recibidas).',
-        );
-      }
-      const raw = await fetchMisComprobantesRecibidos({
-        cuit: config.cuit,
-        username: (config.portalUsername || config.cuit).replace(/\D/g, ''),
-        password: decryptFiscalSecret(config.portalPasswordEncrypted),
-        fechaEmision: formatAfipDateRange(fromDate, toDate),
-        accessToken,
-      });
-      const rows = raw
-        .map((item) => this.parseAutomationItem(item))
-        .filter((row): row is CsvRow => !!row);
-      const result = await this.upsertRows(businessId, rows, 'arca_auto');
-      await this.prisma.fiscalConfig.update({
-        where: { businessId },
-        data: {
-          receivedLastSyncAt: new Date(),
-          receivedLastSyncError: null,
-          receivedLastSyncCount: result.created + result.updated,
-        },
-      });
-      return { ...result, fetched: raw.length };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al sincronizar con ARCA';
-      await this.prisma.fiscalConfig.update({
-        where: { businessId },
-        data: { receivedLastSyncAt: new Date(), receivedLastSyncError: message },
-      }).catch(() => undefined);
-      throw err;
-    }
+  /**
+   * Afip SDK fue desactivado (límite de automatizaciones / costo).
+   * Usá import CSV en Compras → Facturas ARCA, o el runner local sync-runner.
+   */
+  async syncFromArca(_businessId: string, _from?: Date, _to?: Date) {
+    throw new BadRequestException(
+      'El sync con Afip SDK ya no está disponible. En Compras → Facturas ARCA importá el CSV de Mis Comprobantes → Recibidos (lo bajás desde afip.gob.ar), o corré Sincronizar-ARCA en tu PC.',
+    );
   }
 
   async syncAllAuto() {
-    const configs = await this.prisma.fiscalConfig.findMany({
-      where: { receivedAutoSync: true, portalPasswordEncrypted: { not: null } },
-      select: { businessId: true },
-      take: 25,
-    });
-    const results: Array<{ businessId: string; ok: boolean; created?: number; updated?: number; error?: string }> = [];
-    for (const cfg of configs) {
-      try {
-        const r = await this.syncFromArca(cfg.businessId);
-        results.push({ businessId: cfg.businessId, ok: true, created: r.created, updated: r.updated });
-      } catch (err) {
-        results.push({
-          businessId: cfg.businessId,
-          ok: false,
-          error: err instanceof Error ? err.message : 'error',
-        });
-      }
-    }
-    return { processed: results.length, results };
+    return { processed: 0, results: [], disabled: true, reason: 'Afip SDK desactivado; usar CSV o runner local.' };
   }
 
   private async upsertRows(businessId: string, rows: CsvRow[], source: string) {

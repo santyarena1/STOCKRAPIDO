@@ -38,16 +38,6 @@ type ListResponse = {
   count: number;
   totalAmount: number;
   totalVat: number;
-  sync?: {
-    autoSync: boolean;
-    hasPortalPassword: boolean;
-    hasAfipSdkAccessToken?: boolean;
-    portalUsername: string | null;
-    lastSyncAt: string | null;
-    lastSyncError: string | null;
-    lastSyncCount: number | null;
-    afipSdkConfigured: boolean;
-  };
   items: ReceivedItem[];
 };
 
@@ -103,7 +93,6 @@ export default function ComprasArcaPage() {
   const [csvText, setCsvText] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState('');
-  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,27 +163,6 @@ export default function ComprasArcaPage() {
   };
 
 
-  const syncFromArca = async () => {
-    setSyncing(true);
-    setMsg('');
-    try {
-      const res = await api<{ parsed: number; created: number; updated: number; skipped: number; fetched?: number }>(
-        '/fiscal/received/sync',
-        { method: 'POST', body: JSON.stringify({ from, to }) },
-      );
-      setMsg(
-        `Sync ARCA: ${res.created} nuevas, ${res.updated} actualizadas` +
-          (res.fetched != null ? ` (${res.fetched} leídas)` : '') +
-          (res.skipped ? `, ${res.skipped} omitidas` : ''),
-      );
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'No se pudo sincronizar con ARCA');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const verifySelected = async () => {
     const ids = [...selected];
     if (!ids.length) {
@@ -251,75 +219,31 @@ export default function ComprasArcaPage() {
         />
 
         <div className="rounded-xl border border-brand/20 bg-brand-highlight-soft px-4 py-3 text-sm text-fg">
-          <strong className="text-brand">Solo montos, y ahora automático.</strong> Esto no suma productos al inventario. Sirve para ver
-          el total facturado por proveedores en el período (y el IVA), y armar un balance de compras.
+          <strong className="text-brand">Solo montos (sin Afip SDK).</strong> Esto no suma productos al inventario.
+          Traé las facturas con el CSV de ARCA (abajo). Sirve para ver el total facturado por proveedores y el IVA.
         </div>
 
-        
         <section className="space-y-3 rounded-2xl border border-brand/30 bg-brand-highlight-soft p-4 sm:p-5">
           <div>
             <h2 className="flex items-center gap-2 font-semibold text-fg">
-              <RefreshCw className="h-5 w-5" /> Sincronizar desde ARCA
+              <FileSpreadsheet className="h-5 w-5" /> Traer facturas desde ARCA (CSV)
             </h2>
-            <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-              Trae solo los montos de Mis Comprobantes → Recibidos. No carga stock.
-              {data?.sync?.lastSyncAt
-                ? ` Último sync: ${new Date(data.sync.lastSyncAt).toLocaleString('es-AR')}.`
-                : ''}
-              {data?.sync?.lastSyncError ? ` Último error: ${data.sync.lastSyncError}` : ''}
-            </p>
+            <ol className="mt-2 max-w-2xl list-decimal space-y-1 pl-5 text-sm text-fg-muted">
+              <li>
+                Entrá a{' '}
+                <a href="https://www.afip.gob.ar" target="_blank" rel="noreferrer" className="text-brand hover:underline">
+                  afip.gob.ar
+                </a>{' '}
+                con tu Clave Fiscal
+              </li>
+              <li>
+                Abrí <strong className="text-fg">Mis Comprobantes</strong> → <strong className="text-fg">Recibidos</strong>
+              </li>
+              <li>Elegí el período → <strong className="text-fg">Exportar CSV</strong></li>
+              <li>Subí ese archivo acá abajo</li>
+            </ol>
             <p className="mt-2 text-xs text-fg-muted">
-              ARCA no publica una API oficial para listar comprobantes recibidos. En la nube StockRápido usa{' '}
-              <strong className="text-fg">Afip SDK</strong> + tu <strong className="text-fg">Clave Fiscal</strong>.
-              Alternativa local sin SDK: el runner <code className="text-fg">arca_recibidos_sync_runner.py</code> en{' '}
-              <code className="text-fg">sync-runner/</code> (login al portal y mismos llamados ajax). El access token
-              SDK se carga en Config → Fiscal.
-            </p>
-            {!data?.sync?.afipSdkConfigured ? (
-              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                Falta el access token de Afip SDK. Cargalo en{' '}
-                <Link href="/config/fiscal" className="underline">
-                  Config → Fiscal
-                </Link>{' '}
-                (lo sacás de{' '}
-                <a href="https://afipsdk.com" target="_blank" rel="noreferrer" className="underline">
-                  afipsdk.com
-                </a>
-                ; no es un token de ARCA).
-              </p>
-            ) : null}
-            {!data?.sync?.hasPortalPassword ? (
-              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                También hace falta usuario y contraseña de Clave Fiscal (portal ARCA) en{' '}
-                <Link href="/config/fiscal" className="underline">
-                  Config → Fiscal
-                </Link>
-                .
-              </p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            disabled={!!busy || syncing || !data?.sync?.hasPortalPassword || !data?.sync?.afipSdkConfigured}
-            onClick={() => void syncFromArca()}
-            className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-          >
-            {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
-          </button>
-        </section>
-
-        <section className="space-y-3 rounded-2xl border border-hair-soft bg-surface p-4 sm:p-5">
-          <div>
-            <h2 className="flex items-center gap-2 font-semibold text-fg">
-              <FileSpreadsheet className="h-5 w-5" /> Respaldo: importar CSV
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-              En{' '}
-              <a href="https://arca.gob.ar" target="_blank" rel="noreferrer" className="text-brand hover:underline">
-                arca.gob.ar
-              </a>{' '}
-              → Mis Comprobantes → Recibidos → exportá CSV e importalo acá. Se guardan fecha, emisor, tipo, CAE y{' '}
-              <strong>montos</strong> (total e IVA). No mueve stock.
+              Se guardan fecha, emisor, tipo, CAE y <strong>montos</strong> (total e IVA). No mueve stock.
               {data?.receptorCuit ? ` CUIT receptor: ${data.receptorCuit}.` : ''}
             </p>
           </div>
