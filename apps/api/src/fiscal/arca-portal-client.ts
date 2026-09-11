@@ -65,16 +65,47 @@ function chunkRanges(from: Date, to: Date, days = 30): Array<{ from: Date; to: D
   return out;
 }
 
+function resolveExport<T = any>(mod: any): T {
+  let current = mod;
+  for (let i = 0; i < 4; i += 1) {
+    if (!current || typeof current !== 'object') break;
+    const hasArgs = Array.isArray(current.args);
+    const hasLaunch = typeof current.launch === 'function';
+    const hasExec = typeof current.executablePath === 'function';
+    if (hasArgs || hasLaunch || hasExec) return current as T;
+    if (current.default) {
+      current = current.default;
+      continue;
+    }
+    break;
+  }
+  return current as T;
+}
+
 async function launchBrowser(): Promise<Browser> {
-  const puppeteer = await import('puppeteer-core');
+  const puppeteerMod = await import('puppeteer-core');
+  const puppeteer = resolveExport<typeof import('puppeteer-core')>(puppeteerMod);
   const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
   if (isServerless) {
-    const chromium = await import('@sparticuz/chromium');
-    return puppeteer.default.launch({
-      args: [...chromium.default.args, '--disable-dev-shm-usage'],
+    // En Nest/Vercel el import() dinámico a veces deja .default undefined.
+    // Preferimos require CJS y unwrapping de defaults anidados.
+    let chromium: { args?: string[]; executablePath?: () => Promise<string> };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      chromium = resolveExport(require('@sparticuz/chromium'));
+    } catch {
+      chromium = resolveExport(await import('@sparticuz/chromium'));
+    }
+    if (!Array.isArray(chromium.args) || typeof chromium.executablePath !== 'function') {
+      throw new BadRequestException(
+        'Chromium serverless no cargó bien en este deploy. Redeployá la API o importá el CSV de Mis Comprobantes → Recibidos.',
+      );
+    }
+    return puppeteer.launch({
+      args: [...chromium.args, '--disable-dev-shm-usage'],
       defaultViewport: { width: 1280, height: 800 },
-      executablePath: await chromium.default.executablePath(),
+      executablePath: await chromium.executablePath(),
       headless: true,
     });
   }
@@ -88,7 +119,7 @@ async function launchBrowser(): Promise<Browser> {
         ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
         : '/usr/bin/google-chrome');
 
-  return puppeteer.default.launch({
+  return puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     defaultViewport: { width: 1280, height: 800 },
     executablePath,
