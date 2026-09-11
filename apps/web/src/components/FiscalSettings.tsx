@@ -333,9 +333,10 @@ export default function FiscalSettings() {
         <div>
           <h3 className="font-medium text-cyan-100">Facturas recibidas (compras / balance)</h3>
           <p className="text-xs text-slate-500 mt-1">
-            ARCA no tiene API oficial para listar Mis Comprobantes → Recibidos. Acá cargás el{' '}
-            <strong>access token de Afip SDK</strong> (afipsdk.com) y tu Clave Fiscal del portal.
-            Con eso sincronizamos solo montos (sin stock). El CSV queda como respaldo.
+            ARCA no tiene API oficial para listar Mis Comprobantes → Recibidos. Para sync en la
+            nube cargá el <strong>access token de Afip SDK</strong> (afipsdk.com) y tu Clave Fiscal.
+            Alternativa gratis en tu PC: el runner <code className="text-cyan-200">sync-runner/arca_recibidos_sync_runner.py</code>{' '}
+            (login portal + mismos llamados ajax, sin SDK). El CSV manual sigue como respaldo.
           </p>
         </div>
         <div>

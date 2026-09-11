@@ -79,3 +79,31 @@ python tokin_sync_runner.py
 
 Cada producto conserva el payload original en `raw` y sus variantes UN/DI/BU,
 códigos, multiplicadores, impuestos, precios y stock se envían a StockRápido.
+
+## ARCA — Mis Comprobantes Recibidos (sin Afip SDK)
+
+ARCA no publica un web service oficial para listar facturas recibidas. La opción
+cloud sigue siendo Afip SDK (token en Config → Fiscal). Como alternativa local,
+este runner hace login con Clave Fiscal, abre Mis Comprobantes y llama a los
+mismos `ajax.do` del portal (`generarConsulta` + `listaResultados`, `t=R`).
+
+Variables extra en `.env`:
+
+| Variable | Valor |
+|----------|--------|
+| `AFIP_CUIT` | CUIT con el que entrás a Clave Fiscal |
+| `AFIP_PASSWORD` | Contraseña Clave Fiscal |
+| `AFIP_HEADLESS` | `1` por defecto; `0` si aparece CAPTCHA o 2FA |
+| `AFIP_FROM` / `AFIP_TO` | Rango opcional `YYYY-MM-DD` (default: últimos 30 días) |
+
+```bash
+python -m pip install playwright python-dotenv requests
+python -m playwright install chromium
+python arca_recibidos_sync_runner.py
+python arca_recibidos_sync_runner.py --from 2026-01-01 --to 2026-03-31 --headed
+```
+
+El CSV se importa a `POST /fiscal/received/import` (mismo destino que el CSV
+manual). Limitaciones: CAPTCHA/2FA pueden exigir `--headed`; si ARCA cambia el
+portal el script puede romperse; en Vercel seguís necesitando Afip SDK o este
+proceso en una PC.
