@@ -61,8 +61,7 @@ export class FiscalService {
       receivedLastSyncAt: c.receivedLastSyncAt,
       receivedLastSyncError: c.receivedLastSyncError,
       receivedLastSyncCount: c.receivedLastSyncCount,
-      afipSdkConfigured:
-        !!c.afipSdkAccessTokenEncrypted || !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim(),
+      afipSdkConfigured: false,
     };
   }
 
@@ -172,20 +171,8 @@ export class FiscalService {
       dto.portalUsername !== undefined
         ? dto.portalUsername.replace(/\D/g, '') || null
         : previous?.portalUsername ?? null;
-    const receivedAutoSync =
-      dto.receivedAutoSync !== undefined ? !!dto.receivedAutoSync : !!previous?.receivedAutoSync;
-    const hasAfipSdkToken =
-      !!afipSdkAccessTokenEncrypted || !!process.env.AFIP_SDK_ACCESS_TOKEN?.trim();
-    if (receivedAutoSync && !portalPasswordEncrypted) {
-      throw new BadRequestException(
-        'Para el sync automático de facturas recibidas necesitás guardar la Clave Fiscal (usuario y contraseña del portal ARCA).',
-      );
-    }
-    if (receivedAutoSync && !hasAfipSdkToken) {
-      throw new BadRequestException(
-        'Para el sync automático necesitás cargar el access token de Afip SDK (Config → Fiscal) o pedirle al admin que configure AFIP_SDK_ACCESS_TOKEN en el servidor.',
-      );
-    }
+    // Afip SDK desactivado: el sync automático por nube queda apagado.
+    const receivedAutoSync = false;
     await this.prisma.fiscalConfig.upsert({ where: { businessId }, create: { businessId, enabled: !!dto.enabled,
       environment: dto.environment, cuit, pointOfSale: dto.pointOfSale, legalName: dto.legalName?.trim() || null,
       grossIncomeNumber: dto.grossIncomeNumber?.trim() || null, activityStartDate: dto.activityStartDate ? new Date(dto.activityStartDate) : null,

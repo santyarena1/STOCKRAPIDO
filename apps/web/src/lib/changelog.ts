@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.35',
+    date: '2026-09-11',
+    summary: 'Facturas ARCA sin Afip SDK: solo CSV o runner en tu PC.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Se eliminó Afip SDK de facturas recibidas',
+        desc: 'El botón de sync en la nube con Afip SDK quedó fuera (límite de automatizaciones). Ahora traés las compras con el CSV de Mis Comprobantes → Recibidos, o con doble clic en Sincronizar-ARCA en tu PC.',
+      },
+    ],
+  },
+  {
     version: 'v1.34',
     date: '2026-09-10',
     summary: 'Sync de facturas recibidas sin Afip SDK (runner local).',
@@ -29,7 +41,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'NUEVO',
         title: 'Runner local Mis Comprobantes Recibidos',
-        desc: 'Podés bajar las facturas de compra desde el portal ARCA con Clave Fiscal en tu PC (sync-runner), sin pagar Afip SDK. El sync en la nube con token SDK sigue disponible.',
+        desc: 'Podés bajar las facturas de compra desde el portal ARCA con Clave Fiscal en tu PC (sync-runner), sin Afip SDK.',
       },
     ],
   },
