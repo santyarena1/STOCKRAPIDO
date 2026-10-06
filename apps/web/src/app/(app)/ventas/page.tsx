@@ -15,6 +15,7 @@ import {
   type InvoiceAlertStatus,
 } from '@/lib/invoice-alert';
 import { formatMoneyArs as formatMoneyArsShared, formatMoneyInputArs, parseMoneyInputArs } from '@/lib/units';
+import QRCode from 'qrcode';
 
 type SaleItem = {
   id: string;
@@ -39,6 +40,10 @@ type Sale = {
   user?: { name: string };
   seller?: { name: string } | null;
   customer?: { id: string; name: string; balance?: string | number } | null;
+  loyaltyAccount?: { id: string; name: string } | null;
+  loyaltyPointsEarned?: number;
+  loyaltyPointsRedeemed?: number;
+  loyaltyArsRedeemed?: string | number;
   fiscalDocument?: {
     kind: 'INTERNAL' | 'FACTURA_C';
     status: 'INTERNAL' | 'PENDING' | 'AUTHORIZED' | 'ERROR';
@@ -70,9 +75,24 @@ const PAYMENT_LABELS: Record<string, string> = {
   transferencia: 'Transferencia',
   mercadopago: 'Mercado Pago',
   fiado: 'Fiado',
+  puntos: 'Puntos',
 };
 
-const PAYMENT_OPTIONS = Object.entries(PAYMENT_LABELS);
+const PAYMENT_OPTIONS = Object.entries(PAYMENT_LABELS).filter(([key]) => key !== 'puntos');
+
+function canClaimLoyalty(sale: Sale) {
+  return (sale.status ?? 'completed') === 'completed' && !sale.loyaltyAccount && !(sale.loyaltyPointsEarned && sale.loyaltyPointsEarned > 0);
+}
+
+function loyaltySummary(sale: Sale) {
+  const parts: string[] = [];
+  if (sale.loyaltyAccount?.name) parts.push(`Cliente fidelidad: ${sale.loyaltyAccount.name}`);
+  if ((sale.loyaltyPointsEarned ?? 0) > 0) parts.push(`Ganó: ${sale.loyaltyPointsEarned!.toLocaleString('es-AR')} puntos`);
+  if ((sale.loyaltyPointsRedeemed ?? 0) > 0) {
+    parts.push(`Usó: ${sale.loyaltyPointsRedeemed!.toLocaleString('es-AR')} puntos ($${Number(sale.loyaltyArsRedeemed ?? 0).toFixed(0)})`);
+  }
+  return parts;
+}
 
 function saleSellerLabel(sale: Sale) {
   return sale.seller?.name?.trim() || '—';
@@ -253,6 +273,8 @@ export default function VentasPage() {
   const [activeDatePreset, setActiveDatePreset, datePresetReady] = usePersistedState<VentasDatePresetId | null>('sr-filters:ventas:date-preset', null);
   const filtersHydrated = listTabReady && facturasViewReady && filtersReady && selectedProductReady && datePresetReady;
   const [viewSale, setViewSale] = useState<Sale | null>(null);
+  const [claimQr, setClaimQr] = useState<{ url: string; image: string; points: number; totalLabel: string } | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
 
   const [saleEditDiscount, setSaleEditDiscount] = useState('');
   const [saleEditPayment, setSaleEditPayment] = useState('');
@@ -630,6 +652,20 @@ export default function VentasPage() {
     setSaleEditCustomerId(viewSale.customer?.id ?? '');
     setEditingItemId(null);
   }, [viewSale?.id, viewSale]);
+
+  const showClaimQr = async (saleId: string, event?: { stopPropagation: () => void }) => {
+    event?.stopPropagation();
+    setClaimBusy(true);
+    try {
+      const data = await api<{ url: string; points: number; totalLabel: string }>(`/loyalty/sales/${saleId}/claim-token`, { method: 'POST' });
+      const image = await QRCode.toDataURL(data.url, { width: 360, margin: 1 });
+      setClaimQr({ url: data.url, image, points: data.points, totalLabel: data.totalLabel });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo generar el QR de puntos');
+    } finally {
+      setClaimBusy(false);
+    }
+  };
 
   const refreshSaleInModal = async (saleId: string) => {
     try {
@@ -1541,6 +1577,13 @@ export default function VentasPage() {
                             Anular (NC)
                           </button>
                         )}
+                        {canClaimLoyalty(s) ? (
+                          <button type="button" disabled={claimBusy} onClick={(e) => void showClaimQr(s.id, e)} className="text-sm text-brand hover:underline">
+                            Mostrar QR de puntos
+                          </button>
+                        ) : s.loyaltyAccount ? (
+                          <span className="text-xs text-ok">✓ Puntos asignados a {s.loyaltyAccount.name}</span>
+                        ) : null}
                         <button
                           type="button"
                           onClick={(e) => void handleReprint(s.id, e)}
@@ -1619,7 +1662,7 @@ export default function VentasPage() {
                 <div className="flex flex-col items-end gap-1">{isVoided ? <><span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs font-medium text-crit">Anulada</span>{sale.fiscalDocument?.creditNoteNumber != null && <span className="font-mono text-[10px] text-crit">NC {String(sale.fiscalDocument.pointOfSale ?? 0).padStart(5, '0')}-{String(sale.fiscalDocument.creditNoteNumber).padStart(8, '0')}</span>}</> : isAuthorizedFactura ? <><span className="rounded-md border border-ok/30 bg-[var(--ok-soft)] px-2 py-1 text-xs font-medium text-ok">Factura C</span>{sale.fiscalDocument?.pointOfSale != null && sale.fiscalDocument.receiptNumber != null && <span className="font-mono text-[10px] text-fg-faint">{String(sale.fiscalDocument.pointOfSale).padStart(5, '0')}-{String(sale.fiscalDocument.receiptNumber).padStart(8, '0')}</span>}</> : sale.fiscalDocument?.kind === 'FACTURA_C' ? <span className="rounded-md border border-crit/30 bg-[var(--crit-soft)] px-2 py-1 text-xs text-crit">{sale.fiscalDocument.status === 'PENDING' ? 'Pendiente ARCA' : 'Error ARCA'}</span> : sale.fiscalDocument?.kind === 'INTERNAL' ? <span className="rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 text-xs text-warn">Comprobante interno</span> : <span className="rounded-md border border-hair bg-raised2 px-2 py-1 text-xs text-fg-muted">Sin comprobante</span>}{isDuplicate && <span className="rounded border border-warn/30 bg-[var(--warn-soft)] px-1 text-[10px] text-warn">dup</span>}</div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 border-t border-hair-soft pt-3 text-sm"><div><span className="block text-xs text-fg-faint">Forma de pago</span><span className="text-fg-muted">{sale.paymentMethod ? (PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod) : '—'}</span></div><div><span className="block text-xs text-fg-faint">Ítems</span><span className="font-mono text-fg-muted">{itemCount}</span></div><div><span className="block text-xs text-fg-faint">Subtotal</span><span className="font-mono text-fg-muted">${Number(sale.total ?? 0).toFixed(0)}</span></div><div><span className="block text-xs text-fg-faint">Descuento</span><span className="font-mono text-warn">{Number(sale.discount ?? 0) > 0 ? `-$${Number(sale.discount).toFixed(0)}` : '—'}</span></div><div><span className="block text-xs text-fg-faint">Vendedor</span><span className="text-fg-muted">{saleSellerLabel(sale)}</span></div><div><span className="block text-xs text-fg-faint">Total</span><span className="font-mono text-lg font-semibold text-brand">${Number(sale.totalFinal ?? 0).toFixed(0)}</span></div></div>
-              <div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3">{!isVoided && (!sale.fiscalDocument || sale.fiscalDocument.kind === 'INTERNAL') && <button type="button" onClick={(event) => void handleFacturar(sale.id, event)} className="text-sm text-ok">Facturar</button>}{!isVoided && isAuthorizedFactura && <button type="button" onClick={(event) => void handleAnular(sale.id, event)} className="text-sm text-warn">Anular (NC)</button>}<button type="button" onClick={(event) => void handleReprint(sale.id, event)} className="text-sm text-brand">Reimprimir</button><button type="button" onClick={() => setViewSale(sale)} className="text-sm text-brand">Detalle</button>{!isVoided && <button type="button" onClick={(event) => { event.stopPropagation(); setViewSale(sale); }} className="text-sm text-ok">Editar</button>}{!isVoided && !isAuthorizedFactura && <button type="button" onClick={(event) => void handleDeleteSaleFromRow(sale, event)} className="text-sm text-crit">Eliminar</button>}</div>
+              <div className="mt-3 text-xs text-fg-muted">{loyaltySummary(sale).join(' · ')}</div><div className="mt-3 flex flex-wrap justify-end gap-3 border-t border-hair-soft pt-3">{canClaimLoyalty(sale) ? <button type="button" disabled={claimBusy} onClick={(event) => void showClaimQr(sale.id, event)} className="text-sm text-brand">Mostrar QR de puntos</button> : sale.loyaltyAccount ? <span className="text-sm text-ok">✓ Puntos asignados a {sale.loyaltyAccount.name}</span> : null}{!isVoided && (!sale.fiscalDocument || sale.fiscalDocument.kind === 'INTERNAL') && <button type="button" onClick={(event) => void handleFacturar(sale.id, event)} className="text-sm text-ok">Facturar</button>}{!isVoided && isAuthorizedFactura && <button type="button" onClick={(event) => void handleAnular(sale.id, event)} className="text-sm text-warn">Anular (NC)</button>}<button type="button" onClick={(event) => void handleReprint(sale.id, event)} className="text-sm text-brand">Reimprimir</button><button type="button" onClick={() => setViewSale(sale)} className="text-sm text-brand">Detalle</button>{!isVoided && <button type="button" onClick={(event) => { event.stopPropagation(); setViewSale(sale); }} className="text-sm text-ok">Editar</button>}{!isVoided && !isAuthorizedFactura && <button type="button" onClick={(event) => void handleDeleteSaleFromRow(sale, event)} className="text-sm text-crit">Eliminar</button>}</div>
             </article>;
           })}
         </div>
@@ -1876,7 +1919,30 @@ export default function VentasPage() {
                   <span>Total</span>
                   <span>${Number(viewSale.totalFinal ?? 0).toFixed(0)}</span>
                 </div>
+                {loyaltySummary(viewSale).map((line) => (
+                  <p key={line} className="text-fg-muted">{line}</p>
+                ))}
+                {canClaimLoyalty(viewSale) && (
+                  <button type="button" disabled={claimBusy} onClick={() => void showClaimQr(viewSale.id)} className="mt-2 text-sm font-medium text-brand">
+                    Mostrar QR de puntos
+                  </button>
+                )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {claimQr && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={() => setClaimQr(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-hair bg-surface p-5 text-center" onClick={(event) => event.stopPropagation()}>
+            <h2 className="text-lg font-bold text-fg">QR de puntos</h2>
+            <p className="mt-1 text-sm text-fg-muted">Compra de {claimQr.totalLabel}. El cliente recibe {claimQr.points.toLocaleString('es-AR')} puntos.</p>
+            <img src={claimQr.image} alt="QR para acreditar puntos" className="mx-auto mt-4 w-full max-w-[240px] rounded-lg bg-white p-3" />
+            <p className="mt-3 break-all text-xs text-fg-faint">{claimQr.url}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => void navigator.clipboard.writeText(claimQr.url)} className="rounded-lg border border-hair py-3 text-sm font-medium text-fg">Copiar</button>
+              <button type="button" onClick={() => setClaimQr(null)} className="btn-brand rounded-lg py-3 text-sm font-medium">Cerrar</button>
             </div>
           </div>
         </div>

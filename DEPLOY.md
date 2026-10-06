@@ -141,6 +141,28 @@ Abrí `https://web-six-jet-75.vercel.app/login` — no debe haber errores CORS e
 
 ---
 
+## Fidelización y wallets
+
+Fidelización funciona sin Wallet configurado. La migración `20261006013000_loyalty_program` se aplica con `prisma migrate deploy`.
+
+Opcionales en el proyecto API (nunca commitear certificados ni el JSON de la service account):
+
+| Key | Uso |
+|-----|-----|
+| `WEB_URL` | URL pública del portal `/fidelidad/...` |
+| `PUBLIC_API_URL` | Web service de Apple Wallet |
+| `APPLE_WALLET_ENABLED` | `true` solo con certificados reales |
+| `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER` | PassKit |
+| `APPLE_WALLET_CERT`, `APPLE_WALLET_KEY`, `APPLE_WALLET_CERT_PASSWORD`, `APPLE_WALLET_WWDR_CERT` | PEM o base64 |
+| `APPLE_WALLET_APNS_KEY`, `APPLE_WALLET_APNS_KEY_ID` | Push de actualización del pase |
+| `GOOGLE_WALLET_ENABLED` | `true` solo con issuer real |
+| `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_CLASS_ID` | Loyalty Class |
+| `GOOGLE_WALLET_SERVICE_ACCOUNT_BASE64` | JSON de la service account en base64 |
+
+Detalle en `docs/LOYALTY.md`.
+
+---
+
 ## JWT secrets
 
 ```bash

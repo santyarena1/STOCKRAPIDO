@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { pickConsignmentParty } from './pick-party';
 
 export type CommissionBase = 'cost' | 'sale';
 
@@ -231,25 +232,14 @@ export class ConsignmentService {
       });
     }
 
-    let partyId = data.consignmentPartyId?.trim() || null;
-    if (!partyId) {
-      const parties = await this.prisma.consignmentParty.findMany({
-        where: { businessId, active: true },
-        orderBy: { name: 'asc' },
-        take: 2,
-      });
-      if (parties.length === 1) partyId = parties[0].id;
-      else if (parties.length === 0) {
-        throw new BadRequestException('Primero creá una entidad en Comisionados.');
-      } else {
-        throw new BadRequestException('Elegí a quién asociar el producto comisionado.');
-      }
-    } else {
-      const party = await this.prisma.consignmentParty.findFirst({
-        where: { id: partyId, businessId, active: true },
-      });
-      if (!party) throw new BadRequestException('Entidad inválida.');
-    }
+    const parties = await this.prisma.consignmentParty.findMany({
+      where: { businessId, active: true },
+      select: { id: true },
+      orderBy: { name: 'asc' },
+    });
+    const picked = pickConsignmentParty(parties, data.consignmentPartyId);
+    if (!picked.ok) throw new BadRequestException(picked.message);
+    const partyId = picked.partyId;
 
     const pct =
       data.consignmentCommissionPercent === undefined

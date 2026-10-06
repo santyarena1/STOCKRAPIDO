@@ -83,5 +83,6 @@ En local con SQLite usar `npx prisma db push` en `apps/api` para sincronizar el 
 - Variables: `DATABASE_URL` (Postgres), `JWT_SECRET`, `JWT_REFRESH_SECRET`, `WEB_URL` para emails.
 - TODOs: PWA/offline (IndexedDB).
 - Planes: **Mostrador** (operatoria), **Fiscal** (Factura C AFIP), **Pro** (Tokin/Mondelez/Juntos+ e IA). Variables: `MP_ACCESS_TOKEN`, `BILLING_MP_ALIAS`, `BILLING_CBU`, `BILLING_WHATSAPP`.
+- Fidelización (puntos, portal público, QR y wallets): ver `docs/LOYALTY.md`. Funciona sin certificados de Apple o Google Wallet.
 
 Si ves **"Failed to fetch"**: comprobá que la API esté en marcha (`API running at http://localhost:4002`) y que solo corra una instancia de `npx pnpm dev`.

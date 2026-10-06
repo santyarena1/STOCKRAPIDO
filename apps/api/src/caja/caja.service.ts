@@ -1,13 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
-import { movementChannel, MovChannel, saleChannel } from './caja-channels.util';
+import { arsToCents, collectedForChannel } from '../../../../shared/loyalty-money';
+import { movementChannel, MovChannel } from './caja-channels.util';
 
 type RegisterWithRelations = {
   openingCash: Decimal;
   openingBank: Decimal;
   movements: { type: string; amount: Decimal; category: string | null }[];
-  sales: { totalFinal: Decimal; paymentMethod: string | null }[];
+  sales: { totalFinal: Decimal; paymentMethod: string | null; loyaltyArsRedeemed?: Decimal | null }[];
 };
 
 @Injectable()
@@ -17,11 +18,16 @@ export class CajaService {
   computeExpected(reg: RegisterWithRelations) {
     let salesEfectivo = 0;
     let salesBanco = 0;
+    let salesPuntos = 0;
     for (const s of reg.sales) {
-      const ch = saleChannel(s.paymentMethod);
-      const t = Number(s.totalFinal);
-      if (ch === 'efectivo') salesEfectivo += t;
-      else if (ch === 'banco') salesBanco += t;
+      const split = collectedForChannel(
+        arsToCents(s.totalFinal),
+        arsToCents(s.loyaltyArsRedeemed ?? 0),
+        s.paymentMethod,
+      );
+      salesEfectivo += split.efectivo / 100;
+      salesBanco += split.banco / 100;
+      salesPuntos += split.puntos / 100;
     }
     let movEfectivoIncome = 0;
     let movEfectivoExpense = 0;
@@ -48,6 +54,7 @@ export class CajaService {
       openingBanco,
       salesEfectivo,
       salesBanco,
+      salesPuntos,
       movEfectivoIncome,
       movEfectivoExpense,
       movBancoIncome,

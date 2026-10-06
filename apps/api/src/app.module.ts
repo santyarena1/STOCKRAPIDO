@@ -29,6 +29,7 @@ import { PreciosClarosModule } from './precios-claros/precios-claros.module';
 import { ConsignmentModule } from './consignment/consignment.module';
 import { PublicCatalogModule } from './public-catalog/public-catalog.module';
 import { DeliveryModule } from './delivery/delivery.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { DeliveryModule } from './delivery/delivery.module';
     ConsignmentModule,
     PublicCatalogModule,
     DeliveryModule,
+    LoyaltyModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ReadOnlyGuard },

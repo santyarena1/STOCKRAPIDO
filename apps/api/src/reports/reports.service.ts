@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { arsToCents, collectedForChannel } from '../../../../shared/loyalty-money';
 
 export type ReportPeriod = 'today' | 'week' | 'month' | 'year';
 
@@ -344,6 +345,7 @@ export class ReportsService {
         totalFinal: true,
         discount: true,
         paymentMethod: true,
+        loyaltyArsRedeemed: true,
         items: { select: { qty: true, productId: true } },
       },
     });
@@ -365,10 +367,26 @@ export class ReportsService {
       } else {
         for (const it of s.items) unitsSold += it.qty;
       }
+      const split = collectedForChannel(
+        arsToCents(s.totalFinal),
+        arsToCents(s.loyaltyArsRedeemed),
+        s.paymentMethod,
+      );
       const pm = s.paymentMethod?.trim() || '_sin_metodo';
-      if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
-      byPayment[pm].count += 1;
-      byPayment[pm].total += Number(s.totalFinal);
+      if (split.efectivo || split.banco || split.fiado || pm === 'puntos' || pm === '_sin_metodo') {
+        const methodKey = pm === 'puntos' ? 'puntos' : pm;
+        const methodTotal = (pm === 'puntos' ? split.puntos : split.efectivo + split.banco + split.fiado) / 100;
+        if (methodTotal > 0 || pm !== 'puntos') {
+          if (!byPayment[methodKey]) byPayment[methodKey] = { count: 0, total: 0 };
+          byPayment[methodKey].count += 1;
+          byPayment[methodKey].total += pm === 'puntos' ? split.puntos / 100 : methodTotal;
+        }
+      }
+      if (split.puntos > 0 && pm !== 'puntos') {
+        if (!byPayment.puntos) byPayment.puntos = { count: 0, total: 0 };
+        byPayment.puntos.count += 1;
+        byPayment.puntos.total += split.puntos / 100;
+      }
     }
 
     const saleCount = sales.length;
@@ -594,15 +612,32 @@ export class ReportsService {
     const range = this.getDateRange(period, from, to);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
-      select: { paymentMethod: true, totalFinal: true },
+      select: { paymentMethod: true, totalFinal: true, loyaltyArsRedeemed: true },
     });
     const grouped = new Map<string, { paymentMethod: string; total: number; count: number }>();
     for (const sale of sales) {
+      const split = collectedForChannel(
+        arsToCents(sale.totalFinal),
+        arsToCents(sale.loyaltyArsRedeemed),
+        sale.paymentMethod,
+      );
       const paymentMethod = sale.paymentMethod?.trim() || 'sin_metodo';
-      const row = grouped.get(paymentMethod) ?? { paymentMethod, total: 0, count: 0 };
-      row.total += Number(sale.totalFinal);
-      row.count += 1;
-      grouped.set(paymentMethod, row);
+      const methodTotal =
+        paymentMethod === 'puntos'
+          ? split.puntos / 100
+          : (split.efectivo + split.banco + split.fiado) / 100;
+      if (methodTotal > 0 || paymentMethod !== 'puntos') {
+        const row = grouped.get(paymentMethod) ?? { paymentMethod, total: 0, count: 0 };
+        row.total += methodTotal;
+        row.count += 1;
+        grouped.set(paymentMethod, row);
+      }
+      if (split.puntos > 0 && paymentMethod !== 'puntos') {
+        const row = grouped.get('puntos') ?? { paymentMethod: 'puntos', total: 0, count: 0 };
+        row.total += split.puntos / 100;
+        row.count += 1;
+        grouped.set('puntos', row);
+      }
     }
     return [...grouped.values()].sort((a, b) => b.total - a.total);
   }

@@ -14,7 +14,9 @@ import { Search, ShoppingCart } from 'lucide-react';
 import { Loader } from '@/components/ui/Loader';
 import { SerperImagePicker } from '@/components/SerperImagePicker';
 import { confirmInvoiceAlertIfNeeded, fetchInvoiceAlert } from '@/lib/invoice-alert';
-import { clearPosSession, readPosSession, writePosSession } from '@/lib/pos-session-cache';
+import { clearPosSession, readPosSession, writePosSession, type PosLoyaltyAttachment } from '@/lib/pos-session-cache';
+import { LoyaltyPosBar } from '@/components/pos/LoyaltyPosBar';
+import { resolveFiscalMode } from '@/lib/loyalty-money';
 
 type CartItem = {
   productId: string;
@@ -262,7 +264,14 @@ export default function POSPage() {
   const [paymentMethodPending, setPaymentMethodPending] = useState<string | null>(null);
   const [cashPaidText, setCashPaidText] = useState(''); // billete/monto con el que pagó (texto)
   const cashPaidInputRef = useRef<HTMLInputElement>(null);
-  const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'>('internal');
+  const [fiscalMode,setFiscalMode]=useState<'internal'|'factura_c'|'auto_mp'>('internal');
+  const [loyaltyAttachment,setLoyaltyAttachment]=useState<PosLoyaltyAttachment>(null);
+  const [loyaltyPoints,setLoyaltyPoints]=useState(0);
+  const [quickSilent,setQuickSilent]=useState(false);
+  const [quickConsigned,setQuickConsigned]=useState(false);
+  const [quickPartyId,setQuickPartyId]=useState('');
+  const [quickCommission,setQuickCommission]=useState('');
+  const [consignmentParties,setConsignmentParties]=useState<{id:string;name:string;active:boolean}[]>([]);
   const [invoiceAlertBanner,setInvoiceAlertBanner]=useState<string|null>(null);
   const [printEnabled,setPrintEnabled]=useState(true);
   /** Modo silencioso: los productos marcados como "silenciosos" se imprimen con el texto configurado. ON por defecto. */
@@ -302,7 +311,7 @@ export default function POSPage() {
   const isUpdateQtyRef = useRef(false);
   const isSubmittingRef = useRef(false);
   const [cobrandoBusy, setCobrandoBusy] = useState(false);
-  useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('stockrapido:pos-preferences')||'{}');if(v.fiscalMode==='internal'||v.fiscalMode==='factura_c')setFiscalMode(v.fiscalMode);if(typeof v.printEnabled==='boolean')setPrintEnabled(v.printEnabled);if(typeof v.silentMode==='boolean')setSilentMode(v.silentMode)}catch{}setPreferencesLoaded(true)},[]);
+  useEffect(()=>{try{const v=JSON.parse(localStorage.getItem('stockrapido:pos-preferences')||'{}');if(v.fiscalMode==='internal'||v.fiscalMode==='factura_c'||v.fiscalMode==='auto_mp')setFiscalMode(v.fiscalMode);if(typeof v.printEnabled==='boolean')setPrintEnabled(v.printEnabled);if(typeof v.silentMode==='boolean')setSilentMode(v.silentMode)}catch{}setPreferencesLoaded(true)},[]);
   useEffect(()=>{if(preferencesLoaded)localStorage.setItem('stockrapido:pos-preferences',JSON.stringify({fiscalMode,printEnabled,silentMode}))},[fiscalMode,printEnabled,silentMode,preferencesLoaded]);
   useEffect(()=>{
     const saved=readPosSession();
@@ -310,13 +319,15 @@ export default function POSPage() {
       setCart(saved.cart);
       setDiscountTotal(saved.discountTotal);
       setSelectedCustomer(saved.selectedCustomer);
+      setLoyaltyAttachment(saved.loyalty || null);
+      setLoyaltyPoints(saved.pointsToRedeem || 0);
     }
     setPosSessionLoaded(true);
   },[]);
   useEffect(()=>{
     if(!posSessionLoaded)return;
-    writePosSession({cart,discountTotal,selectedCustomer});
-  },[cart,discountTotal,selectedCustomer,posSessionLoaded]);
+    writePosSession({cart,discountTotal,selectedCustomer,loyalty:loyaltyAttachment,pointsToRedeem:loyaltyPoints});
+  },[cart,discountTotal,selectedCustomer,loyaltyAttachment,loyaltyPoints,posSessionLoaded]);
   useEffect(()=>{
     if(fiscalMode!=='factura_c'){setInvoiceAlertBanner(null);return}
     let cancelled=false;
@@ -729,7 +740,7 @@ export default function POSPage() {
   }, [search, addToCart, hiddenCategoryIds]);
 
   const handleCobrar = useCallback(
-    async (paymentMethod: string) => {
+    async (paymentMethod: string, pointsOverride?: number) => {
       if (!cart.length || isSubmittingRef.current) return;
       // Marcar YA: evita doble Enter / doble click antes del primer await.
       isSubmittingRef.current = true;
@@ -744,6 +755,7 @@ export default function POSPage() {
         setCobrandoBusy(false);
         return;
       }
+      const pointsUsed = pointsOverride ?? loyaltyPoints;
       const total = Math.max(0, cart.reduce((n, i) => n + i.subtotal, 0) - discountTotal);
       const isFiado = paymentMethod === 'fiado';
       if (isFiado && !selectedCustomer?.id) {
@@ -753,7 +765,8 @@ export default function POSPage() {
         setShowCustomer(true);
         return;
       }
-      if (fiscalMode === 'factura_c' && !isFiado) {
+      const resolvedFiscal = resolveFiscalMode(isFiado && fiscalMode === 'auto_mp' ? 'auto_mp' : fiscalMode, paymentMethod);
+      if (resolvedFiscal === 'factura_c') {
         const ok = await confirmInvoiceAlertIfNeeded(total);
         if (!ok) {
           isSubmittingRef.current = false;
@@ -790,10 +803,12 @@ export default function POSPage() {
             customerId: selectedCustomer?.id,
             paymentMethod,
             cashRegisterId: crId,
-            // En fiado preferimos interno: se factura después desde Clientes / Ventas.
-            fiscalMode: isFiado ? 'internal' : fiscalMode,
+            fiscalMode,
             sellerId: activeSeller?.id ?? null,
             clientRequestId,
+            loyaltyAccountId: loyaltyAttachment?.id ?? null,
+            loyaltyCheckInId: loyaltyAttachment?.checkInId ?? null,
+            loyaltyPointsToRedeem: pointsUsed > 0 ? pointsUsed : 0,
           }),
         });
         if (!res.ok) {
@@ -810,6 +825,8 @@ export default function POSPage() {
         setCart([]);
         setDiscountTotal(0);
         setSelectedCustomer(null);
+        setLoyaltyAttachment(null);
+        setLoyaltyPoints(0);
         setSearch('');
         setPaymentMethodPending(null);
         setShowPayment(false);
@@ -857,6 +874,8 @@ export default function POSPage() {
       printEnabled,
       silentMode,
       activeSeller?.id,
+      loyaltyAttachment,
+      loyaltyPoints,
     ],
   );
   const pickPaymentMethod = useCallback(
@@ -1097,8 +1116,8 @@ export default function POSPage() {
     setDiscountInput('');
   };
 
-  const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status})});if(!r.ok)throw Error();clearPosSession();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
-  const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);setShowPayment(true)}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
+  const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status,loyaltyAttachment,loyaltyPoints})});if(!r.ok)throw Error();clearPosSession();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setLoyaltyAttachment(null);setLoyaltyPoints(0);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
+  const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setLoyaltyAttachment((v as {loyaltyAttachment?:PosLoyaltyAttachment}).loyaltyAttachment||null);setLoyaltyPoints(Number((v as {loyaltyPoints?:number}).loyaltyPoints)||0);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);setShowPayment(true)}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
 
   const addManualProduct = () => {
     const name = manualName.trim() || 'Producto manual';
@@ -1119,13 +1138,26 @@ export default function POSPage() {
     try {
       const product = await api<{ id: string; name: string; price: string; stock: number; stockControl: boolean; imageUrl?: string | null }>('/products/quick', {
         method: 'POST',
-        body: JSON.stringify({ name, price, barcode: quickBarcode.trim() || undefined, imageUrl: quickImageUrl.trim() || undefined }),
+        body: JSON.stringify({
+          name,
+          price,
+          barcode: quickBarcode.trim() || undefined,
+          imageUrl: quickImageUrl.trim() || undefined,
+          silent: quickSilent,
+          consigned: quickConsigned,
+          consignmentPartyId: quickConsigned ? quickPartyId || undefined : undefined,
+          consignmentCommissionPercent: quickConsigned && quickCommission.trim() ? Number(quickCommission.replace(',', '.')) : null,
+        }),
       });
       addToCart(product);
       setQuickName('');
       setQuickPrice('');
       setQuickBarcode('');
       setQuickImageUrl('');
+      setQuickSilent(false);
+      setQuickConsigned(false);
+      setQuickPartyId('');
+      setQuickCommission('');
       setShowQuickProduct(false);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Error al crear el producto rápido');
@@ -1151,7 +1183,7 @@ export default function POSPage() {
 
   return (
     <div className="flex h-full flex-col bg-app">
-      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-2 sm:gap-3"><span className="w-full text-xs font-semibold text-fg-muted uppercase sm:w-auto">Próximas ventas</span><div className="inline-flex max-w-full rounded-lg border border-hair overflow-x-auto"><button type="button" onClick={()=>setFiscalMode('internal')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
+      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-2 sm:gap-3"><span className="w-full text-xs font-semibold text-fg-muted uppercase sm:w-auto">Próximas ventas</span><div className="inline-flex max-w-full rounded-lg border border-hair overflow-x-auto"><button type="button" onClick={()=>setFiscalMode('internal')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button><button type="button" onClick={()=>setFiscalMode('auto_mp')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='auto_mp'?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Mercado Pago</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
       {invoiceAlertBanner && (
         <div className="shrink-0 border-b border-amber-700/40 bg-amber-950/30 px-3 py-2 sm:px-4">
           <p className="text-xs text-amber-200">{invoiceAlertBanner}</p>
@@ -1392,6 +1424,7 @@ export default function POSPage() {
                 : <span className="text-brand">Elegir cliente</span>}
             </span>
           </button>
+          <LoyaltyPosBar total={total} attachment={loyaltyAttachment} pointsToRedeem={loyaltyPoints} onAttachment={setLoyaltyAttachment} onPoints={setLoyaltyPoints} onPayWithPoints={(points) => { setLoyaltyPoints(points); void handleCobrar('puntos', points); }} />
           <div className="flex-1 overflow-auto p-2 min-h-[120px]">
             {cart.length === 0 ? (
               <p className="p-4 text-sm text-fg-faint">Agregá productos con la búsqueda, escaneando código o producto manual.</p>
@@ -1470,7 +1503,7 @@ export default function POSPage() {
         <button type="button" onClick={openPayment} disabled={cart.length === 0 || cobrandoBusy} className={`rounded-xl px-5 py-3 font-bold disabled:opacity-50 ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-green-600 text-white'}`}>{selectedCustomer ? 'Confirmar' : 'Cobrar'}</button>
       </div>
 
-      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} onSilent={() => setSilentPrompt({ productId: item.productId, name: item.name, from: 'cart' })} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div><button type="button" onClick={() => { setCustomerSearch(''); setShowCustomer(true); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised2 text-fg'}`}><span className="truncate">👤 {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}</span><span className="shrink-0 text-xs">{selectedCustomer ? (selectedCustomer.balance != null && selectedCustomer.balance > 0 ? `Debe $${Number(selectedCustomer.balance).toFixed(0)}` : 'Cambiar') : 'Elegir'}</span></button><div className="grid grid-cols-2 gap-2"><button type="button" disabled={cart.length === 0} onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { setShowMobileCart(false); void handleCobrar('fiado'); } }} className="rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn disabled:opacity-50">A cuenta corriente</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
+      {showMobileCart && <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setShowMobileCart(false)}><div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-hair bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between border-b border-hair-soft px-4 py-3"><div><h2 className="font-semibold text-fg">Carrito</h2><p className="font-mono text-xs text-fg-faint">{cart.reduce((sum, item) => sum + item.qty, 0)} ítems</p></div><button type="button" onClick={() => setShowMobileCart(false)} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted">Cerrar</button></div><div className="min-h-[120px] flex-1 overflow-y-auto p-3" data-pos-cart>{cart.length === 0 ? <p className="py-8 text-center text-sm text-fg-faint">El carrito está vacío.</p> : <ul className="space-y-2">{cart.map((item) => <CartItemRow key={item.productId} item={item} onMinus={() => updateQty(item.productId, -1)} onPlus={() => updateQty(item.productId, 1)} onQtyChange={(qty) => setItemQty(item.productId, qty)} onPriceChange={(price) => setItemPrice(item.productId, price)} onRemove={() => removeItem(item.productId)} onSilent={() => setSilentPrompt({ productId: item.productId, name: item.name, from: 'cart' })} />)}</ul>}</div><div className="space-y-2 border-t border-hair-soft p-4"><LoyaltyPosBar total={total} attachment={loyaltyAttachment} pointsToRedeem={loyaltyPoints} onAttachment={setLoyaltyAttachment} onPoints={setLoyaltyPoints} onPayWithPoints={(points) => { setLoyaltyPoints(points); setShowMobileCart(false); void handleCobrar('puntos', points); }} /><div className="flex justify-between text-sm text-fg-muted"><span>Subtotal</span><span className="font-mono tabular-nums">${subtotal.toFixed(0)}</span></div>{discountTotal > 0 && <div className="flex justify-between text-sm text-warn"><span>Descuento</span><span className="font-mono tabular-nums">-${discountTotal.toFixed(0)}</span></div>}<div className="flex justify-between text-xl font-bold text-fg"><span>Total</span><span className="font-mono tabular-nums">${total.toFixed(0)}</span></div><button type="button" onClick={() => { setCustomerSearch(''); setShowCustomer(true); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${selectedCustomer ? 'bg-[var(--warn-soft)] text-warn' : 'bg-raised2 text-fg'}`}><span className="truncate">👤 {selectedCustomer ? selectedCustomer.name : 'Consumidor final'}</span><span className="shrink-0 text-xs">{selectedCustomer ? (selectedCustomer.balance != null && selectedCustomer.balance > 0 ? `Debe $${Number(selectedCustomer.balance).toFixed(0)}` : 'Cambiar') : 'Elegir'}</span></button><div className="grid grid-cols-2 gap-2"><button type="button" disabled={cart.length === 0} onClick={() => { if (!selectedCustomer) { setCustomerSearch(''); setShowCustomer(true); } else { setShowMobileCart(false); void handleCobrar('fiado'); } }} className="rounded-lg bg-[var(--warn-soft)] py-3 font-medium text-warn disabled:opacity-50">A cuenta corriente</button><button type="button" onClick={() => { setShowMobileCart(false); setShowPaused(true); }} className="rounded-lg bg-raised2 py-3 font-medium text-fg">Pausar (F6)</button></div></div></div></div>}
 
       {showOpenCaja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { setShowOpenCaja(false); pendingPaymentAfterOpenRef.current = false; }}>
@@ -1746,10 +1779,26 @@ export default function POSPage() {
             <label className="mb-3 block text-sm text-fg-muted">Nombre<input autoFocus type="text" value={quickName} onChange={(event) => setQuickName(event.target.value)} placeholder="Nombre del producto" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg placeholder:text-fg-faint focus-brand" /></label>
             <label className="mb-3 block text-sm text-fg-muted">Precio<input type="text" inputMode="decimal" value={quickPrice} onChange={(event) => setQuickPrice(event.target.value)} placeholder="0,00" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono tabular-nums text-fg placeholder:text-fg-faint focus-brand" /></label>
             <label className="mb-3 block text-sm text-fg-muted">SKU / código de barras <span className="text-fg-faint">(opcional)</span><input type="text" value={quickBarcode} onChange={(event) => setQuickBarcode(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createQuickProduct(); }} placeholder="Código escaneable" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 font-mono text-fg placeholder:text-fg-faint focus-brand" /></label>
-            <div className="mb-5">
+            <div className="mb-4">
               <p className="mb-2 text-sm text-fg-muted">Imagen (Serper)</p>
               <SerperImagePicker compact query={[quickName].filter(Boolean).join(' ')} value={quickImageUrl} onChange={setQuickImageUrl} />
             </div>
+            <label className="mb-2 flex items-center justify-between gap-3 text-sm text-fg"><span>Producto silencioso</span><input type="checkbox" checked={quickSilent} onChange={(event) => setQuickSilent(event.target.checked)} /></label>
+            <label className="mb-2 flex items-center justify-between gap-3 text-sm text-fg"><span>Producto comisionado</span><input type="checkbox" checked={quickConsigned} onChange={(event) => { setQuickConsigned(event.target.checked); if (event.target.checked && !consignmentParties.length) void api<{id:string;name:string;active:boolean}[]>('/consignment/parties').then((rows) => { const active = rows.filter((row) => row.active); setConsignmentParties(active); if (active.length === 1) setQuickPartyId(active[0].id); }); }} /></label>
+            {quickConsigned && (
+              <div className="mb-4 space-y-2">
+                {consignmentParties.length === 0 ? <p className="text-sm text-warn">Primero tenés que crear una entidad en Comisionados. <Link href="/comisionados" className="underline">Abrir Comisionados</Link></p> : (
+                  <label className="block text-sm text-fg-muted">Entidad comisionada
+                    <select value={quickPartyId} onChange={(event) => setQuickPartyId(event.target.value)} className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg">
+                      {consignmentParties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="block text-sm text-fg-muted">% particular de este producto <span className="text-fg-faint">(opcional)</span>
+                  <input value={quickCommission} onChange={(event) => setQuickCommission(event.target.value)} placeholder="Usa el de la entidad si queda vacío" className="mt-1 w-full rounded-lg border border-hair bg-raised px-3 py-2 text-fg" />
+                </label>
+              </div>
+            )}
             <div className="flex gap-2"><button type="button" disabled={quickBusy} onClick={() => setShowQuickProduct(false)} className="flex-1 rounded-lg border border-hair bg-raised py-2 text-fg-muted hover:bg-raised2 disabled:opacity-50">Cancelar</button><button type="button" disabled={quickBusy} onClick={() => void createQuickProduct()} className="btn-brand flex-1 rounded-lg py-2 font-medium disabled:opacity-50">{quickBusy ? 'Creando…' : 'Crear y agregar'}</button></div>
           </div>
         </div>

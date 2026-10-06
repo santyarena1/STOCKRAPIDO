@@ -14,10 +14,21 @@ export type PosSessionCartItem = {
   silentTicket?: boolean;
 };
 
+export type PosLoyaltyAttachment = {
+  id: string;
+  name: string;
+  balancePoints: number;
+  arsLabel: string;
+  checkInId?: string | null;
+  hint?: string | null;
+} | null;
+
 export type PosSessionSnapshot = {
   cart: PosSessionCartItem[];
   discountTotal: number;
   selectedCustomer: PosSessionCustomer;
+  loyalty?: PosLoyaltyAttachment;
+  pointsToRedeem?: number;
 };
 
 const STORAGE_KEY = 'stockrapido:pos-session';
@@ -44,7 +55,19 @@ export function readPosSession(): PosSessionSnapshot | null {
                 typeof v.selectedCustomer.balance === 'number' ? v.selectedCustomer.balance : undefined,
             }
           : null;
-    return { cart, discountTotal, selectedCustomer };
+    const loyalty =
+      v.loyalty && typeof v.loyalty.id === 'string' && typeof v.loyalty.name === 'string'
+        ? {
+            id: v.loyalty.id,
+            name: v.loyalty.name,
+            balancePoints: Number(v.loyalty.balancePoints) || 0,
+            arsLabel: typeof v.loyalty.arsLabel === 'string' ? v.loyalty.arsLabel : '',
+            checkInId: v.loyalty.checkInId ?? null,
+            hint: v.loyalty.hint ?? null,
+          }
+        : null;
+    const pointsToRedeem = typeof v.pointsToRedeem === 'number' && Number.isFinite(v.pointsToRedeem) ? v.pointsToRedeem : 0;
+    return { cart, discountTotal, selectedCustomer, loyalty, pointsToRedeem };
   } catch {
     return null;
   }

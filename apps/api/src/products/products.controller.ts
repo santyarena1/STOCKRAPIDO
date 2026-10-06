@@ -125,7 +125,17 @@ export class ProductsController {
   @Post('quick')
   quick(
     @CurrentUser() user: User,
-    @Body() body: { name: string; price: number; barcode?: string; imageUrl?: string },
+    @Body()
+    body: {
+      name: string;
+      price: number;
+      barcode?: string;
+      imageUrl?: string;
+      silent?: boolean;
+      consigned?: boolean;
+      consignmentPartyId?: string | null;
+      consignmentCommissionPercent?: number | null;
+    },
   ) {
     return this.products.quick(user.businessId, body);
   }

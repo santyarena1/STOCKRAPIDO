@@ -1,6 +1,8 @@
 import { Inject, Injectable, BadRequestException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConsignmentService } from '../consignment/consignment.service';
+import { quickProductFlags } from '../consignment/pick-party';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
@@ -59,6 +61,7 @@ export class ProductsService {
     private prisma: PrismaService,
     @Inject(forwardRef(() => PublicCatalogService))
     private publicCatalog: PublicCatalogService,
+    private consignment: ConsignmentService,
   ) {}
 
   private queuePublicCatalogSync(businessId: string, productId: string) {
@@ -833,7 +836,19 @@ export class ProductsService {
     return product;
   }
 
-  async quick(businessId: string, data: { name: string; price: number; barcode?: string; imageUrl?: string }) {
+  async quick(
+    businessId: string,
+    data: {
+      name: string;
+      price: number;
+      barcode?: string;
+      imageUrl?: string;
+      silent?: boolean;
+      consigned?: boolean;
+      consignmentPartyId?: string | null;
+      consignmentCommissionPercent?: number | null;
+    },
+  ) {
     const name = typeof data?.name === 'string' ? data.name.trim() : '';
     const price = Number(data?.price);
     if (!name) throw new BadRequestException('El nombre es obligatorio.');
@@ -843,15 +858,33 @@ export class ProductsService {
     const imageUrl = typeof data.imageUrl === 'string' && /^https?:\/\//i.test(data.imageUrl.trim())
       ? data.imageUrl.trim()
       : undefined;
+    const flags = quickProductFlags({ silent: data.silent });
+    const percent =
+      data.consignmentCommissionPercent == null || data.consignmentCommissionPercent === ('' as unknown)
+        ? null
+        : Number(data.consignmentCommissionPercent);
+    if (data.consigned && percent != null && (!Number.isFinite(percent) || percent < 0 || percent > 100)) {
+      throw new BadRequestException('El porcentaje de comisión tiene que estar entre 0 y 100.');
+    }
     const product = await this.create(businessId, {
       name,
       price,
       barcode: typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : undefined,
       imageUrl,
-      stockControl: false,
-      incomplete: true,
+      stockControl: flags.stockControl,
+      incomplete: flags.incomplete,
+      silent: flags.silent,
     });
     if (!product) throw new BadRequestException('No se pudo crear el producto.');
+    if (data.consigned) {
+      return decorateProductUnits(
+        await this.consignment.assignProduct(businessId, product.id, {
+          consigned: true,
+          consignmentPartyId: data.consignmentPartyId,
+          consignmentCommissionPercent: percent,
+        }),
+      );
+    }
     return decorateProductUnits(product);
   }
 

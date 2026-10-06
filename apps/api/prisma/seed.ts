@@ -118,6 +118,67 @@ const CATALOGO_BASE = [
   { name: 'Bolsa grande', barcode: '779003900002', cat: 'Otros', price: 80 },
 ];
 
+async function seedLoyaltyDemo(prisma: PrismaClient, businessId: string) {
+  const existing = await prisma.loyaltyConfig.findUnique({ where: { businessId } });
+  if (existing) return;
+  const pinHash = await argon2.hash('1234', { type: 2 });
+  await prisma.loyaltyConfig.create({
+    data: {
+      businessId,
+      enabled: true,
+      pointsPerArs: 10,
+      cashbackPercent: 5,
+      programName: 'Fidelización',
+      publicSlug: `kiosco-demo-${businessId.slice(-6).toLowerCase()}`,
+      transferAlias: 'kiosco.demo',
+      transferHolder: 'Kiosco Demo',
+      transferInstructions: 'Transferí y cargá el nombre de quien transfiere.',
+    },
+  });
+  const juan = await prisma.loyaltyAccount.create({
+    data: {
+      businessId,
+      name: 'Juan Gómez',
+      phone: '1112345678',
+      normalizedPhone: '1112345678',
+      email: 'juan@demo.local',
+      normalizedEmail: 'juan@demo.local',
+      pinHash,
+      publicToken: `demo-juan-${businessId.slice(-6)}`,
+      balancePoints: 5000,
+      freePoints: 5000,
+    },
+  });
+  const martina = await prisma.loyaltyAccount.create({
+    data: {
+      businessId,
+      name: 'Martina López',
+      phone: '1198765432',
+      normalizedPhone: '1198765432',
+      pinHash,
+      publicToken: `demo-martina-${businessId.slice(-6)}`,
+    },
+  });
+  await prisma.loyaltyTransaction.create({
+    data: {
+      businessId,
+      loyaltyAccountId: juan.id,
+      type: 'EARNED',
+      pointsDelta: 5000,
+      freeDelta: 5000,
+      arsEquivalent: 500,
+      idempotencyKey: `seed-earn-${juan.id}`,
+    },
+  });
+  await prisma.loyaltyReward.createMany({
+    data: [
+      { businessId, name: 'Café', description: 'Un café del mostrador', pointsCost: 3500, active: true },
+      { businessId, name: 'Coca Cola 500 ml', description: 'Canje por una lata o botella', pointsCost: 8000, active: true, stock: 20 },
+    ],
+  });
+  console.log('Fidelización demo:', juan.name, martina.name, 'PIN 1234');
+}
+
 async function main() {
   const email = process.env.SEED_TEST_EMAIL || 'owner@demo.com';
   const password = process.env.SEED_TEST_PASSWORD || 'Demo123!';
@@ -154,6 +215,7 @@ async function main() {
       },
     });
     console.log('Negocio y usuarios creados.');
+    await seedLoyaltyDemo(prisma, business.id);
   }
 
   const count = await prisma.product.count({ where: { businessId: business!.id } });

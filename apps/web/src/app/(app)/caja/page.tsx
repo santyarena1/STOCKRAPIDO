@@ -12,6 +12,7 @@ type CajaPreview = {
   openingBanco: number;
   salesEfectivo: number;
   salesBanco: number;
+  salesPuntos?: number;
   movEfectivoIncome: number;
   movEfectivoExpense: number;
   movBancoIncome: number;
@@ -263,6 +264,11 @@ export default function CajaPage() {
                   </p>
                 </div>
               </div>
+              {(preview.salesPuntos ?? 0) > 0 && (
+                <p className="mt-3 text-xs text-fg-muted">
+                  Puntos: ${preview.salesPuntos!.toFixed(0)}. No ingresan a la caja: ya se cobraron al cargar saldo o son beneficio.
+                </p>
+              )}
             </div>
           )}
 

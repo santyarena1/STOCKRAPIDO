@@ -21,9 +21,12 @@ export class SalesController {
       discount?: number;
       paymentMethod?: string;
       cashRegisterId?: string;
-      fiscalMode?: 'internal' | 'factura_c';
+      fiscalMode?: 'internal' | 'factura_c' | 'auto_mp';
       sellerId?: string;
       clientRequestId?: string;
+      loyaltyAccountId?: string | null;
+      loyaltyCheckInId?: string | null;
+      loyaltyPointsToRedeem?: number | null;
     },
   ) {
     return this.sales.create(user.businessId, user.id, body.items, {
@@ -34,6 +37,9 @@ export class SalesController {
       fiscalMode: body.fiscalMode,
       sellerId: body.sellerId,
       clientRequestId: body.clientRequestId,
+      loyaltyAccountId: body.loyaltyAccountId,
+      loyaltyCheckInId: body.loyaltyCheckInId,
+      loyaltyPointsToRedeem: body.loyaltyPointsToRedeem,
     });
   }
 

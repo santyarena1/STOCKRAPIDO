@@ -75,6 +75,19 @@ model Business {
   catalogImports       CatalogImportLog[]
   deliveryIntegrations DeliveryIntegration[]
   deliveryOrders       DeliveryOrder[]
+  loyaltyConfig        LoyaltyConfig?
+  loyaltyAccounts      LoyaltyAccount[]
+  loyaltyTransactions  LoyaltyTransaction[]
+  loyaltySaleLinks     LoyaltySaleLink[]
+  loyaltyCheckIns      LoyaltyCheckIn[]
+  loyaltyTopups        LoyaltyTopupRequest[]
+  loyaltyRewards       LoyaltyReward[]
+  loyaltyRedemptions   LoyaltyRedemption[]
+  loyaltyRules         LoyaltyMilestoneRule[]
+  loyaltyMilestoneAwards LoyaltyMilestoneAward[]
+  loyaltySessions      LoyaltySession[]
+  loyaltyWalletDevices LoyaltyWalletDevice[]
+  loyaltyPinResets     LoyaltyPinReset[]
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 }
 
@@ -152,6 +165,10 @@ model User {
   refreshTokens       RefreshToken[]
   supportTickets      SupportTicket[]
   supportMessages     SupportMessage[]
+  loyaltyTransactions LoyaltyTransaction[] @relation("LoyaltyTxUser")
+  loyaltyTopupReviews LoyaltyTopupRequest[] @relation("TopupReviewer")
+  loyaltyRedemptionDeliveries LoyaltyRedemption[] @relation("RedemptionDeliverer")
+  loyaltyCheckIns     LoyaltyCheckIn[] @relation("CheckInStaff")
 }
 
 model Category {
@@ -219,6 +236,7 @@ model Product {
   deliveryOrderItems DeliveryOrderItem[]
   deliveryMappings   DeliveryProductMapping[]
   deliveryMenuItems  DeliveryMenuItem[]
+  loyaltyRewards     LoyaltyReward[]
 
   @@index([businessId, consigned])
   @@index([consignmentPartyId])
@@ -306,6 +324,12 @@ model Sale {
   externalOrderId String?
   /** UUID del intento de cobro (anti doble-submit). Único por negocio. */
   clientRequestId String?
+  /** internal | factura_c | auto_mp. El comprobante emitido queda en FiscalDocument. */
+  fiscalMode String?
+  loyaltyAccountId String?
+  loyaltyPointsRedeemed Int @default(0)
+  loyaltyArsRedeemed Decimal @default(0) @db.Decimal(14, 2)
+  loyaltyPointsEarned Int @default(0)
 
   business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user         User          @relation(fields: [userId], references: [id])
@@ -315,8 +339,14 @@ model Sale {
   fiscalDocument FiscalDocument?
   seller       Vendedor?      @relation(fields: [sellerId], references: [id])
   deliveryOrder DeliveryOrder?
+  loyaltyAccount LoyaltyAccount? @relation(fields: [loyaltyAccountId], references: [id], onDelete: SetNull)
+  loyaltyTransactions LoyaltyTransaction[]
+  loyaltySaleLink LoyaltySaleLink?
+  loyaltyMilestoneAwards LoyaltyMilestoneAward[]
+  loyaltyCheckIns LoyaltyCheckIn[] @relation("CheckInSale")
 
   @@unique([businessId, clientRequestId])
+  @@index([loyaltyAccountId])
   @@index([businessId, orderSource])
   @@index([businessId, externalOrderId])
   @@index([businessId, userId, createdAt])
@@ -557,6 +587,7 @@ model Customer {
   business  Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   sales     Sale[]
   payments  CustomerPayment[]
+  loyaltyAccounts LoyaltyAccount[]
 }
 
 model CustomerPayment {
@@ -1304,5 +1335,303 @@ model PreciosClarosCatalog {
   @@index([nameNorm])
   @@index([brand])
   @@index([syncedAt])
+}
+
+/** Programa de fidelización por comercio. Los secretos de Wallet viven en variables de entorno. */
+model LoyaltyConfig {
+  id                   String   @id @default(cuid())
+  businessId           String   @unique
+  enabled              Boolean  @default(true)
+  pointsPerArs         Int      @default(10)
+  cashbackPercent      Decimal  @default(5) @db.Decimal(6, 2)
+  checkInTtlMinutes    Int      @default(8)
+  claimTtlHours        Int      @default(168)
+  transferAlias        String?
+  transferCbuCvu       String?
+  transferHolder       String?
+  transferBank         String?
+  transferInstructions String?
+  programName          String   @default("Fidelización")
+  publicSlug           String   @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+/** Cuenta pública del cliente. El saldo visible es balancePoints; la procedencia vive en los buckets. */
+model LoyaltyAccount {
+  id                String    @id @default(cuid())
+  businessId        String
+  customerId        String?
+  name              String
+  phone             String?
+  normalizedPhone   String?
+  email             String?
+  normalizedEmail   String?
+  pinHash           String
+  active            Boolean   @default(true)
+  balancePoints     Int       @default(0)
+  purchasedPoints   Int       @default(0)
+  freePoints        Int       @default(0)
+  publicToken       String    @unique
+  appleSerial       String?   @unique
+  appleAuthTokenEnc String?
+  googleObjectId    String?
+  pinFailedCount    Int       @default(0)
+  pinLockedUntil    DateTime?
+  lastLoginAt       DateTime?
+  walletSyncedAt    DateTime?
+  walletSyncError   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  business      Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer      Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  transactions  LoyaltyTransaction[]
+  checkIns      LoyaltyCheckIn[]
+  topups        LoyaltyTopupRequest[]
+  redemptions   LoyaltyRedemption[]
+  sessions      LoyaltySession[]
+  sales         Sale[]
+  saleLinks     LoyaltySaleLink[]
+  milestoneAwards LoyaltyMilestoneAward[]
+  walletDevices LoyaltyWalletDevice[]
+  pinResets     LoyaltyPinReset[]
+
+  @@unique([businessId, normalizedPhone])
+  @@unique([businessId, normalizedEmail])
+  @@index([businessId, name])
+  @@index([businessId, active])
+}
+
+/** Ledger inmutable. Los saldos se revierten con movimientos opuestos, nunca borrando filas. */
+model LoyaltyTransaction {
+  id                 String   @id @default(cuid())
+  businessId         String
+  loyaltyAccountId   String
+  type               String
+  pointsDelta        Int
+  purchasedDelta     Int      @default(0)
+  freeDelta          Int      @default(0)
+  arsEquivalent      Decimal  @default(0) @db.Decimal(14, 2)
+  sourceSaleId       String?
+  sourceTopupId      String?
+  sourceRedemptionId String?
+  reversalOfId       String?  @unique
+  idempotencyKey     String
+  metadata           Json?
+  createdByUserId    String?
+  createdAt          DateTime @default(now())
+
+  business  Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account   LoyaltyAccount      @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+  sale      Sale?               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
+  reversalOf LoyaltyTransaction? @relation("LoyaltyReversal", fields: [reversalOfId], references: [id])
+  reversals LoyaltyTransaction[] @relation("LoyaltyReversal")
+  createdBy User?               @relation("LoyaltyTxUser", fields: [createdByUserId], references: [id])
+
+  @@unique([businessId, idempotencyKey])
+  @@index([loyaltyAccountId, createdAt])
+  @@index([businessId, type, createdAt])
+  @@index([sourceSaleId])
+  @@index([sourceTopupId])
+}
+
+model LoyaltySaleLink {
+  id                      String    @id @default(cuid())
+  businessId              String
+  saleId                  String    @unique
+  loyaltyAccountId        String?
+  pointsEarned            Int       @default(0)
+  pointsRedeemed          Int       @default(0)
+  freePointsRedeemed      Int       @default(0)
+  purchasedPointsRedeemed Int       @default(0)
+  arsRedeemed             Decimal   @default(0) @db.Decimal(14, 2)
+  claimTokenHash          String?   @unique
+  claimTokenEnc           String?
+  claimExpiresAt          DateTime?
+  claimedAt               DateTime?
+  status                  String    @default("open")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sale     Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  account  LoyaltyAccount? @relation(fields: [loyaltyAccountId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, status])
+}
+
+model LoyaltyCheckIn {
+  id               String    @id @default(cuid())
+  businessId       String
+  loyaltyAccountId String
+  status           String    @default("WAITING")
+  expiresAt        DateTime
+  attachedSaleId   String?   @unique
+  attachedByUserId String?
+  /** Mientras está WAITING vale el id de la cuenta. Unique: un solo check-in activo. */
+  openKey          String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account    LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+  attachedBy User?          @relation("CheckInStaff", fields: [attachedByUserId], references: [id])
+  attachedSale Sale?        @relation("CheckInSale", fields: [attachedSaleId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, status, expiresAt])
+  @@index([loyaltyAccountId, createdAt])
+}
+
+model LoyaltyTopupRequest {
+  id                   String    @id @default(cuid())
+  businessId           String
+  loyaltyAccountId     String
+  amountArs            Decimal   @db.Decimal(14, 2)
+  points               Int
+  pointsPerArsSnapshot Int
+  payerName            String
+  note                 String?
+  reference            String?
+  status               String    @default("PENDING")
+  reviewedById         String?
+  reviewedAt           DateTime?
+  rejectReason         String?
+  transactionId        String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account    LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+  reviewedBy User?          @relation("TopupReviewer", fields: [reviewedById], references: [id])
+
+  @@index([businessId, status, createdAt])
+}
+
+model LoyaltyReward {
+  id              String   @id @default(cuid())
+  businessId      String
+  name            String
+  description     String?
+  imageUrl        String?
+  pointsCost      Int
+  active          Boolean  @default(true)
+  stock           Int?
+  linkedProductId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business    Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product     Product?             @relation(fields: [linkedProductId], references: [id], onDelete: SetNull)
+  redemptions LoyaltyRedemption[]
+
+  @@index([businessId, active])
+}
+
+model LoyaltyRedemption {
+  id               String    @id @default(cuid())
+  businessId       String
+  loyaltyAccountId String
+  rewardId         String
+  pointsCost       Int
+  code             String
+  status           String    @default("PENDING")
+  transactionId    String?   @unique
+  deliveredById    String?
+  deliveredAt      DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  business    Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account     LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+  reward      LoyaltyReward  @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  deliveredBy User?          @relation("RedemptionDeliverer", fields: [deliveredById], references: [id])
+
+  @@unique([businessId, code])
+  @@index([businessId, status, createdAt])
+}
+
+model LoyaltyMilestoneRule {
+  id              String   @id @default(cuid())
+  businessId      String
+  name            String
+  everyNPurchases Int
+  bonusPoints     Int
+  active          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  awards   LoyaltyMilestoneAward[]
+
+  @@index([businessId, active])
+}
+
+model LoyaltyMilestoneAward {
+  id               String   @id @default(cuid())
+  businessId       String
+  ruleId           String
+  loyaltyAccountId String
+  saleId           String?
+  purchaseCount    Int
+  transactionId    String?  @unique
+  createdAt        DateTime @default(now())
+
+  business Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  rule     LoyaltyMilestoneRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  account  LoyaltyAccount       @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+  sale     Sale?                @relation(fields: [saleId], references: [id], onDelete: SetNull)
+
+  @@unique([ruleId, saleId])
+  @@index([businessId, loyaltyAccountId])
+}
+
+model LoyaltySession {
+  id               String    @id @default(cuid())
+  businessId       String
+  loyaltyAccountId String
+  tokenHash        String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  business Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account  LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+
+  @@index([loyaltyAccountId, expiresAt])
+}
+
+model LoyaltyWalletDevice {
+  id                      String   @id @default(cuid())
+  businessId              String
+  loyaltyAccountId        String
+  deviceLibraryIdentifier String
+  pushToken               String
+  passTypeIdentifier      String
+  serialNumber            String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  business Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account  LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceLibraryIdentifier, serialNumber])
+  @@index([serialNumber])
+}
+
+model LoyaltyPinReset {
+  id               String    @id @default(cuid())
+  businessId       String
+  loyaltyAccountId String
+  tokenHash        String    @unique
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  business Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account  LoyaltyAccount @relation(fields: [loyaltyAccountId], references: [id], onDelete: Cascade)
 }
 

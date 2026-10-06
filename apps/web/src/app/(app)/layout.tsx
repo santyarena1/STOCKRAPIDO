@@ -16,6 +16,7 @@ import {
   Settings,
   Shield,
   SlidersHorizontal,
+  Star,
   ShoppingCart,
   Sun,
   Truck,
@@ -79,6 +80,7 @@ const GROUPS = [
       { href: '/caja', label: 'Caja' },
       { href: '/clientes', label: 'Clientes / Fiados' },
       { href: '/comisionados', label: 'Comisionados' },
+      { href: '/fidelizacion', label: 'Fidelización', icon: Star },
     ],
   },
   {

@@ -4,6 +4,8 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { ProductsService } from '../products/products.service';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { ConsignmentService } from '../consignment/consignment.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { arsToCents, centsToArsString, collectedForChannel, resolveFiscalMode } from '../../../../shared/loyalty-money';
 
 export type SaleItemInput =
   | { productId: string; qty: number; unitPrice: number; silentTicket?: boolean }
@@ -53,6 +55,7 @@ export class SalesService {
     private products: ProductsService,
     private fiscal: FiscalService,
     private consignment: ConsignmentService,
+    private loyalty: LoyaltyService,
   ) {}
 
   private async returnExistingSale(saleId: string, businessId: string) {
@@ -70,8 +73,11 @@ export class SalesService {
       discount?: number;
       paymentMethod?: string;
       cashRegisterId?: string;
-      fiscalMode?: 'internal' | 'factura_c';
+      fiscalMode?: 'internal' | 'factura_c' | 'auto_mp';
       sellerId?: string;
+      loyaltyAccountId?: string | null;
+      loyaltyCheckInId?: string | null;
+      loyaltyPointsToRedeem?: number | null;
       orderSource?: string;
       externalOrderId?: string;
       clientRequestId?: string;
@@ -171,35 +177,62 @@ export class SalesService {
         items: { select: { productId: true, productName: true, qty: true, unitPrice: true } },
       },
     });
+    const loyaltyAccountHint = await this.loyalty.peekAccountId(
+      businessId,
+      options?.loyaltyAccountId,
+      options?.loyaltyCheckInId,
+    );
     for (const sale of recent) {
       if (moneyKey(Number(sale.totalFinal)) !== moneyKey(totalFinal)) continue;
       if (moneyKey(Number(sale.discount)) !== moneyKey(discount)) continue;
       if ((sale.customerId || null) !== (options?.customerId || null)) continue;
       if ((sale.sellerId || null) !== (options?.sellerId || null)) continue;
+      if ((sale.loyaltyAccountId || null) !== (loyaltyAccountHint || null)) continue;
       if (storedItemsFingerprint(sale.items) !== itemsFp) continue;
       return this.returnExistingSale(sale.id, businessId);
     }
 
     let sale;
+    let walletAccountId: string | null = null;
     try {
-      sale = await this.prisma.sale.create({
-        data: {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const row = await tx.sale.create({
+          data: {
+            businessId,
+            userId,
+            customerId: options?.customerId,
+            total: new Decimal(total),
+            discount: new Decimal(discount),
+            totalFinal: new Decimal(totalFinal),
+            paymentMethod: options?.paymentMethod,
+            cashRegisterId,
+            sellerId: options?.sellerId ?? null,
+            orderSource: options?.orderSource ?? null,
+            externalOrderId: options?.externalOrderId ?? null,
+            clientRequestId,
+            fiscalMode: options?.fiscalMode ?? 'internal',
+            items: { create: saleItems },
+          },
+          include: { items: { include: { product: true } }, customer: true },
+        });
+        const applied = await this.loyalty.applyToNewSale(tx, {
           businessId,
           userId,
-          customerId: options?.customerId,
-          total: new Decimal(total),
-          discount: new Decimal(discount),
-          totalFinal: new Decimal(totalFinal),
-          paymentMethod: options?.paymentMethod,
-          cashRegisterId,
-          sellerId: options?.sellerId ?? null,
-          orderSource: options?.orderSource ?? null,
-          externalOrderId: options?.externalOrderId ?? null,
-          clientRequestId,
-          items: { create: saleItems },
-        },
-        include: { items: { include: { product: true } }, customer: true },
+          saleId: row.id,
+          totalCents: arsToCents(row.totalFinal),
+          paymentMethod: options?.paymentMethod || 'efectivo',
+          loyaltyAccountId: options?.loyaltyAccountId,
+          loyaltyCheckInId: options?.loyaltyCheckInId,
+          pointsRequested: options?.loyaltyPointsToRedeem,
+        });
+        walletAccountId = applied.accountIdForWallet;
+        if (!applied.accountIdForWallet) return row;
+        return tx.sale.findFirstOrThrow({
+          where: { id: row.id, businessId },
+          include: { items: { include: { product: true } }, customer: true },
+        });
       });
+      sale = created;
     } catch (err) {
       // Carrera: otro request creó la misma venta un instante antes.
       if (clientRequestId && isUniqueViolation(err)) {
@@ -234,10 +267,15 @@ export class SalesService {
     }
 
     try {
-      if (options?.customerId && options?.paymentMethod === 'fiado') {
+      const tender = collectedForChannel(
+        arsToCents(sale.totalFinal),
+        arsToCents(sale.loyaltyArsRedeemed),
+        sale.paymentMethod,
+      );
+      if (sale.customerId && sale.paymentMethod === 'fiado' && tender.fiado > 0) {
         await this.prisma.customer.update({
-          where: { id: options.customerId },
-          data: { balance: { increment: totalFinal } },
+          where: { id: sale.customerId },
+          data: { balance: { increment: new Decimal(centsToArsString(tender.fiado)) } },
         });
       }
     } catch (err) {
@@ -255,9 +293,10 @@ export class SalesService {
     }
 
     let fiscalDocument: Awaited<ReturnType<FiscalService['createInternal']>> | null = null;
+    const resolvedFiscal = resolveFiscalMode(options?.fiscalMode, sale.paymentMethod);
     try {
       fiscalDocument =
-        options?.fiscalMode === 'factura_c'
+        resolvedFiscal === 'factura_c'
           ? await this.fiscal.issueFacturaC(businessId, sale.id)
           : await this.fiscal.createInternal(businessId, sale.id);
     } catch (err) {
@@ -269,6 +308,7 @@ export class SalesService {
       }
     }
 
+    if (walletAccountId) void this.loyalty.syncWallet(walletAccountId);
     return { ...sale, fiscalDocument };
   }
 
@@ -308,6 +348,7 @@ export class SalesService {
         seller: { select: { name: true } },
         customer: true,
         fiscalDocument: true,
+        loyaltyAccount: { select: { id: true, name: true } },
       },
     });
   }
@@ -321,6 +362,7 @@ export class SalesService {
         seller: { select: { name: true } },
         customer: true,
         fiscalDocument: true,
+        loyaltyAccount: { select: { id: true, name: true } },
       },
     });
   }
@@ -348,12 +390,14 @@ export class SalesService {
     }
 
     if (sale.paymentMethod === 'fiado' && sale.customerId) {
+      const tender = collectedForChannel(arsToCents(sale.totalFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod);
       await this.prisma.customer.update({
         where: { id: sale.customerId },
-        data: { balance: { decrement: Number(sale.totalFinal) } },
+        data: { balance: { decrement: new Decimal(centsToArsString(tender.fiado)) } },
       });
     }
 
+    await this.loyalty.reverseSale(businessId, saleId);
     await this.consignment.voidSaleDebts(businessId, saleId);
 
     await this.prisma.sale.delete({ where: { id: saleId } });
@@ -388,12 +432,14 @@ export class SalesService {
     }
 
     if (sale.paymentMethod === 'fiado' && sale.customerId) {
+      const tender = collectedForChannel(arsToCents(sale.totalFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod);
       await this.prisma.customer.update({
         where: { id: sale.customerId },
-        data: { balance: { decrement: Number(sale.totalFinal) } },
+        data: { balance: { decrement: new Decimal(centsToArsString(tender.fiado)) } },
       });
     }
 
+    await this.loyalty.reverseSale(businessId, saleId);
     await this.consignment.voidSaleDebts(businessId, saleId);
 
     await this.prisma.sale.update({
@@ -437,17 +483,19 @@ export class SalesService {
     const newPayment = dto.paymentMethod !== undefined ? dto.paymentMethod : oldPayment;
     const newCustomerId = dto.customerId !== undefined ? dto.customerId : oldCustomerId;
 
-    if (oldPayment === 'fiado' && oldCustomerId) {
+    const oldFiado = collectedForChannel(arsToCents(oldFinal), arsToCents(sale.loyaltyArsRedeemed), oldPayment).fiado;
+    const newFiado = collectedForChannel(arsToCents(totalFinal), arsToCents(sale.loyaltyArsRedeemed), newPayment).fiado;
+    if (oldPayment === 'fiado' && oldCustomerId && oldFiado > 0) {
       await this.prisma.customer.update({
         where: { id: oldCustomerId },
-        data: { balance: { decrement: oldFinal } },
+        data: { balance: { decrement: new Decimal(centsToArsString(oldFiado)) } },
       });
     }
 
-    if (newPayment === 'fiado' && newCustomerId) {
+    if (newPayment === 'fiado' && newCustomerId && newFiado > 0) {
       await this.prisma.customer.update({
         where: { id: newCustomerId },
-        data: { balance: { increment: totalFinal } },
+        data: { balance: { increment: new Decimal(centsToArsString(newFiado)) } },
       });
     }
 
@@ -525,11 +573,13 @@ export class SalesService {
     });
 
     if (sale.paymentMethod === 'fiado' && sale.customerId) {
-      const deltaBal = totalFinal - oldFinal;
+      const oldFiado = collectedForChannel(arsToCents(oldFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod).fiado;
+      const newFiado = collectedForChannel(arsToCents(totalFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod).fiado;
+      const deltaBal = newFiado - oldFiado;
       if (deltaBal !== 0) {
         await this.prisma.customer.update({
           where: { id: sale.customerId },
-          data: { balance: { increment: deltaBal } },
+          data: { balance: { increment: new Decimal(centsToArsString(deltaBal)) } },
         });
       }
     }
@@ -562,11 +612,13 @@ export class SalesService {
     const remaining = await this.prisma.saleItem.count({ where: { saleId } });
     if (remaining === 0) {
       if (sale.paymentMethod === 'fiado' && sale.customerId) {
+        const tender = collectedForChannel(arsToCents(oldFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod);
         await this.prisma.customer.update({
           where: { id: sale.customerId },
-          data: { balance: { decrement: oldFinal } },
+          data: { balance: { decrement: new Decimal(centsToArsString(tender.fiado)) } },
         });
       }
+      await this.loyalty.reverseSale(businessId, saleId);
       await this.prisma.sale.delete({ where: { id: saleId } });
       return { removed: true as const, saleDeleted: true };
     }
@@ -588,10 +640,15 @@ export class SalesService {
     });
 
     if (sale.paymentMethod === 'fiado' && sale.customerId) {
-      await this.prisma.customer.update({
-        where: { id: sale.customerId },
-        data: { balance: { increment: totalFinal - oldFinal } },
-      });
+      const oldFiado = collectedForChannel(arsToCents(oldFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod).fiado;
+      const newFiado = collectedForChannel(arsToCents(totalFinal), arsToCents(sale.loyaltyArsRedeemed), sale.paymentMethod).fiado;
+      const deltaBal = newFiado - oldFiado;
+      if (deltaBal !== 0) {
+        await this.prisma.customer.update({
+          where: { id: sale.customerId },
+          data: { balance: { increment: new Decimal(centsToArsString(deltaBal)) } },
+        });
+      }
     }
 
     return { removed: true as const, saleDeleted: false, sale: await this.getOne(saleId, businessId) };
