@@ -429,6 +429,13 @@ export default function POSPage() {
     if (showPayment) void refreshOpenCashRegister();
   }, [showPayment, refreshOpenCashRegister]);
 
+  const openPaymentModal = useCallback(() => {
+    // Sacamos el foco del buscador para que las teclas 1-6 elijan el medio de pago.
+    searchRef.current?.blur();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setShowPayment(true);
+  }, []);
+
   const handleOpenCaja = async (e: React.FormEvent) => {
     e.preventDefault();
     const cash = parseFloat(openCajaCash.replace(',', '.')) || 0;
@@ -452,7 +459,7 @@ export default function POSPage() {
       if (pendingPaymentAfterOpenRef.current && cart.length > 0) {
         pendingPaymentAfterOpenRef.current = false;
         if (selectedCustomer) void handleCobrar('fiado');
-        else setShowPayment(true);
+        else openPaymentModal();
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al abrir caja');
@@ -463,6 +470,7 @@ export default function POSPage() {
 
   const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
   const total = Math.max(0, subtotal - discountTotal);
+
   const openPayment = () => {
     if (cart.length === 0) return;
     if (!openCashRegisterId) {
@@ -475,7 +483,7 @@ export default function POSPage() {
       void handleCobrar('fiado');
       return;
     }
-    setShowPayment(true);
+    openPaymentModal();
   };
 
   const fetchPaused = useCallback(async () => {
@@ -937,12 +945,20 @@ export default function POSPage() {
           confirmPendingPayment();
           return;
         }
-        const typingInField = active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
-        if (showPayment && !typingInField && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
-          const idx = parseInt(e.key, 10) - 1;
-          if (PAYMENT_METHODS[idx]) {
-            e.preventDefault();
-            pickPaymentMethod(PAYMENT_METHODS[idx].id);
+        // 1-6 eligen medio de pago (teclado principal o numpad). Solo se bloquean
+        // si el foco está en el input de billete (para poder tipar el monto).
+        if (showPayment && active !== cashPaidInputRef.current) {
+          const digitFromCode =
+            /^Digit([1-6])$/.exec(e.code)?.[1] ??
+            /^Numpad([1-6])$/.exec(e.code)?.[1] ??
+            null;
+          const digit = digitFromCode ?? (['1', '2', '3', '4', '5', '6'].includes(e.key) ? e.key : null);
+          if (digit) {
+            const idx = parseInt(digit, 10) - 1;
+            if (PAYMENT_METHODS[idx]) {
+              e.preventDefault();
+              pickPaymentMethod(PAYMENT_METHODS[idx].id);
+            }
           }
         }
         return;
@@ -969,7 +985,7 @@ export default function POSPage() {
           void handleCobrar('fiado');
           return;
         }
-        setShowPayment(true);
+        openPaymentModal();
         return;
       }
       if (e.key === 'F6') {
@@ -1015,7 +1031,7 @@ export default function POSPage() {
         if (now - lastEnterForCobrarRef.current <= DOUBLE_ENTER_MS) {
           lastEnterForCobrarRef.current = 0;
           if (selectedCustomer) void handleCobrar('fiado');
-          else setShowPayment(true);
+          else openPaymentModal();
         } else {
           lastEnterForCobrarRef.current = now;
         }
@@ -1045,6 +1061,7 @@ export default function POSPage() {
     cart.length,
     pickPaymentMethod,
     confirmPendingPayment,
+    openPaymentModal,
     paymentMethodPending,
     openCashRegisterId,
     addToCart,
@@ -1117,7 +1134,7 @@ export default function POSPage() {
   };
 
   const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status,loyaltyAttachment,loyaltyPoints})});if(!r.ok)throw Error();clearPosSession();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setLoyaltyAttachment(null);setLoyaltyPoints(0);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
-  const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setLoyaltyAttachment((v as {loyaltyAttachment?:PosLoyaltyAttachment}).loyaltyAttachment||null);setLoyaltyPoints(Number((v as {loyaltyPoints?:number}).loyaltyPoints)||0);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);setShowPayment(true)}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
+  const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setLoyaltyAttachment((v as {loyaltyAttachment?:PosLoyaltyAttachment}).loyaltyAttachment||null);setLoyaltyPoints(Number((v as {loyaltyPoints?:number}).loyaltyPoints)||0);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);openPaymentModal()}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
 
   const addManualProduct = () => {
     const name = manualName.trim() || 'Producto manual';
@@ -1183,7 +1200,7 @@ export default function POSPage() {
 
   return (
     <div className="flex h-full flex-col bg-app">
-      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-2 sm:gap-3"><span className="w-full text-xs font-semibold text-fg-muted uppercase sm:w-auto">Próximas ventas</span><div className="inline-flex max-w-full rounded-lg border border-hair overflow-x-auto"><button type="button" onClick={()=>setFiscalMode('internal')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button><button type="button" onClick={()=>setFiscalMode('auto_mp')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='auto_mp'?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Mercado Pago</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
+      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-hair-soft bg-surface flex flex-wrap items-center gap-2 sm:gap-3"><span className="w-full text-xs font-semibold text-fg-muted uppercase sm:w-auto">Próximas ventas</span><div className="inline-flex max-w-full rounded-lg border border-hair overflow-x-auto"><button type="button" onClick={()=>setFiscalMode('internal')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='internal'?'bg-[var(--warn-soft)] text-warn':'bg-raised text-fg-muted')}>Comprobante interno</button><button type="button" onClick={()=>setFiscalMode('factura_c')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='factura_c'?'bg-[var(--ok-soft)] text-ok':'bg-raised text-fg-muted')}>Factura C</button><button type="button" onClick={()=>setFiscalMode('auto_mp')} className={'whitespace-nowrap px-3 py-2 text-sm font-semibold '+(fiscalMode==='auto_mp'?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>MODO PRO</button></div><div className="inline-flex rounded-lg border border-hair overflow-hidden"><button type="button" onClick={()=>setPrintEnabled(true)} className={'px-3 py-2 text-sm font-semibold '+(printEnabled?'bg-brand-highlight text-brand':'bg-raised text-fg-muted')}>Imprimir</button><button type="button" onClick={()=>setPrintEnabled(false)} className={'px-3 py-2 text-sm font-semibold '+(!printEnabled?'bg-raised2 text-fg':'bg-raised text-fg-muted')}>No imprimir</button></div><div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">{sellers.length === 0 ? <Link href="/config/vendedores" className="rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">Creá vendedores en Configuración</Link> : <><span className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-semibold text-brand">Vendedor: <strong>{activeSeller?.name ?? 'Sin seleccionar'}</strong></span><button type="button" onClick={() => setShowSeller(true)} className="rounded-lg border border-hair px-3 py-2 text-sm text-fg-muted hover:bg-raised">Cambiar vendedor</button></>}<button type="button" onClick={()=>{setShowPaused(true);void fetchPaused()}} className="px-3 py-2 rounded-lg border border-hair text-sm text-fg-muted hover:bg-raised">En espera ({pausedList.length})</button></div></div>
       {invoiceAlertBanner && (
         <div className="shrink-0 border-b border-amber-700/40 bg-amber-950/30 px-3 py-2 sm:px-4">
           <p className="text-xs text-amber-200">{invoiceAlertBanner}</p>
