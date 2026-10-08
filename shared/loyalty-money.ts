@@ -1,5 +1,5 @@
 /**
- * Aritmética de fidelización y decisión fiscal del modo Mercado Pago.
+ * Aritmética de fidelización y decisión fiscal del MODO PRO.
  * Enteros en centavos y puntos. El redondeo de puntos es siempre hacia abajo.
  */
 
