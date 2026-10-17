@@ -35,10 +35,92 @@ type SaveInvoiceAlert = {
   invoiceYearAlertPercent?: number;
 };
 
+type WsaaTicket = {
+  token: string;
+  sign: string;
+  /** Epoch ms; renovamos ~60s antes. */
+  expiresAt: number;
+};
+
 @Injectable()
 export class FiscalService {
   private parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false, trimValues: true });
+  /** Ticket WSAA reutilizable por negocio (ARCA solo permite uno activo por servicio). */
+  private readonly wsaaTickets = new Map<string, WsaaTicket>();
+  /** Serializa emisiones por negocio para evitar choques de numeración. */
+  private readonly emitChains = new Map<string, Promise<unknown>>();
   constructor(private prisma: PrismaService) {}
+
+  private invalidateWsaa(businessId: string) {
+    this.wsaaTickets.delete(businessId);
+  }
+
+  private async withEmitLock<T>(businessId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.emitChains.get(businessId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const chained = previous.catch(() => undefined).then(() => gate);
+    this.emitChains.set(businessId, chained);
+    await previous.catch(() => undefined);
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this.emitChains.get(businessId) === chained) this.emitChains.delete(businessId);
+    }
+  }
+
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Errores de red / timeout / WSAA que suelen resolverse reintentando. */
+  private isTransientArcaError(message: string) {
+    const m = message.toLowerCase();
+    return (
+      m.includes('tiempo de espera') ||
+      m.includes('timeout') ||
+      m.includes('econnreset') ||
+      m.includes('econnrefused') ||
+      m.includes('etimedout') ||
+      m.includes('socket hang up') ||
+      m.includes('no se pudo conectar') ||
+      m.includes('alreadyauthenticated') ||
+      m.includes('already authenticated') ||
+      m.includes('coe') ||
+      m.includes('busy') ||
+      m.includes('servidor') ||
+      m.includes('temporar')
+    );
+  }
+
+  /** Número de comprobante ya usado (carrera entre cobros). */
+  private isDuplicateNumberError(message: string) {
+    const m = message.toLowerCase();
+    return (
+      m.includes('10016') ||
+      m.includes('ya se encuentra registrado') ||
+      m.includes('ya existe') ||
+      m.includes('comprobante duplicado') ||
+      (m.includes('nro. de comprobante') && m.includes('registrado'))
+    );
+  }
+
+  private isAuthError(message: string) {
+    const m = message.toLowerCase();
+    return (
+      m.includes('alreadyauthenticated') ||
+      m.includes('already authenticated') ||
+      m.includes('wsaa') ||
+      m.includes('autenticación') ||
+      m.includes('autenticacion') ||
+      m.includes('login ticket') ||
+      m.includes('logincms') ||
+      (m.includes('credenciales') && m.includes('wsaa'))
+    );
+  }
 
   async getPublicConfig(businessId: string) {
     const c = await this.prisma.fiscalConfig.findUnique({ where: { businessId } });
@@ -190,6 +272,8 @@ export class FiscalService {
       address: dto.address?.trim() || null, certificateEncrypted, privateKeyEncrypted, certificateExpiresAt,
       portalUsername: portalUsername || cuit, portalPasswordEncrypted, afipSdkAccessTokenEncrypted, receivedAutoSync,
       ...alert } });
+    // Cert/CUIT/ambiente pueden cambiar: forzar ticket WSAA nuevo.
+    this.invalidateWsaa(businessId);
     return this.getPublicConfig(businessId);
   }
 
@@ -693,7 +777,9 @@ export class FiscalService {
   }
   private createCms(certPem: string, keyPem: string) {
     const now = Date.now();
-    const tra = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${Math.floor(now / 1000)}</uniqueId><generationTime>${new Date(now - 600000).toISOString()}</generationTime><expirationTime>${new Date(now + 600000).toISOString()}</expirationTime></header><service>${WSFE_SERVICE}</service></loginTicketRequest>`;
+    // uniqueId en ms (no en segundos): evita choques si hay dos loginCms en el mismo segundo.
+    const uniqueId = now % 2_147_483_647;
+    const tra = `<?xml version="1.0" encoding="UTF-8"?><loginTicketRequest version="1.0"><header><uniqueId>${uniqueId}</uniqueId><generationTime>${new Date(now - 600000).toISOString()}</generationTime><expirationTime>${new Date(now + 600000).toISOString()}</expirationTime></header><service>${WSFE_SERVICE}</service></loginTicketRequest>`;
     const p7 = forge.pkcs7.createSignedData();
     p7.content = forge.util.createBuffer(tra, 'utf8');
     const cert = forge.pki.certificateFromPem(certPem);
@@ -705,18 +791,46 @@ export class FiscalService {
     return forge.util.encode64(forge.asn1.toDer(p7.toAsn1()).getBytes());
   }
 
-  private async auth(businessId: string) {
+  private parseTicketExpiry(login: any, fallbackMs = 10 * 60 * 1000): number {
+    const raw = login?.header?.expirationTime || login?.header?.expirationtime;
+    if (typeof raw === 'string' && raw.trim()) {
+      const parsed = Date.parse(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return Date.now() + fallbackMs;
+  }
+
+  private async auth(businessId: string, opts?: { force?: boolean }) {
     const { config, cert, key } = await this.credentials(businessId);
+    const cached = this.wsaaTickets.get(businessId);
+    const now = Date.now();
+    if (!opts?.force && cached && cached.expiresAt > now + 60_000) {
+      return { config, token: cached.token, sign: cached.sign };
+    }
+
     const cms = this.createCms(cert, key);
     const xml = `<?xml version="1.0"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://wsaa.view.sua.dvadac.desein.afip.gov"><soapenv:Body><ser:loginCms><ser:in0>${cms}</ser:in0></ser:loginCms></soapenv:Body></soapenv:Envelope>`;
     const response = await this.postSoap(this.endpoints(config.environment).wsaa, 'loginCms', xml);
     const text = response.text;
-    if (response.status < 200 || response.status >= 300) throw new Error(`WSAA respondió HTTP ${response.status}.`);    const outer = this.parser.parse(text);
+    if (response.status < 200 || response.status >= 300) throw new Error(`WSAA respondió HTTP ${response.status}.`);
+    const outer = this.parser.parse(text);
+    const fault = this.soapError(outer);
+    // Si WSAA dice que ya hay ticket activo, reutilizar el cache si todavía sirve.
+    if (fault && this.isAuthError(fault) && cached && cached.expiresAt > now) {
+      return { config, token: cached.token, sign: cached.sign };
+    }
     const returned = outer?.Envelope?.Body?.loginCmsResponse?.loginCmsReturn;
-    if (!returned) throw new Error(this.soapError(outer) || 'WSAA no devolvió credenciales.');
+    if (!returned) throw new Error(fault || 'WSAA no devolvió credenciales.');
     const login = this.parser.parse(returned)?.loginTicketResponse;
     if (!login?.credentials?.token || !login?.credentials?.sign) throw new Error('Respuesta de autenticación de ARCA inválida.');
-    return { config, token: String(login.credentials.token), sign: String(login.credentials.sign) };
+    const token = String(login.credentials.token);
+    const sign = String(login.credentials.sign);
+    this.wsaaTickets.set(businessId, {
+      token,
+      sign,
+      expiresAt: this.parseTicketExpiry(login),
+    });
+    return { config, token, sign };
   }
 
   private soapError(parsed: any) { return parsed?.Envelope?.Body?.Fault?.faultstring || parsed?.Envelope?.Body?.Fault?.Reason?.Text; }
@@ -752,38 +866,61 @@ export class FiscalService {
 
   async issueFacturaC(businessId: string, saleId: string) {
     await assertPlanFeature(this.prisma, businessId, 'fiscal');
+    return this.withEmitLock(businessId, () => this.issueFacturaCLocked(businessId, saleId));
+  }
+
+  private async issueFacturaCLocked(businessId: string, saleId: string) {
     const existing = await this.prisma.fiscalDocument.findUnique({ where: { saleId } });
     if (existing?.status === 'AUTHORIZED') return existing;
     const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { items: { include: { product: true } } } });
     if (!sale) throw new NotFoundException('Venta no encontrada.');
     await this.prisma.fiscalDocument.upsert({ where: { saleId }, create: { businessId, saleId, kind: 'FACTURA_C', status: 'PENDING', receiptType: FACTURA_C }, update: { kind: 'FACTURA_C', status: 'PENDING', errorMessage: null } });
-    try {
-      const { config, token, sign } = await this.auth(businessId);
-      if (!config.enabled) throw new Error('La facturación ARCA está desactivada en Configuración.');
-      const authXml = this.authXml({ token, sign }, config.cuit);
-      const last = await this.wsfe(config.environment, 'FECompUltimoAutorizado', `${authXml}<ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${FACTURA_C}</ar:CbteTipo>`);
-      const lastErrors = this.collectErrors(last); if (lastErrors) throw new Error(lastErrors);
-      const number = Number(last?.CbteNro || 0) + 1;
-      const amount = Number(sale.totalFinal).toFixed(2);
-      const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).replaceAll('-', '');
-      const request = `${authXml}<ar:FeCAEReq><ar:FeCabReq><ar:CantReg>1</ar:CantReg><ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${FACTURA_C}</ar:CbteTipo></ar:FeCabReq><ar:FeDetReq><ar:FECAEDetRequest><ar:Concepto>1</ar:Concepto><ar:DocTipo>99</ar:DocTipo><ar:DocNro>0</ar:DocNro><ar:CbteDesde>${number}</ar:CbteDesde><ar:CbteHasta>${number}</ar:CbteHasta><ar:CbteFch>${date}</ar:CbteFch><ar:ImpTotal>${amount}</ar:ImpTotal><ar:ImpTotConc>0</ar:ImpTotConc><ar:ImpNeto>${amount}</ar:ImpNeto><ar:ImpOpEx>0</ar:ImpOpEx><ar:ImpTrib>0</ar:ImpTrib><ar:ImpIVA>0</ar:ImpIVA><ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz><ar:CondicionIVAReceptorId>5</ar:CondicionIVAReceptorId></ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>`;
-      const result = await this.wsfe(config.environment, 'FECAESolicitar', request);
-      const detail = result?.FeDetResp?.FECAEDetResponse;
-      const errors = this.collectErrors(result);
-      if (result?.FeCabResp?.Resultado !== 'A' || detail?.Resultado !== 'A' || !detail?.CAE) throw new Error(errors || 'ARCA rechazó el comprobante sin detalle.');
-      const cae = String(detail.CAE); const dueRaw = String(detail.CAEFchVto);
-      const due = new Date(`${dueRaw.slice(0,4)}-${dueRaw.slice(4,6)}-${dueRaw.slice(6,8)}T00:00:00-03:00`);
-      const qrData = { ver: 1, fecha: `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`, cuit: Number(config.cuit), ptoVta: config.pointOfSale,
-        tipoCmp: FACTURA_C, nroCmp: number, importe: Number(amount), moneda: 'PES', ctz: 1, tipoDocRec: 99, nroDocRec: 0, tipoCodAut: 'E', codAut: Number(cae) };
-      const qrPayload = `https://www.afip.gob.ar/fe/qr/?p=${Buffer.from(JSON.stringify(qrData)).toString('base64')}`;
-      return await this.prisma.fiscalDocument.update({ where: { saleId }, data: { status: 'AUTHORIZED', pointOfSale: config.pointOfSale, receiptNumber: number, cae, caeExpiresAt: due, qrPayload, arcaResult: result as any, errorMessage: null } });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Error desconocido al emitir en ARCA.';
-      return this.prisma.fiscalDocument.update({ where: { saleId }, data: { status: 'ERROR', errorMessage: message } });
+
+    const maxAttempts = 3;
+    let lastMessage = 'Error desconocido al emitir en ARCA.';
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const forceAuth = attempt > 1 && this.isAuthError(lastMessage);
+        if (forceAuth) this.invalidateWsaa(businessId);
+        const { config, token, sign } = await this.auth(businessId, { force: forceAuth });
+        if (!config.enabled) throw new Error('La facturación ARCA está desactivada en Configuración.');
+        const authXml = this.authXml({ token, sign }, config.cuit);
+        const last = await this.wsfe(config.environment, 'FECompUltimoAutorizado', `${authXml}<ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${FACTURA_C}</ar:CbteTipo>`);
+        const lastErrors = this.collectErrors(last); if (lastErrors) throw new Error(lastErrors);
+        const number = Number(last?.CbteNro || 0) + 1;
+        const amount = Number(sale.totalFinal).toFixed(2);
+        const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).replaceAll('-', '');
+        const request = `${authXml}<ar:FeCAEReq><ar:FeCabReq><ar:CantReg>1</ar:CantReg><ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${FACTURA_C}</ar:CbteTipo></ar:FeCabReq><ar:FeDetReq><ar:FECAEDetRequest><ar:Concepto>1</ar:Concepto><ar:DocTipo>99</ar:DocTipo><ar:DocNro>0</ar:DocNro><ar:CbteDesde>${number}</ar:CbteDesde><ar:CbteHasta>${number}</ar:CbteHasta><ar:CbteFch>${date}</ar:CbteFch><ar:ImpTotal>${amount}</ar:ImpTotal><ar:ImpTotConc>0</ar:ImpTotConc><ar:ImpNeto>${amount}</ar:ImpNeto><ar:ImpOpEx>0</ar:ImpOpEx><ar:ImpTrib>0</ar:ImpTrib><ar:ImpIVA>0</ar:ImpIVA><ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz><ar:CondicionIVAReceptorId>5</ar:CondicionIVAReceptorId></ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>`;
+        const result = await this.wsfe(config.environment, 'FECAESolicitar', request);
+        const detail = result?.FeDetResp?.FECAEDetResponse;
+        const errors = this.collectErrors(result);
+        if (result?.FeCabResp?.Resultado !== 'A' || detail?.Resultado !== 'A' || !detail?.CAE) {
+          throw new Error(errors || 'ARCA rechazó el comprobante sin detalle.');
+        }
+        const cae = String(detail.CAE); const dueRaw = String(detail.CAEFchVto);
+        const due = new Date(`${dueRaw.slice(0,4)}-${dueRaw.slice(4,6)}-${dueRaw.slice(6,8)}T00:00:00-03:00`);
+        const qrData = { ver: 1, fecha: `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`, cuit: Number(config.cuit), ptoVta: config.pointOfSale,
+          tipoCmp: FACTURA_C, nroCmp: number, importe: Number(amount), moneda: 'PES', ctz: 1, tipoDocRec: 99, nroDocRec: 0, tipoCodAut: 'E', codAut: Number(cae) };
+        const qrPayload = `https://www.afip.gob.ar/fe/qr/?p=${Buffer.from(JSON.stringify(qrData)).toString('base64')}`;
+        return await this.prisma.fiscalDocument.update({ where: { saleId }, data: { status: 'AUTHORIZED', pointOfSale: config.pointOfSale, receiptNumber: number, cae, caeExpiresAt: due, qrPayload, arcaResult: result as any, errorMessage: null } });
+      } catch (e) {
+        lastMessage = e instanceof Error ? e.message : 'Error desconocido al emitir en ARCA.';
+        const retryable =
+          attempt < maxAttempts &&
+          (this.isTransientArcaError(lastMessage) || this.isDuplicateNumberError(lastMessage) || this.isAuthError(lastMessage));
+        if (!retryable) break;
+        if (this.isAuthError(lastMessage)) this.invalidateWsaa(businessId);
+        await this.sleep(350 * attempt);
+      }
     }
+    return this.prisma.fiscalDocument.update({ where: { saleId }, data: { status: 'ERROR', errorMessage: lastMessage } });
   }
 
   async issueCreditNote(businessId: string, saleId: string) {
+    return this.withEmitLock(businessId, () => this.issueCreditNoteLocked(businessId, saleId));
+  }
+
+  private async issueCreditNoteLocked(businessId: string, saleId: string) {
     const doc = await this.prisma.fiscalDocument.findFirst({ where: { saleId, businessId } });
     if (
       !doc ||
@@ -802,64 +939,82 @@ export class FiscalService {
     });
     if (!sale) throw new NotFoundException('Venta no encontrada.');
 
-    const { config, token, sign } = await this.auth(businessId);
-    if (!config.enabled) throw new Error('La facturación ARCA está desactivada en Configuración.');
-    const authXml = this.authXml({ token, sign }, config.cuit);
-    const last = await this.wsfe(
-      config.environment,
-      'FECompUltimoAutorizado',
-      `${authXml}<ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${NOTA_CREDITO_C}</ar:CbteTipo>`,
-    );
-    const lastErrors = this.collectErrors(last);
-    if (lastErrors) throw new Error(lastErrors);
+    const maxAttempts = 3;
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const forceAuth = attempt > 1;
+        if (forceAuth) this.invalidateWsaa(businessId);
+        const { config, token, sign } = await this.auth(businessId, { force: forceAuth });
+        if (!config.enabled) throw new Error('La facturación ARCA está desactivada en Configuración.');
+        const authXml = this.authXml({ token, sign }, config.cuit);
+        const last = await this.wsfe(
+          config.environment,
+          'FECompUltimoAutorizado',
+          `${authXml}<ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${NOTA_CREDITO_C}</ar:CbteTipo>`,
+        );
+        const lastErrors = this.collectErrors(last);
+        if (lastErrors) throw new Error(lastErrors);
 
-    const creditNumber = Number(last?.CbteNro || 0) + 1;
-    const amount = Number(sale.totalFinal).toFixed(2);
-    const date = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date()).replaceAll('-', '');
-    const request = `${authXml}<ar:FeCAEReq><ar:FeCabReq><ar:CantReg>1</ar:CantReg><ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${NOTA_CREDITO_C}</ar:CbteTipo></ar:FeCabReq><ar:FeDetReq><ar:FECAEDetRequest><ar:Concepto>1</ar:Concepto><ar:DocTipo>99</ar:DocTipo><ar:DocNro>0</ar:DocNro><ar:CbteDesde>${creditNumber}</ar:CbteDesde><ar:CbteHasta>${creditNumber}</ar:CbteHasta><ar:CbteFch>${date}</ar:CbteFch><ar:ImpTotal>${amount}</ar:ImpTotal><ar:ImpTotConc>0</ar:ImpTotConc><ar:ImpNeto>${amount}</ar:ImpNeto><ar:ImpOpEx>0</ar:ImpOpEx><ar:ImpTrib>0</ar:ImpTrib><ar:ImpIVA>0</ar:ImpIVA><ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz><ar:CondicionIVAReceptorId>5</ar:CondicionIVAReceptorId><ar:CbtesAsoc><ar:CbteAsoc><ar:Tipo>${FACTURA_C}</ar:Tipo><ar:PtoVta>${doc.pointOfSale}</ar:PtoVta><ar:Nro>${doc.receiptNumber}</ar:Nro><ar:Cuit>${config.cuit}</ar:Cuit></ar:CbteAsoc></ar:CbtesAsoc></ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>`;
-    const result = await this.wsfe(config.environment, 'FECAESolicitar', request);
-    const detail = result?.FeDetResp?.FECAEDetResponse;
-    const errors = this.collectErrors(result);
-    if (result?.FeCabResp?.Resultado !== 'A' || detail?.Resultado !== 'A' || !detail?.CAE) {
-      throw new Error(errors || 'ARCA rechazó la nota de crédito sin detalle.');
+        const creditNumber = Number(last?.CbteNro || 0) + 1;
+        const amount = Number(sale.totalFinal).toFixed(2);
+        const date = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Argentina/Buenos_Aires',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date()).replaceAll('-', '');
+        const request = `${authXml}<ar:FeCAEReq><ar:FeCabReq><ar:CantReg>1</ar:CantReg><ar:PtoVta>${config.pointOfSale}</ar:PtoVta><ar:CbteTipo>${NOTA_CREDITO_C}</ar:CbteTipo></ar:FeCabReq><ar:FeDetReq><ar:FECAEDetRequest><ar:Concepto>1</ar:Concepto><ar:DocTipo>99</ar:DocTipo><ar:DocNro>0</ar:DocNro><ar:CbteDesde>${creditNumber}</ar:CbteDesde><ar:CbteHasta>${creditNumber}</ar:CbteHasta><ar:CbteFch>${date}</ar:CbteFch><ar:ImpTotal>${amount}</ar:ImpTotal><ar:ImpTotConc>0</ar:ImpTotConc><ar:ImpNeto>${amount}</ar:ImpNeto><ar:ImpOpEx>0</ar:ImpOpEx><ar:ImpTrib>0</ar:ImpTrib><ar:ImpIVA>0</ar:ImpIVA><ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz><ar:CondicionIVAReceptorId>5</ar:CondicionIVAReceptorId><ar:CbtesAsoc><ar:CbteAsoc><ar:Tipo>${FACTURA_C}</ar:Tipo><ar:PtoVta>${doc.pointOfSale}</ar:PtoVta><ar:Nro>${doc.receiptNumber}</ar:Nro><ar:Cuit>${config.cuit}</ar:Cuit></ar:CbteAsoc></ar:CbtesAsoc></ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>`;
+        const result = await this.wsfe(config.environment, 'FECAESolicitar', request);
+        const detail = result?.FeDetResp?.FECAEDetResponse;
+        const errors = this.collectErrors(result);
+        if (result?.FeCabResp?.Resultado !== 'A' || detail?.Resultado !== 'A' || !detail?.CAE) {
+          throw new Error(errors || 'ARCA rechazó la nota de crédito sin detalle.');
+        }
+
+        const cae = String(detail.CAE);
+        const dueRaw = String(detail.CAEFchVto);
+        const due = new Date(`${dueRaw.slice(0,4)}-${dueRaw.slice(4,6)}-${dueRaw.slice(6,8)}T00:00:00-03:00`);
+        const qrData = {
+          ver: 1,
+          fecha: `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,
+          cuit: Number(config.cuit),
+          ptoVta: config.pointOfSale,
+          tipoCmp: NOTA_CREDITO_C,
+          nroCmp: creditNumber,
+          importe: Number(amount),
+          moneda: 'PES',
+          ctz: 1,
+          tipoDocRec: 99,
+          nroDocRec: 0,
+          tipoCodAut: 'E',
+          codAut: Number(cae),
+        };
+        const creditNoteQr = `https://www.afip.gob.ar/fe/qr/?p=${Buffer.from(JSON.stringify(qrData)).toString('base64')}`;
+        return this.prisma.fiscalDocument.update({
+          where: { saleId },
+          data: {
+            creditNoteType: NOTA_CREDITO_C,
+            creditNoteNumber: creditNumber,
+            creditNoteCae: cae,
+            creditNoteCaeExpiresAt: due,
+            creditNoteQr,
+            creditNoteResult: result as any,
+            voidedAt: new Date(),
+          },
+        });
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error('Error desconocido al emitir nota de crédito.');
+        const msg = lastError.message;
+        const retryable =
+          attempt < maxAttempts &&
+          (this.isTransientArcaError(msg) || this.isDuplicateNumberError(msg) || this.isAuthError(msg));
+        if (!retryable) throw lastError;
+        this.invalidateWsaa(businessId);
+        await this.sleep(350 * attempt);
+      }
     }
-
-    const cae = String(detail.CAE);
-    const dueRaw = String(detail.CAEFchVto);
-    const due = new Date(`${dueRaw.slice(0,4)}-${dueRaw.slice(4,6)}-${dueRaw.slice(6,8)}T00:00:00-03:00`);
-    const qrData = {
-      ver: 1,
-      fecha: `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,
-      cuit: Number(config.cuit),
-      ptoVta: config.pointOfSale,
-      tipoCmp: NOTA_CREDITO_C,
-      nroCmp: creditNumber,
-      importe: Number(amount),
-      moneda: 'PES',
-      ctz: 1,
-      tipoDocRec: 99,
-      nroDocRec: 0,
-      tipoCodAut: 'E',
-      codAut: Number(cae),
-    };
-    const creditNoteQr = `https://www.afip.gob.ar/fe/qr/?p=${Buffer.from(JSON.stringify(qrData)).toString('base64')}`;
-    return this.prisma.fiscalDocument.update({
-      where: { saleId },
-      data: {
-        creditNoteType: NOTA_CREDITO_C,
-        creditNoteNumber: creditNumber,
-        creditNoteCae: cae,
-        creditNoteCaeExpiresAt: due,
-        creditNoteQr,
-        creditNoteResult: result as any,
-        voidedAt: new Date(),
-      },
-    });
+    throw lastError ?? new Error('No se pudo emitir la nota de crédito en ARCA.');
   }
 
   async receipt(businessId: string, saleId: string, reveal = false) {
