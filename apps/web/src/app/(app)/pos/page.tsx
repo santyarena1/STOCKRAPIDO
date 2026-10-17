@@ -222,9 +222,10 @@ function CartItemRow({
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSilent(); }}
-          className="shrink-0 rounded border border-hair px-1.5 py-0.5 text-[10px] font-bold uppercase text-fg-muted hover:border-[color:var(--brand-accent)] hover:text-brand"
+          className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase hover:border-red-500/50 hover:text-red-400 ${(item.silentTicket || item.productSilent) ? 'border-red-500/40 text-red-400' : 'border-hair text-fg-muted'}`}
           title="Producto silencioso"
         >
+          {(item.silentTicket || item.productSilent) ? <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> : null}
           PS
         </button>
       ) : null}
