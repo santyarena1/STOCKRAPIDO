@@ -155,10 +155,17 @@ function CartItemRow({
       ) : (
         <div className="w-8 h-8 rounded bg-raised2 shrink-0" />
       )}
-      <span className="text-fg-muted truncate flex-1 min-w-0 basis-full sm:basis-0">
-        {item.name}
+      <span className="flex min-w-0 flex-1 basis-full items-center gap-1.5 text-fg-muted sm:basis-0">
         {(item.silentTicket || item.productSilent) ? (
-          <span className="ml-1 rounded border border-[color:var(--brand-accent)] bg-brand-highlight px-1 text-[9px] font-bold uppercase text-brand">
+          <span
+            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-red-500/30"
+            title={item.silentTicket && !item.productSilent ? 'Silencioso solo en este carrito' : 'Producto silencioso'}
+            aria-label="Producto silencioso"
+          />
+        ) : null}
+        <span className="truncate">{item.name}</span>
+        {(item.silentTicket || item.productSilent) ? (
+          <span className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-1 text-[9px] font-bold uppercase text-red-400">
             {item.silentTicket && !item.productSilent ? 'PS carrito' : 'PS'}
           </span>
         ) : null}
@@ -215,9 +222,10 @@ function CartItemRow({
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSilent(); }}
-          className="shrink-0 rounded border border-hair px-1.5 py-0.5 text-[10px] font-bold uppercase text-fg-muted hover:border-[color:var(--brand-accent)] hover:text-brand"
+          className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase hover:border-red-500/50 hover:text-red-400 ${(item.silentTicket || item.productSilent) ? 'border-red-500/40 text-red-400' : 'border-hair text-fg-muted'}`}
           title="Producto silencioso"
         >
+          {(item.silentTicket || item.productSilent) ? <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> : null}
           PS
         </button>
       ) : null}
@@ -693,6 +701,7 @@ export default function POSPage() {
             unitsPerBox?: string | null;
             unitsPerBoxNum?: number | null;
             cost?: unknown;
+            silent?: boolean;
           }>
         >('/products/search', {
           signal: ac.signal,
@@ -722,6 +731,7 @@ export default function POSPage() {
           unitsPerBox: p.unitsPerBox ?? null,
           unitsPerBoxNum: p.unitsPerBoxNum ?? null,
           cost: p.cost ?? null,
+          silent: Boolean(p.silent),
         }));
         if (mapped.length === 1 && productHasExactCode(mapped[0], term)) {
           addToCart(mapped[0], 1);
@@ -1153,7 +1163,7 @@ export default function POSPage() {
     if (!Number.isFinite(price) || price < 0) return alert('Ingresá un precio válido.');
     setQuickBusy(true);
     try {
-      const product = await api<{ id: string; name: string; price: string; stock: number; stockControl: boolean; imageUrl?: string | null }>('/products/quick', {
+      const product = await api<{ id: string; name: string; price: string; stock: number; stockControl: boolean; imageUrl?: string | null; silent?: boolean }>('/products/quick', {
         method: 'POST',
         body: JSON.stringify({
           name,
@@ -1166,7 +1176,7 @@ export default function POSPage() {
           consignmentCommissionPercent: quickConsigned && quickCommission.trim() ? Number(quickCommission.replace(',', '.')) : null,
         }),
       });
-      addToCart(product);
+      addToCart({ ...product, silent: Boolean(product.silent) || quickSilent });
       setQuickName('');
       setQuickPrice('');
       setQuickBarcode('');
@@ -1347,7 +1357,20 @@ export default function POSPage() {
                           <span className="h-12 w-12 shrink-0 rounded-lg bg-raised2" />
                         )}
                         <span className="flex flex-col min-w-0">
-                          <span className="flex min-w-0 flex-wrap items-center gap-2"><span className="truncate text-[15px] font-semibold text-fg">{highlightedName(p.name, search)}</span>{p.matched && p.matched !== 'nombre' && <span className="rounded-md border border-hair bg-raised2 px-1.5 py-0.5 text-[10px] font-medium uppercase text-fg-muted">{{ codigo: 'Código', sku: 'SKU', ref: 'Ref', bulto: 'Bulto', marca: 'Marca' }[p.matched]}</span>}</span>
+                          <span className="flex min-w-0 flex-wrap items-center gap-2">
+                            {p.silent ? (
+                              <span
+                                className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-red-500/30"
+                                title="Producto silencioso"
+                                aria-label="Producto silencioso"
+                              />
+                            ) : null}
+                            <span className="truncate text-[15px] font-semibold text-fg">{highlightedName(p.name, search)}</span>
+                            {p.silent ? (
+                              <span className="rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-400">PS</span>
+                            ) : null}
+                            {p.matched && p.matched !== 'nombre' && <span className="rounded-md border border-hair bg-raised2 px-1.5 py-0.5 text-[10px] font-medium uppercase text-fg-muted">{{ codigo: 'Código', sku: 'SKU', ref: 'Ref', bulto: 'Bulto', marca: 'Marca' }[p.matched]}</span>}
+                          </span>
                           {p.unitsPerBoxNum != null && p.unitsPerBoxNum >= 2 && (
                             <span className="text-xs text-fg-faint">Bulto × {p.unitsPerBoxNum} u. · vendés por unidad</span>
                           )}
@@ -1385,10 +1408,17 @@ export default function POSPage() {
                         e.stopPropagation();
                         setSilentPrompt({ productId: p.id, name: p.name, from: 'search' });
                       }}
-                      title="Producto silencioso"
-                      className="shrink-0 border-l border-hair-soft px-2.5 text-center text-[10px] font-bold uppercase text-fg-muted hover:bg-brand-highlight hover:text-brand"
+                      title={p.silent ? 'Ya es silencioso' : 'Producto silencioso'}
+                      className={`shrink-0 border-l border-hair-soft px-2.5 text-center text-[10px] font-bold uppercase hover:bg-brand-highlight hover:text-brand ${p.silent ? 'text-red-400' : 'text-fg-muted'}`}
                     >
-                      PS
+                      {p.silent ? (
+                        <span className="inline-flex flex-col items-center gap-0.5">
+                          <span className="h-2 w-2 rounded-full bg-red-500" />
+                          PS
+                        </span>
+                      ) : (
+                        'PS'
+                      )}
                     </button>
                   </li>
                   );

@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.39',
+    date: '2026-10-17',
+    summary: 'Punto rojo para productos silenciosos en el POS.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Identificar silenciosos en el POS',
+        desc: 'En búsqueda y en el carrito, los productos silenciosos muestran un punto rojo (y la etiqueta PS) para reconocerlos de un vistazo.',
+      },
+    ],
+  },
+  {
     version: 'v1.38',
     date: '2026-10-17',
     summary: 'Menos errores intermitentes al facturar con ARCA.',
