@@ -119,7 +119,7 @@ describe('caja y fiscal automático', () => {
     assert.equal(split.banco, 0);
   });
 
-  it('resuelve el comprobante según el medio cuando el modo es Mercado Pago', () => {
+  it('resuelve el comprobante según el medio cuando el modo es MODO PRO', () => {
     for (const method of ['efectivo', 'fiado', 'cuenta_corriente', 'puntos']) {
       assert.equal(resolveFiscalMode('auto_mp', method), 'internal');
     }

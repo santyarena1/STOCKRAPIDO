@@ -51,12 +51,12 @@ Si los puntos cubren toda la venta, `paymentMethod` queda en `puntos`. Si cubren
 
 El importe fiscal no se reduce por los puntos. Sigue siendo `totalFinal`.
 
-### Modo Mercado Pago
+### MODO PRO
 
-En el POS, Mercado Pago es un modo fiscal (`auto_mp`), no un medio de pago.
+En el POS, MODO PRO es un modo fiscal (`auto_mp`), no un medio de pago.
 
 - Comprobante interno y Factura C se respetan siempre.
-- En Mercado Pago: efectivo, fiado, cuenta corriente y pago total con puntos generan comprobante interno. Débito, crédito, transferencia, Mercado Pago y el resto de medios electrónicos generan Factura C.
+- En MODO PRO: efectivo, fiado, cuenta corriente y pago total con puntos generan comprobante interno. Débito, crédito, transferencia, Mercado Pago y el resto de medios electrónicos generan Factura C.
 - En un pago mixto manda el medio del saldo que no se pagó con puntos.
 
 ## Portal y QR

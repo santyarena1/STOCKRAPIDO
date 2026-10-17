@@ -22,6 +22,23 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.37',
+    date: '2026-10-08',
+    summary: 'MODO PRO en el POS y atajos 1-6 al cobrar.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Modo fiscal MODO PRO',
+        desc: 'El modo automático de facturación en el POS (antes “Mercado Pago”) ahora se llama MODO PRO. Elige comprobante interno o Factura C según el medio de pago.',
+      },
+      {
+        tag: 'FIX',
+        title: 'Teclas 1-6 eligen el medio de pago al cobrar',
+        desc: 'Al abrir Cobrar, podés tocar el número del teclado (o del numpad) que aparece en cada botón y queda seleccionado ese medio de pago. Antes a veces no respondía porque el foco seguía en la búsqueda.',
+      },
+    ],
+  },
+  {
     version: 'v1.36',
     date: '2026-09-11',
     summary: 'Sync online de facturas ARCA sin Afip SDK (portal propio).',
