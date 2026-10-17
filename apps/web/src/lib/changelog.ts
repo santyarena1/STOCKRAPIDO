@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.38',
+    date: '2026-10-17',
+    summary: 'Menos errores intermitentes al facturar con ARCA.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Factura C más estable (reintentos ARCA)',
+        desc: 'Cuando ARCA fallaba a veces al cobrar (timeout, ticket WSAA o número de factura ya usado), ahora reutilizamos el ticket, emitimos de a una por negocio y reintentamos solos hasta 3 veces. La venta ya se guardaba; ahora debería autorizarse más seguido sin tocar Reintentar.',
+      },
+    ],
+  },
+  {
     version: 'v1.37',
     date: '2026-10-08',
     summary: 'MODO PRO en el POS y atajos 1-6 al cobrar.',
