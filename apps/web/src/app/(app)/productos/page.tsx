@@ -51,7 +51,24 @@ type ColumnKey = 'image' | 'name' | 'origin' | 'sku' | 'category' | 'brand' | 't
 type ColumnSetting = { key: ColumnKey; label: string; visible: boolean };
 type SavedView = { id: string; name: string; filters: Filters; columns: ColumnSetting[]; mode: 'catalog' | 'stock'; sort: SortKey; dir: 'asc' | 'desc' };
 type BulkAction = 'setPrice' | 'applyMarkup' | 'adjustPrice' | 'setCategory' | 'setBrand' | 'setIva' | 'setStock' | 'adjustStock' | 'setStockControl' | 'setActive' | 'setSilent' | 'stopSync' | 'delete';
-type BulkDialog = { action: BulkAction; title: string; label: string; kind: 'number' | 'text' | 'category'; value: string };
+type BulkDialog = {
+  action: BulkAction;
+  title: string;
+  label: string;
+  kind: 'number' | 'text' | 'category';
+  value: string;
+  /** Texto auxiliar (ej. rentabilidad actual). */
+  hint?: string;
+};
+type MarkupInfo = {
+  total: number;
+  withCost: number;
+  withoutCost: number;
+  minMarkup: number | null;
+  maxMarkup: number | null;
+  avgMarkup: number | null;
+  commonMarkup: number | null;
+};
 
 const EMPTY_FILTERS: Filters = { q: '', categoryId: '', brand: '', provider: '', type: '', status: 'active', hasStock: false, stockControl: false, lowStock: false };
 const DEFAULT_COLUMNS: ColumnSetting[] = [
@@ -484,12 +501,59 @@ export default function ProductosPage() {
     try {
       const result = await api<{ updated: number; skipped: { id: string; reason: string }[] }>('/products/bulk', { method: 'POST', body: JSON.stringify({ ids: [...selected], action, value }) });
       setBulkMessage(`${result.updated} actualizados${result.skipped.length ? ` · ${result.skipped.length} omitidos: ${result.skipped.slice(0, 3).map((item) => item.reason).join('; ')}` : ''}`);
-      setSelected(new Set()); setBulkMenuOpen(false); setBulkDialog(null);
+      setBulkMenuOpen(false);
+      setBulkDialog(null);
+      // Mantener selección en rentabilidad/precio para poder reabrir y cambiar el %.
+      if (action !== 'applyMarkup' && action !== 'adjustPrice') {
+        setSelected(new Set());
+      }
       await fetchProducts();
       await refreshStockSummary();
     } catch (error) { alert(error instanceof Error ? error.message : 'Error en acción masiva'); }
   };
-  const openBulkDialog = (dialog: Omit<BulkDialog, 'value'>) => { setBulkMenuOpen(false); setBulkDialog({ ...dialog, value: '' }); };
+  const openBulkDialog = (dialog: Omit<BulkDialog, 'value'> & { value?: string }) => {
+    setBulkMenuOpen(false);
+    setBulkDialog({ ...dialog, value: dialog.value ?? '' });
+  };
+  const openApplyMarkupDialog = async () => {
+    if (selected.size === 0) return;
+    setBulkMenuOpen(false);
+    try {
+      const info = await api<MarkupInfo>('/products/bulk/markup-info', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [...selected] }),
+      });
+      const formatPct = (n: number) =>
+        new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(n);
+      let hint: string;
+      let value = '';
+      if (info.withCost === 0) {
+        hint = info.withoutCost
+          ? `Ninguno de los ${info.total} tiene costo: no se puede calcular rentabilidad.`
+          : 'No hay productos con costo.';
+      } else if (info.commonMarkup != null) {
+        hint = `Rentabilidad actual: ${formatPct(info.commonMarkup)}% (${info.withCost} producto${info.withCost === 1 ? '' : 's'}). Cambiá el valor y aplicá de nuevo.`;
+        value = String(info.commonMarkup);
+      } else {
+        hint = `Rentabilidad actual entre ${formatPct(info.minMarkup!)}% y ${formatPct(info.maxMarkup!)}% (promedio ${formatPct(info.avgMarkup!)}%). Escribí el % que querés aplicar a todos.`;
+        value = info.avgMarkup != null ? String(info.avgMarkup) : '';
+      }
+      if (info.withoutCost > 0 && info.withCost > 0) {
+        hint += ` · ${info.withoutCost} sin costo se omitirán.`;
+      }
+      setBulkDialog({
+        action: 'applyMarkup',
+        title: 'Aplicar rentabilidad',
+        label: 'Nueva rentabilidad / markup (%)',
+        kind: 'number',
+        value,
+        hint,
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo leer la rentabilidad actual');
+      openBulkDialog({ action: 'applyMarkup', title: 'Aplicar rentabilidad', label: 'Nueva rentabilidad / markup (%)', kind: 'number' });
+    }
+  };
   const submitBulkDialog = () => {
     if (!bulkDialog) return;
     const value = bulkDialog.kind === 'number' ? Number(bulkDialog.value.replace(',', '.')) : bulkDialog.value.trim();
@@ -1070,7 +1134,7 @@ export default function ProductosPage() {
       )}
     </section>
 
-    {selected.size > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><div className="flex items-center gap-3"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button type="button" onClick={() => setSelected(new Set())} className="text-sm text-fg-muted hover:text-fg">Limpiar</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="text-sm text-fg-muted hover:text-fg disabled:opacity-50">Seleccionar todos los de esta búsqueda</button><button type="button" disabled={photoBusy} onClick={() => void applyFirstPhotos()} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">{photoBusy ? (photoProgress || 'Buscando…') : 'Primera foto'}</button><button type="button" disabled={labelsBusy} onClick={() => void openLabels([...selected])} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">Imprimir etiquetas</button></div><div ref={bulkMenuRef} className="relative"><button type="button" onClick={() => setBulkMenuOpen((current) => !current)} aria-expanded={bulkMenuOpen} className="btn-brand flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold">Acciones rápidas <ChevronDown className={`h-4 w-4 transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} /></button>{bulkMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-hair bg-surface p-2 shadow-2xl"><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Estado</p><button type="button" onClick={() => void runBulk('setActive', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Habilitar</button><button type="button" onClick={() => void runBulk('setActive', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Deshabilitar</button><button type="button" onClick={() => void runBulk('setSilent', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Marcar como silencioso</button><button type="button" onClick={() => void runBulk('setSilent', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Quitar silencioso</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Catálogo</p><button type="button" onClick={() => openBulkDialog({ action: 'setCategory', title: 'Cambiar categoría', label: 'Nueva categoría', kind: 'category' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar categoría</button><button type="button" onClick={() => openBulkDialog({ action: 'setBrand', title: 'Cambiar marca', label: 'Nueva marca', kind: 'text' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar marca</button><button type="button" onClick={() => openBulkDialog({ action: 'setIva', title: 'Cambiar IVA', label: 'IVA (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar IVA</button><button type="button" onClick={() => void exportSelected()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Exportar seleccionados</button><button type="button" disabled={labelsBusy} onClick={() => { setBulkMenuOpen(false); void openLabels([...selected]); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised disabled:opacity-50">Imprimir etiquetas</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Precio</p><button type="button" onClick={() => openBulkDialog({ action: 'applyMarkup', title: 'Aplicar rentabilidad', label: 'Rentabilidad / markup (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Aplicar rentabilidad %</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustPrice', title: 'Ajustar precio', label: 'Porcentaje (usá negativo para bajar)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar precio ±%</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Inventario</p><button type="button" onClick={() => openBulkDialog({ action: 'setStock', title: 'Fijar stock', label: 'Cantidad final', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Fijar stock</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustStock', title: 'Ajustar stock', label: 'Cantidad a sumar o restar', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar stock ±</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Admin</p><button type="button" onClick={() => confirm('¿Dejar de sincronizar los productos seleccionados?') && void runBulk('stopSync')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Dejar de sincronizar</button><button type="button" onClick={() => confirm('¿Eliminar definitivamente los productos seleccionados?') && void runBulk('delete')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>}</div></div>}
+    {selected.size > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><div className="flex items-center gap-3"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button type="button" onClick={() => setSelected(new Set())} className="text-sm text-fg-muted hover:text-fg">Limpiar</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="text-sm text-fg-muted hover:text-fg disabled:opacity-50">Seleccionar todos los de esta búsqueda</button><button type="button" disabled={photoBusy} onClick={() => void applyFirstPhotos()} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">{photoBusy ? (photoProgress || 'Buscando…') : 'Primera foto'}</button><button type="button" disabled={labelsBusy} onClick={() => void openLabels([...selected])} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">Imprimir etiquetas</button></div><div ref={bulkMenuRef} className="relative"><button type="button" onClick={() => setBulkMenuOpen((current) => !current)} aria-expanded={bulkMenuOpen} className="btn-brand flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold">Acciones rápidas <ChevronDown className={`h-4 w-4 transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} /></button>{bulkMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-hair bg-surface p-2 shadow-2xl"><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Estado</p><button type="button" onClick={() => void runBulk('setActive', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Habilitar</button><button type="button" onClick={() => void runBulk('setActive', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Deshabilitar</button><button type="button" onClick={() => void runBulk('setSilent', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Marcar como silencioso</button><button type="button" onClick={() => void runBulk('setSilent', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Quitar silencioso</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Catálogo</p><button type="button" onClick={() => openBulkDialog({ action: 'setCategory', title: 'Cambiar categoría', label: 'Nueva categoría', kind: 'category' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar categoría</button><button type="button" onClick={() => openBulkDialog({ action: 'setBrand', title: 'Cambiar marca', label: 'Nueva marca', kind: 'text' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar marca</button><button type="button" onClick={() => openBulkDialog({ action: 'setIva', title: 'Cambiar IVA', label: 'IVA (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar IVA</button><button type="button" onClick={() => void exportSelected()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Exportar seleccionados</button><button type="button" disabled={labelsBusy} onClick={() => { setBulkMenuOpen(false); void openLabels([...selected]); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised disabled:opacity-50">Imprimir etiquetas</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Precio</p><button type="button" onClick={() => void openApplyMarkupDialog()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Aplicar rentabilidad %</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustPrice', title: 'Ajustar precio', label: 'Porcentaje (usá negativo para bajar)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar precio ±%</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Inventario</p><button type="button" onClick={() => openBulkDialog({ action: 'setStock', title: 'Fijar stock', label: 'Cantidad final', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Fijar stock</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustStock', title: 'Ajustar stock', label: 'Cantidad a sumar o restar', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar stock ±</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Admin</p><button type="button" onClick={() => confirm('¿Dejar de sincronizar los productos seleccionados?') && void runBulk('stopSync')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Dejar de sincronizar</button><button type="button" onClick={() => confirm('¿Eliminar definitivamente los productos seleccionados?') && void runBulk('delete')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>}</div></div>}
 
     <div data-tour="productos-table"><div className="hidden overflow-x-auto rounded-xl border border-hair-soft bg-surface md:block"><table className="w-full text-sm"><thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3"><input type="checkbox" checked={products.length > 0 && products.every((product) => selected.has(product.id))} onChange={(event) => setSelected(event.target.checked ? new Set(products.map((product) => product.id)) : new Set())} /></th>{visibleColumns.map((column) => <th key={column.key} className="whitespace-nowrap p-3 text-left">{SORTABLE[column.key] ? <button type="button" onClick={() => changeSort(SORTABLE[column.key]!)} className="hover:text-fg">{column.label}{sort === SORTABLE[column.key] ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}</button> : column.label}</th>)}</tr></thead><tbody className="divide-y divide-hair-soft">{products.map((product) => <tr key={product.id} className="hover:bg-raised/70"><td className="p-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></td>{visibleColumns.map((column) => <td key={column.key} className={`whitespace-nowrap p-3 ${['cost', 'price', 'margin', 'stock', 'minStock'].includes(column.key) ? 'text-right font-mono tabular-nums' : ''}`}>{renderCell(product, column.key)}</td>)}</tr>)}{!loading && products.length === 0 && <tr><td colSpan={visibleColumns.length + 1} className="p-10 text-center text-fg-faint">No hay productos para estos filtros.</td></tr>}</tbody></table></div><div className="space-y-3 md:hidden">{products.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); return <article key={product.id} className="rounded-xl border border-hair-soft bg-surface p-3"><div className="flex items-start gap-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} className="mt-3 shrink-0" />{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-hair-soft bg-white object-contain" /> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair-soft bg-raised2 text-sm font-semibold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}<div className="min-w-0 flex-1"><span className="flex items-center gap-1.5"><Link href={`/productos/${product.id}`} className="truncate text-[14.5px] font-semibold leading-tight text-fg">{product.name}</Link>{product.silent && <span title="Producto silencioso" className="shrink-0 rounded border border-[color:var(--brand-accent)] bg-brand-highlight px-1 text-[9px] font-bold uppercase leading-4 text-brand">PS</span>}</span><p className="mt-1 truncate font-mono text-[10.5px] text-fg-faint">{product.barcode || 'Sin código'}{product.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 ? ` · bulto ×${product.unitsPerBoxNum}` : ''}</p></div><div className="shrink-0 text-right"><p className="font-mono text-base font-bold tabular-nums text-brand">{formatMoneyArs(Number(product.price))}</p><p className="font-mono text-[10.5px] tabular-nums text-fg-faint">{product.cost == null ? 'sin costo' : `costo ${formatMoneyArs(Number(product.cost))}`}</p></div></div><div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-hair-soft pt-3"><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Stock</span><span className={`mt-1 inline-flex rounded-md border px-2 py-0.5 font-mono text-xs tabular-nums ${product.stock <= product.minStock ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{product.stock}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Categoría</span><span className="mt-1 block truncate text-sm text-fg-muted">{product.category?.name || '—'}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Origen</span>{product.sourceProvider ? <span className="mt-1 inline-flex rounded-md border border-hair bg-raised2 px-2 py-0.5 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="mt-1 block text-sm text-fg-faint">—</span>}</div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">{product.incomplete ? 'Estado' : 'Vencimiento'}</span>{product.incomplete ? <span className="mt-1 inline-flex rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-0.5 text-xs text-warn">Incompleto</span> : <span className={`mt-1 block font-mono text-xs tabular-nums ${expiryDays != null && expiryDays <= 30 ? 'text-crit' : 'text-fg-muted'}`}>{product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : '—'}</span>}</div></div><div className="mt-3 flex justify-end gap-3 border-t border-hair-soft pt-3"><button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setQuickViewProduct(product); }} className="text-sm font-medium text-fg-muted">👁️ Vista rápida</button><button type="button" onClick={() => void openLabels([product.id])} className="text-sm font-medium text-fg-muted">Etiqueta</button><Link href={`/productos/${product.id}`} className="text-sm font-medium text-brand">Editar</Link></div></article>; })}{!loading && products.length === 0 && <p className="rounded-xl border border-hair-soft bg-surface p-6 text-center text-fg-faint">No hay productos para estos filtros.</p>}</div>{loading && <Loader />}</div>
 
@@ -1079,7 +1143,73 @@ export default function ProductosPage() {
 
     {quickViewProduct && (() => { const product = quickViewProduct; const rows: [string, string | null][] = [['Marca', product.brand ?? null], ['Categoría', product.category?.name ?? null], ['Subcategoría', product.subcategory ?? null], ['Cód. de barras', product.barcode ?? null], ['EAN bulto', product.eanBox ?? null], ['SKU proveedor', product.supplierSku ?? null], ['Ref. proveedor', product.supplierRef ?? null], ['ID externo', product.externalId ?? null], ['Costo', product.cost != null && Number(product.cost) > 0 ? formatMoneyArs(Number(product.cost)) : null], ['Precio', formatMoneyArs(Number(product.price))], ['IVA', product.iva != null ? `${Number(product.iva)}%` : null], ['Unidades por bulto', product.unitsPerBox ?? null], ['Peso', product.weight ?? null], ['Formato', product.format ?? null], ['Sabor', product.flavor ?? null], ['Presentación', product.presentation ?? null], ['Stock', String(product.stock)], ['Stock mínimo', String(product.minStock)], ['Control de stock', product.stockControl ? 'Sí' : 'No'], ['Producto silencioso', product.silent ? 'Sí' : 'No'], ['Origen', product.sourceProvider ?? null], ['Vencimiento', product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : null]]; const filled = rows.filter(([, value]) => value != null && value !== '' && value !== '—'); return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setQuickViewProduct(null)}><div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-hair bg-surface shadow-xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center gap-3 border-b border-hair-soft p-4">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-raised2 text-sm font-bold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}<div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold text-fg">{product.name}</h2><p className="text-xs text-fg-faint">Vista rápida · {filled.length} datos completos</p></div><button type="button" onClick={() => setQuickViewProduct(null)} className="rounded-lg px-2 py-1 text-fg-muted hover:bg-raised" aria-label="Cerrar vista rápida">✕</button></div><div className="flex-1 overflow-y-auto p-4"><dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">{filled.map(([label, value]) => <div key={label} className="flex flex-col border-b border-hair-soft/60 pb-2"><dt className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">{label}</dt><dd className="mt-0.5 truncate text-sm text-fg">{value}</dd></div>)}</dl></div><div className="flex justify-end border-t border-hair-soft p-4"><Link href={`/productos/${product.id}`} className="text-sm font-medium text-brand hover:underline">Editar</Link></div></div></div>; })()}
 
-    {bulkDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setBulkDialog(null); }}><div className="w-full max-w-md rounded-2xl border border-hair bg-surface p-5 shadow-2xl"><h2 className="text-xl font-bold text-fg">{bulkDialog.title}</h2><p className="mt-1 text-sm text-fg-muted">Se aplicará a <span className="font-mono text-brand">{selected.size}</span> productos.</p><label className="mt-5 block text-sm font-medium text-fg-muted">{bulkDialog.label}{bulkDialog.kind === 'category' ? <select autoFocus value={bulkDialog.value} onChange={(event) => setBulkDialog({ ...bulkDialog, value: event.target.value })} className="mt-2 h-12 w-full rounded-xl border border-hair bg-raised px-3 text-fg"><option value="">Elegí una categoría</option>{facets.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select> : <input autoFocus type={bulkDialog.kind === 'number' ? 'number' : 'text'} step={bulkDialog.kind === 'number' ? '0.01' : undefined} value={bulkDialog.value} onChange={(event) => setBulkDialog({ ...bulkDialog, value: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') submitBulkDialog(); if (event.key === 'Escape') setBulkDialog(null); }} className="mt-2 h-12 w-full rounded-xl border border-hair bg-raised px-3 font-mono text-fg" />}</label><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setBulkDialog(null)} className="rounded-xl border border-hair px-4 py-2.5 text-sm text-fg-muted">Cancelar</button><button type="button" onClick={submitBulkDialog} className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold">Aplicar</button></div></div></div>}
+    {bulkDialog && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setBulkDialog(null);
+        }}
+      >
+        <div className="w-full max-w-md rounded-2xl border border-hair bg-surface p-5 shadow-2xl">
+          <h2 className="text-xl font-bold text-fg">{bulkDialog.title}</h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            Se aplicará a <span className="font-mono text-brand">{selected.size}</span> productos.
+          </p>
+          {bulkDialog.hint ? (
+            <p className="mt-3 rounded-xl border border-hair-soft bg-raised px-3 py-2 text-sm text-fg">
+              {bulkDialog.hint}
+            </p>
+          ) : null}
+          <label className="mt-5 block text-sm font-medium text-fg-muted">
+            {bulkDialog.label}
+            {bulkDialog.kind === 'category' ? (
+              <select
+                autoFocus
+                value={bulkDialog.value}
+                onChange={(event) => setBulkDialog({ ...bulkDialog, value: event.target.value })}
+                className="mt-2 h-12 w-full rounded-xl border border-hair bg-raised px-3 text-fg"
+              >
+                <option value="">Elegí una categoría</option>
+                {facets.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                autoFocus
+                type={bulkDialog.kind === 'number' ? 'number' : 'text'}
+                step={bulkDialog.kind === 'number' ? '0.01' : undefined}
+                value={bulkDialog.value}
+                onChange={(event) => setBulkDialog({ ...bulkDialog, value: event.target.value })}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitBulkDialog();
+                  if (event.key === 'Escape') setBulkDialog(null);
+                }}
+                className="mt-2 h-12 w-full rounded-xl border border-hair bg-raised px-3 font-mono text-fg"
+              />
+            )}
+          </label>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setBulkDialog(null)}
+              className="rounded-xl border border-hair px-4 py-2.5 text-sm text-fg-muted"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={submitBulkDialog}
+              className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold"
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {showDuplicates && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowDuplicates(false); }}><div className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-hair bg-surface p-5"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-bold text-fg">Duplicados por EAN</h2><button type="button" onClick={() => setShowDuplicates(false)} className="text-fg-muted">Cerrar</button></div>{duplicates.length === 0 ? <p className="text-fg-muted">No hay códigos duplicados activos.</p> : <div className="space-y-4">{duplicates.map((group) => <section key={group.barcode} className="rounded-xl border border-hair bg-raised p-4"><div className="mb-3 flex justify-between"><strong className="font-mono text-fg">EAN {group.barcode}</strong><span className="font-mono text-warn">{group.count}</span></div><div className="space-y-2">{group.products.map((product) => <label key={product.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-hair-soft bg-surface p-3"><input type="radio" name={`keep-${group.barcode}`} checked={duplicateKeep[group.barcode] === product.id} onChange={() => setDuplicateKeep((current) => ({ ...current, [group.barcode]: product.id }))} /><span className="min-w-0 flex-1"><strong className="block text-fg">{product.name}</strong><span className="font-mono text-xs text-fg-faint">{product.sourceProvider || 'Sin origen'} · stock {product.stock} · {formatMoneyArs(Number(product.price))}</span></span></label>)}</div><button type="button" onClick={() => mergeDuplicate(group)} className="btn-brand mt-3 rounded-lg px-4 py-2">Conservar seleccionado y fusionar</button></section>)}</div>}</div></div>}
     {showHiddenCategories && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHiddenCategories(false); }}><div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-hair bg-surface p-5 shadow-xl"><div className="mb-4 flex items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-fg">Categorías ocultas</h2><p className="mt-1 text-sm text-fg-muted">No se mostrarán en el catálogo mientras el toggle esté activado.</p></div><button type="button" onClick={() => setShowHiddenCategories(false)} className="text-sm text-fg-muted hover:text-fg">Cerrar</button></div><div className="space-y-2">{facets.categories.length === 0 ? <p className="rounded-lg border border-hair-soft bg-raised p-4 text-sm text-fg-faint">No hay categorías disponibles.</p> : facets.categories.map((category) => <label key={category.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-hair-soft bg-raised px-3 py-2.5 hover:bg-raised2"><input type="checkbox" checked={hiddenCategoryIds.includes(category.id)} onChange={(event) => setHiddenCategoryIds((current) => event.target.checked ? [...new Set([...current, category.id])] : current.filter((id) => id !== category.id))} /><span className="min-w-0 flex-1 text-sm text-fg">{category.name}</span><span className="font-mono text-xs tabular-nums text-fg-faint">{category.count}</span></label>)}</div><div className="mt-5 flex items-center justify-between gap-3 border-t border-hair-soft pt-4"><button type="button" onClick={() => setHiddenCategoryIds([])} className="text-sm text-crit hover:underline">Limpiar selección</button><button type="button" disabled={savingHiddenCategories} onClick={() => void saveHiddenCategories()} className="btn-brand rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">{savingHiddenCategories ? 'Guardando…' : 'Guardar'}</button></div></div></div>}
