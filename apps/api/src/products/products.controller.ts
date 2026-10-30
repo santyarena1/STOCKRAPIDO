@@ -115,6 +115,12 @@ export class ProductsController {
     return this.products.bulk(user.businessId, body);
   }
 
+  /** Rentabilidad actual de los seleccionados (para el diálogo de markup). */
+  @Post('bulk/markup-info')
+  bulkMarkupInfo(@CurrentUser() user: User, @Body() body: { ids?: string[] }) {
+    return this.products.bulkMarkupInfo(user.businessId, body?.ids || []);
+  }
+
   @Post('export')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="productos-seleccionados.csv"')

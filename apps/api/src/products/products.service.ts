@@ -495,6 +495,54 @@ export class ProductsService {
     };
   }
 
+  /**
+   * Resumen de rentabilidad actual (markup %) de productos seleccionados,
+   * para prellenar el diálogo de “Aplicar rentabilidad”.
+   */
+  async bulkMarkupInfo(businessId: string, ids: string[]) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('Indicá al menos un producto.');
+    }
+    const unique = [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    const products = await this.prisma.product.findMany({
+      where: { businessId, id: { in: unique } },
+      select: { id: true, cost: true, price: true },
+    });
+
+    const markups: number[] = [];
+    let withoutCost = 0;
+    for (const product of products) {
+      if (product.cost == null || Number(product.cost) <= 0) {
+        withoutCost += 1;
+        continue;
+      }
+      const cost = Number(product.cost);
+      const price = Number(product.price);
+      const markup = Math.round(((price - cost) / cost) * 10000) / 100;
+      markups.push(markup);
+    }
+
+    const minMarkup = markups.length ? Math.min(...markups) : null;
+    const maxMarkup = markups.length ? Math.max(...markups) : null;
+    const avgMarkup = markups.length
+      ? Math.round((markups.reduce((sum, value) => sum + value, 0) / markups.length) * 100) / 100
+      : null;
+    const commonMarkup =
+      markups.length > 0 && markups.every((value) => Math.abs(value - markups[0]) < 0.05)
+        ? Math.round(markups[0] * 100) / 100
+        : null;
+
+    return {
+      total: products.length,
+      withCost: markups.length,
+      withoutCost,
+      minMarkup,
+      maxMarkup,
+      avgMarkup,
+      commonMarkup,
+    };
+  }
+
   async bulk(businessId: string, input: ProductBulkInput) {
     if (!Array.isArray(input?.ids) || input.ids.length === 0) {
       throw new BadRequestException('Indicá al menos un producto.');
