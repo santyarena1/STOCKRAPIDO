@@ -191,8 +191,13 @@ export default function ProductosPage() {
   const [photoProgress, setPhotoProgress] = useState<string | null>(null);
   const [deliveryReadiness, setDeliveryReadiness] = useState<Record<string, ProductDeliveryReadiness[]>>({});
   const [showBulkCreate, setShowBulkCreate] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [wipingInventory, setWipingInventory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
+  const canWipeInventory = /teatro/i.test(
+    businessName.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+  );
 
   useEffect(() => {
     if (!bulkMenuOpen) return;
@@ -290,7 +295,31 @@ export default function ProductosPage() {
     }
   }, []);
 
-  useEffect(() => { if (!hydrated) return; Promise.allSettled([api<Facets>('/products/facets'), api<StockSummary>('/reports/stock-summary'), api<{ posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')]).then(([facetResult, summaryResult, businessResult]) => { if (facetResult.status === 'fulfilled') setFacets(facetResult.value); if (summaryResult.status === 'fulfilled') setStockSummary(summaryResult.value); if (businessResult.status === 'fulfilled') { const ids = businessResult.value.posConfig?.hiddenCategoryIds; setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []); } }); }, [hydrated]);
+  useEffect(() => { if (!hydrated) return; Promise.allSettled([api<Facets>('/products/facets'), api<StockSummary>('/reports/stock-summary'), api<{ name?: string; posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')]).then(([facetResult, summaryResult, businessResult]) => { if (facetResult.status === 'fulfilled') setFacets(facetResult.value); if (summaryResult.status === 'fulfilled') setStockSummary(summaryResult.value); if (businessResult.status === 'fulfilled') { setBusinessName(businessResult.value.name || ''); const ids = businessResult.value.posConfig?.hiddenCategoryIds; setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []); } }); }, [hydrated]);
+
+  const wipeInventory = async () => {
+    if (!canWipeInventory || wipingInventory) return;
+    const typed = prompt(
+      'Esto borra TODOS los productos de este negocio (Teatro).\nEscribí VACIAR para confirmar.',
+    );
+    if (typed !== 'VACIAR') return;
+    if (!confirm('¿Seguro? No se puede deshacer. Los productos con compras quedarán desactivados.')) return;
+    setWipingInventory(true);
+    try {
+      const res = await api<{ deleted: number; deactivated: number; message: string }>('/products/wipe-inventory', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: 'VACIAR' }),
+      });
+      setBulkMessage(res.message || `Vacío: ${res.deleted} eliminados, ${res.deactivated} desactivados`);
+      setSelected(new Set());
+      await fetchProducts();
+      await loadIncompleteProducts();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo vaciar el inventario');
+    } finally {
+      setWipingInventory(false);
+    }
+  };
   useEffect(() => { if (hydrated) void loadIncompleteProducts(); }, [hydrated, loadIncompleteProducts]);
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
   useEffect(() => {
@@ -677,6 +706,16 @@ export default function ProductosPage() {
             <Upload className="h-4 w-4" />
             Carga masiva
           </button>
+          {canWipeInventory ? (
+            <button
+              type="button"
+              disabled={wipingInventory}
+              onClick={() => void wipeInventory()}
+              className="rounded-lg border border-crit/40 bg-[var(--crit-soft)] px-3 py-2 text-sm font-medium text-crit hover:bg-raised2 disabled:opacity-50"
+            >
+              {wipingInventory ? 'Vaciando…' : 'Vaciar inventario'}
+            </button>
+          ) : null}
           <Link href="/productos/nuevo" data-tour="productos-nuevo" className="btn-brand rounded-lg px-4 py-2 text-sm font-semibold">Nuevo producto</Link>
         </>
         ) : null
@@ -967,6 +1006,7 @@ export default function ProductosPage() {
             (result.matchedFromCatalog
               ? ` · ${result.matchedFromCatalog} con ficha del catálogo público`
               : '') +
+            (result.rejected ? ` · ${result.rejected} rechazado${result.rejected === 1 ? '' : 's'}` : '') +
             (result.skipped ? ` · ${result.skipped} con error` : ''),
         );
         void fetchProducts();

@@ -308,12 +308,56 @@ export class ProductsController {
     return this.products.importStock(user.businessId, rows);
   }
 
-  /** Alta masiva: pegá CSV/TSV/texto (nombre, precio, stock, etc.). */
+  /** Alta masiva: preview para revisar matches antes de confirmar. */
+  @Post('bulk-create/preview')
+  bulkCreatePreview(@CurrentUser() user: User, @Body() body: { text?: string }) {
+    const text = typeof body?.text === 'string' ? body.text : '';
+    if (!text.trim()) throw new BadRequestException('Pegá la lista de productos en el campo de texto.');
+    return this.products.bulkCreatePreview(user.businessId, text);
+  }
+
+  /** Buscar producto local o ficha pública para vincular en la revisión. */
+  @Get('bulk-create/search')
+  bulkCreateSearch(@CurrentUser() user: User, @Query('q') q?: string) {
+    return this.products.bulkCreateSearch(user.businessId, q || '');
+  }
+
+  /** Confirma filas aprobadas de la carga masiva. */
+  @Post('bulk-create/confirm')
+  bulkCreateConfirm(
+    @CurrentUser() user: User,
+    @Body()
+    body: {
+      items?: Array<{
+        row: number;
+        name: string;
+        price: number;
+        stock?: number;
+        cost?: number;
+        action: 'approve' | 'reject';
+        localProductId?: string;
+        publicProductId?: string;
+      }>;
+    },
+  ) {
+    return this.products.bulkCreateConfirm(user.businessId, body?.items || []);
+  }
+
+  /** Alta masiva directa (sin revisión). Preferir preview + confirm. */
   @Post('bulk-create')
   bulkCreate(@CurrentUser() user: User, @Body() body: { text?: string }) {
     const text = typeof body?.text === 'string' ? body.text : '';
     if (!text.trim()) throw new BadRequestException('Pegá la lista de productos en el campo de texto.');
     return this.products.bulkCreateFromText(user.businessId, text);
+  }
+
+  /** Vaciar inventario (solo tenant Teatro). */
+  @Post('wipe-inventory')
+  wipeInventory(
+    @CurrentUser() user: User,
+    @Body() body: { confirm?: string },
+  ) {
+    return this.products.wipeInventory(user.businessId, body?.confirm || '');
   }
 
   @Get(':id/supplier-data')
