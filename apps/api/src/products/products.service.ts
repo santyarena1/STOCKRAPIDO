@@ -1,4 +1,4 @@
-import { Inject, Injectable, BadRequestException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, BadRequestException, ForbiddenException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConsignmentService } from '../consignment/consignment.service';
@@ -12,6 +12,7 @@ import { assertProductLimit } from '../billing/plan-guard';
 import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
 import { PublicCatalogService } from '../public-catalog/public-catalog.service';
+import { parseBulkCreateText } from './bulk-create-text';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -786,6 +787,7 @@ export class ProductsService {
     externalId?: string;
     incomplete?: boolean;
     silent?: boolean;
+    sourcePublicProductId?: string;
   }) {
     await assertProductLimit(this.prisma, businessId);
     const initialStock = Math.max(0, Math.floor(data.stock ?? 0));
@@ -816,6 +818,7 @@ export class ProductsService {
         externalId: data.externalId,
         incomplete: data.incomplete ?? false,
         silent: data.silent ?? false,
+        sourcePublicProductId: data.sourcePublicProductId || undefined,
         allCodes: collectAllCodes(null, [data.barcode, data.supplierSku, data.externalId]),
       },
       include: { category: true },
@@ -1291,6 +1294,222 @@ export class ProductsService {
       out.push({ id: id || undefined, barcode: barcode || undefined, stock, minStock });
     }
     return out;
+  }
+
+  /**
+   * Busca en el catálogo público por código de barras o nombre (+ marca).
+   * Prefiere fichas con imagen y código.
+   */
+  private async findPublicCatalogMatch(row: {
+    barcode?: string;
+    name: string;
+    brand?: string;
+  }) {
+    type Pub = {
+      id: string;
+      name: string;
+      brand: string | null;
+      category: string | null;
+      barcode: string | null;
+      imageUrl: string | null;
+      unitsPerBox: string | null;
+      weight: string | null;
+      format: string | null;
+      flavor: string | null;
+      presentation: string | null;
+      subcategory: string | null;
+    };
+    const pickBest = (candidates: Pub[]) =>
+      candidates.find((c) => c.imageUrl?.trim() && c.barcode?.trim())
+      ?? candidates.find((c) => c.imageUrl?.trim())
+      ?? candidates.find((c) => c.barcode?.trim())
+      ?? candidates[0]
+      ?? null;
+
+    if (row.barcode?.trim()) {
+      const byCode = await this.prisma.publicProduct.findMany({
+        where: { status: 'active', barcode: row.barcode.trim() },
+        orderBy: { updatedAt: 'desc' },
+        take: 8,
+      });
+      const best = pickBest(byCode);
+      if (best) return best;
+    }
+
+    const name = row.name.trim();
+    if (name.length < 3) return null;
+
+    const byNameAndBrand = await this.prisma.publicProduct.findMany({
+      where: {
+        status: 'active',
+        name: { equals: name, mode: 'insensitive' },
+        ...(row.brand?.trim()
+          ? { brand: { equals: row.brand.trim(), mode: 'insensitive' } }
+          : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 8,
+    });
+    if (byNameAndBrand.length) return pickBest(byNameAndBrand);
+
+    // Si vino marca y no hubo match, reintentar solo por nombre exacto.
+    if (row.brand?.trim()) {
+      const byNameOnly = await this.prisma.publicProduct.findMany({
+        where: { status: 'active', name: { equals: name, mode: 'insensitive' } },
+        orderBy: { updatedAt: 'desc' },
+        take: 8,
+      });
+      if (byNameOnly.length) return pickBest(byNameOnly);
+    }
+    return null;
+  }
+
+  /**
+   * Alta masiva desde texto pegado (CSV/TSV/plano).
+   * Crea productos nuevos; si hay match en catálogo público, asocia foto/código/nombre.
+   */
+  async bulkCreateFromText(
+    businessId: string,
+    text: string,
+  ): Promise<{
+    created: number;
+    matchedFromCatalog: number;
+    skipped: number;
+    errors: Array<{ row: number; message: string }>;
+    ids: string[];
+  }> {
+    const parsed = parseBulkCreateText(text);
+    const errors = [...parsed.errors];
+    if (!parsed.rows.length) {
+      if (!errors.length) throw new BadRequestException('No se encontraron filas válidas para crear.');
+      return { created: 0, matchedFromCatalog: 0, skipped: errors.length, errors, ids: [] };
+    }
+
+    const categoryCache = new Map<string, string>();
+    const resolveCategoryId = async (name: string | undefined): Promise<string | undefined> => {
+      const trimmed = name?.trim();
+      if (!trimmed) return undefined;
+      const key = trimmed.toLowerCase();
+      const cached = categoryCache.get(key);
+      if (cached) return cached;
+      const existing = await this.prisma.category.findFirst({
+        where: { businessId, name: { equals: trimmed, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (existing) {
+        categoryCache.set(key, existing.id);
+        return existing.id;
+      }
+      const createdCat = await this.prisma.category.create({
+        data: { businessId, name: trimmed },
+      });
+      categoryCache.set(key, createdCat.id);
+      return createdCat.id;
+    };
+
+    const ids: string[] = [];
+    let created = 0;
+    let matchedFromCatalog = 0;
+    let skipped = 0;
+    let limitHit = false;
+
+    for (const row of parsed.rows) {
+      if (limitHit) {
+        skipped += 1;
+        errors.push({ row: row.line, message: 'Omitido: se alcanzó el límite del plan.' });
+        continue;
+      }
+      try {
+        const pub = await this.findPublicCatalogMatch(row);
+        const effectiveBarcode = row.barcode?.trim() || pub?.barcode?.trim() || undefined;
+
+        if (effectiveBarcode) {
+          const dup = await this.prisma.product.findFirst({
+            where: { businessId, isActive: true, barcode: effectiveBarcode },
+            select: { id: true, name: true },
+          });
+          if (dup) {
+            skipped += 1;
+            errors.push({
+              row: row.line,
+              message: `Ya existe un producto con código ${effectiveBarcode} (${dup.name})`,
+            });
+            continue;
+          }
+        }
+
+        let sourcePublicProductId: string | undefined;
+        if (pub) {
+          const alreadyLinked = await this.prisma.product.findFirst({
+            where: { businessId, sourcePublicProductId: pub.id },
+            select: { id: true },
+          });
+          if (!alreadyLinked) sourcePublicProductId = pub.id;
+        }
+
+        const categoryName = row.category?.trim() || pub?.category?.trim() || undefined;
+        const categoryId = await resolveCategoryId(categoryName);
+        const imageUrl =
+          pub?.imageUrl && /^https?:\/\//i.test(pub.imageUrl.trim()) ? pub.imageUrl.trim() : undefined;
+
+        const product = await this.create(businessId, {
+          // Precio/stock/costo/IVA vienen del pegado; ficha pública aporta nombre, código, foto, marca…
+          name: pub?.name?.trim() || row.name,
+          price: row.price,
+          cost: row.cost,
+          stock: row.stock,
+          minStock: row.minStock,
+          barcode: effectiveBarcode,
+          categoryId,
+          brand: row.brand?.trim() || pub?.brand?.trim() || undefined,
+          iva: row.iva,
+          expiresAt: row.expiresAt,
+          stockControl: row.stockControl,
+          imageUrl,
+          unitsPerBox: pub?.unitsPerBox?.trim() || undefined,
+          weight: pub?.weight?.trim() || undefined,
+          format: pub?.format?.trim() || undefined,
+          flavor: pub?.flavor?.trim() || undefined,
+          presentation: pub?.presentation?.trim() || undefined,
+          subcategory: pub?.subcategory?.trim() || undefined,
+          sourcePublicProductId,
+        });
+        if (!product?.id) {
+          skipped += 1;
+          errors.push({ row: row.line, message: 'No se pudo crear el producto.' });
+          continue;
+        }
+        created += 1;
+        ids.push(product.id);
+        if (pub) {
+          matchedFromCatalog += 1;
+          if (sourcePublicProductId) {
+            await this.prisma.catalogImportLog.create({
+              data: {
+                businessId,
+                publicProductId: pub.id,
+                localProductId: product.id,
+              },
+            }).catch(() => undefined);
+          }
+        }
+      } catch (err) {
+        skipped += 1;
+        let message = 'Error al crear';
+        if (err instanceof ForbiddenException || err instanceof BadRequestException) {
+          const raw = (err as { message?: string | string[] }).message;
+          message = Array.isArray(raw) ? String(raw[0] ?? message) : String(raw || message);
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
+        if (err instanceof ForbiddenException && /productos/i.test(message)) {
+          limitHit = true;
+        }
+        errors.push({ row: row.line, message });
+      }
+    }
+
+    return { created, matchedFromCatalog, skipped, errors, ids };
   }
 
   /** Importa stock (y opcionalmente stock_minimo) desde filas Excel. */

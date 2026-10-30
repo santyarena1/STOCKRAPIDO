@@ -308,6 +308,14 @@ export class ProductsController {
     return this.products.importStock(user.businessId, rows);
   }
 
+  /** Alta masiva: pegá CSV/TSV/texto (nombre, precio, stock, etc.). */
+  @Post('bulk-create')
+  bulkCreate(@CurrentUser() user: User, @Body() body: { text?: string }) {
+    const text = typeof body?.text === 'string' ? body.text : '';
+    if (!text.trim()) throw new BadRequestException('Pegá la lista de productos en el campo de texto.');
+    return this.products.bulkCreateFromText(user.businessId, text);
+  }
+
   @Get(':id/supplier-data')
   getSupplierData(@CurrentUser() user: User, @Param('id') id: string) {
     return this.products.getSupplierData(id, user.businessId);
