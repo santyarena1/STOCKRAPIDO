@@ -108,6 +108,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
   const [step, setStep] = useState<'paste' | 'review' | 'done'>('paste');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [busyMode, setBusyMode] = useState<'preview' | 'direct' | 'confirm' | null>(null);
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [parseErrors, setParseErrors] = useState<Array<{ row: number; message: string }>>([]);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
@@ -168,6 +169,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
       return;
     }
     setBusy(true);
+    setBusyMode('preview');
     try {
       const res = await api<{ rows: PreviewRow[]; parseErrors: Array<{ row: number; message: string }> }>(
         '/products/bulk-create/preview',
@@ -181,6 +183,32 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
       alert(err instanceof Error ? err.message : 'No se pudo armar la revisión');
     } finally {
       setBusy(false);
+      setBusyMode(null);
+    }
+  };
+
+  /** Sube todo de una, sin pantalla de revisión (usa matches automáticos). */
+  const uploadDirect = async () => {
+    if (!text.trim()) {
+      alert('Pegá la lista: producto, cantidad y precio.');
+      return;
+    }
+    setBusy(true);
+    setBusyMode('direct');
+    setResult(null);
+    try {
+      const res = await api<ConfirmResult>('/products/bulk-create', {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
+      setResult(res);
+      setStep('done');
+      if (res.created > 0 || (res.updated ?? 0) > 0) onCreated(res);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error en la carga directa');
+    } finally {
+      setBusy(false);
+      setBusyMode(null);
     }
   };
 
@@ -228,6 +256,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
       return;
     }
     setBusy(true);
+    setBusyMode('confirm');
     try {
       const res = await api<ConfirmResult>('/products/bulk-create/confirm', {
         method: 'POST',
@@ -240,6 +269,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
       alert(err instanceof Error ? err.message : 'Error al confirmar');
     } finally {
       setBusy(false);
+      setBusyMode(null);
     }
   };
 
@@ -294,7 +324,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           <div>
             <h2 className="text-xl font-bold text-fg">Carga masiva de productos</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              {step === 'paste' && 'Pegá producto, cantidad y precio. Después revisás cada match.'}
+              {step === 'paste' && 'Pegá producto, cantidad y precio. Podés subir directo o revisar match por match.'}
               {step === 'review' && 'Aprobá, rechazá o buscá un producto parecido antes de confirmar.'}
               {step === 'done' && 'Listo. Resumen de la carga.'}
             </p>
@@ -561,8 +591,21 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
               <button type="button" disabled={busy} onClick={onClose} className="rounded-xl border border-hair px-4 py-2.5 text-sm text-fg-muted">
                 Cancelar
               </button>
-              <button type="button" disabled={busy || !text.trim()} onClick={() => void loadPreview()} className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
-                {busy ? 'Analizando…' : 'Revisar lista'}
+              <button
+                type="button"
+                disabled={busy || !text.trim()}
+                onClick={() => void loadPreview()}
+                className="rounded-xl border border-hair bg-raised px-4 py-2.5 text-sm font-semibold text-fg hover:bg-raised2 disabled:opacity-50"
+              >
+                {busyMode === 'preview' ? 'Analizando…' : 'Revisar lista'}
+              </button>
+              <button
+                type="button"
+                disabled={busy || !text.trim()}
+                onClick={() => void uploadDirect()}
+                className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
+              >
+                {busyMode === 'direct' ? 'Subiendo…' : 'Subir directo'}
               </button>
             </>
           )}
