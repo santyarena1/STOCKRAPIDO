@@ -343,7 +343,10 @@ export class ProductsController {
     return this.products.bulkCreateConfirm(user.businessId, body?.items || []);
   }
 
-  /** Alta masiva directa (sin revisión). Preferir preview + confirm. */
+  /**
+   * Alta masiva directa (sin revisión ni catálogo):
+   * crea exactamente nombre/cantidad/precio pegados.
+   */
   @Post('bulk-create')
   bulkCreate(@CurrentUser() user: User, @Body() body: { text?: string }) {
     const text = typeof body?.text === 'string' ? body.text : '';

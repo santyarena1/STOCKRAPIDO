@@ -1837,27 +1837,130 @@ export class ProductsService {
   }
 
   /**
-   * Alta masiva directa: arma preview y confirma todo como aprobado
-   * (compatibilidad; la UI usa preview + confirm con revisión).
+   * Carga directa: crea exactamente lo pegado (nombre/cantidad/precio).
+   * NO busca en catálogo público ni cambia nombres/códigos/fotos.
+   * Si el mismo nombre ya existe (o se repite en el pegado), suma stock y actualiza precio.
+   * La revisión con catálogo es solo vía preview + confirm.
    */
   async bulkCreateFromText(businessId: string, text: string) {
-    const preview = await this.bulkCreatePreview(businessId, text);
-    const items = preview.rows.map((r) => ({
-      row: r.row,
-      name: r.name,
-      price: r.price,
-      stock: r.stock,
-      cost: r.cost,
-      action: 'approve' as const,
-      localProductId:
-        r.suggestedAction === 'update_local' ? r.suggestedLocal?.id : undefined,
-      publicProductId:
-        r.suggestedAction === 'link_catalog' ? r.suggestedCatalog?.id : undefined,
-    }));
-    const result = await this.bulkCreateConfirm(businessId, items);
+    const parsed = parseBulkCreateText(text);
+    const parseErrors = [...parsed.errors];
+    const errors: Array<{ row: number; message: string }> = [...parseErrors];
+    // Filas que no parsearon ya “no entran”: cuentan como omitidas con mensaje claro.
+    let skipped = parseErrors.filter((e) => e.row > 0).length;
+
+    if (!parsed.rows.length) {
+      if (!errors.length) throw new BadRequestException('No se encontraron filas válidas para crear.');
+      return {
+        created: 0,
+        updated: 0,
+        matchedFromCatalog: 0,
+        skipped,
+        rejected: 0,
+        errors,
+        matches: [],
+        ids: [] as string[],
+        parseErrors,
+      };
+    }
+
+    const ids: string[] = [];
+    const nameToId = new Map<string, string>(); // normalizado → id (esta carga + existentes)
+    let created = 0;
+    let updated = 0;
+    let limitHit = false;
+
+    const norm = (s: string) =>
+      s
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ');
+
+    for (const row of parsed.rows) {
+      if (limitHit) {
+        skipped += 1;
+        errors.push({ row: row.line, message: 'Omitido: se alcanzó el límite del plan.' });
+        continue;
+      }
+      try {
+        const key = norm(row.name);
+        const qty = Math.max(0, Math.floor(row.stock ?? 0));
+        let existingId = nameToId.get(key);
+
+        if (!existingId) {
+          const existing = await this.prisma.product.findFirst({
+            where: {
+              businessId,
+              isActive: true,
+              name: { equals: row.name.trim(), mode: 'insensitive' },
+            },
+            select: { id: true },
+          });
+          if (existing) {
+            existingId = existing.id;
+            nameToId.set(key, existing.id);
+          }
+        }
+
+        if (existingId) {
+          // Mismo nombre → sumar cantidad (no eliminar ni saltar la fila).
+          if (qty > 0) {
+            await this.adjustStock(existingId, businessId, qty, 'carga_masiva', `Fila ${row.line}`);
+          }
+          await this.prisma.product.update({
+            where: { id: existingId },
+            data: {
+              price: new Decimal(row.price),
+              ...(row.cost != null ? { cost: new Decimal(row.cost) } : {}),
+            },
+          });
+          updated += 1;
+          ids.push(existingId);
+          continue;
+        }
+
+        const product = await this.create(businessId, {
+          name: row.name.trim(),
+          price: row.price,
+          cost: row.cost,
+          stock: qty,
+        });
+        if (!product?.id) {
+          skipped += 1;
+          errors.push({ row: row.line, message: 'No se pudo crear el producto.' });
+          continue;
+        }
+        created += 1;
+        ids.push(product.id);
+        nameToId.set(key, product.id);
+      } catch (err) {
+        skipped += 1;
+        let message = 'Error al crear';
+        if (err instanceof ForbiddenException || err instanceof BadRequestException) {
+          const raw = (err as { message?: string | string[] }).message;
+          message = Array.isArray(raw) ? String(raw[0] ?? message) : String(raw || message);
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
+        if (err instanceof ForbiddenException && /productos/i.test(message)) {
+          limitHit = true;
+        }
+        errors.push({ row: row.line, message });
+      }
+    }
+
     return {
-      ...result,
-      parseErrors: preview.parseErrors,
+      created,
+      updated,
+      matchedFromCatalog: 0,
+      skipped,
+      rejected: 0,
+      errors,
+      matches: [],
+      ids,
+      parseErrors,
     };
   }
 

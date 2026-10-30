@@ -52,6 +52,22 @@ Bizcocho Don Satur Grasa 200g,2,1000;`;
     assert.equal(result.rows[0].price, 733);
     assert.equal(result.rows[2].price, 1000);
   });
+
+  it('lista real con repetidos: parsea todas las filas (sin descartar duplicados)', () => {
+    const text = `Bombón Bon o Bon Blanco 40g,4,733;
+Alfajor Milka Tri Mousse Blanco 55g,3,1329;
+Alfajor Milka Tri Mousse Blanco 55g,3,1329;
+Snack Saladix Dúo 33g,6,601;
+Snack Saladix Dúo 33g,6,601;
+Chocolate Sapito Chocolatosos,24,231;
+Caramelos Menthoplus Manzana,12,597;`;
+    const result = parseBulkCreateText(text);
+    assert.equal(result.errors.length, 0, JSON.stringify(result.errors));
+    assert.equal(result.rows.length, 7);
+    assert.equal(result.rows[5].name, 'Chocolate Sapito Chocolatosos');
+    assert.equal(result.rows[5].stock, 24);
+    assert.equal(result.rows[5].price, 231);
+  });
 });
 
 describe('scoreCatalogNameMatch', () => {

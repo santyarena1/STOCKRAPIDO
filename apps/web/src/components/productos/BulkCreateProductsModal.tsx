@@ -187,7 +187,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
     }
   };
 
-  /** Sube todo de una, sin pantalla de revisión (usa matches automáticos). */
+  /** Sube todo de una: nombre/cantidad/precio tal cual, sin catálogo ni revisión. */
   const uploadDirect = async () => {
     if (!text.trim()) {
       alert('Pegá la lista: producto, cantidad y precio.');
@@ -324,7 +324,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           <div>
             <h2 className="text-xl font-bold text-fg">Carga masiva de productos</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              {step === 'paste' && 'Pegá producto, cantidad y precio. Podés subir directo o revisar match por match.'}
+              {step === 'paste' && 'Pegá producto, cantidad y precio. “Subir directo” guarda exactamente eso (sin catálogo). “Revisar” permite matchear fichas.'}
               {step === 'review' && 'Aprobá, rechazá o buscá un producto parecido antes de confirmar.'}
               {step === 'done' && 'Listo. Resumen de la carga.'}
             </p>
@@ -342,6 +342,15 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
                 <p className="mt-1">
                   <span className="font-mono">producto,cantidad,precio;</span> — el <span className="font-mono">;</span> final es opcional.
                 </p>
+                <ul className="mt-2 list-inside list-disc space-y-0.5">
+                  <li>
+                    <strong className="text-fg">Subir directo:</strong> guarda el nombre/cantidad/precio tal cual, sin buscar en el catálogo.
+                  </li>
+                  <li>
+                    <strong className="text-fg">Revisar lista:</strong> te deja aprobar/rechazar y vincular fichas públicas.
+                  </li>
+                  <li>Si el mismo nombre ya existe, suma la cantidad (no lo tira).</li>
+                </ul>
                 <button type="button" onClick={() => setText(EXAMPLE)} className="mt-2 text-sm font-medium text-brand hover:underline">
                   Cargar ejemplo
                 </button>
@@ -562,22 +571,52 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
             <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4 text-sm text-ok">
               <p>
                 <strong className="font-mono">{result.created}</strong> creados
-                {(result.updated ?? 0) > 0 ? <> · <strong className="font-mono">{result.updated}</strong> actualizados (+stock)</> : null}
-                {result.matchedFromCatalog ? <> · <strong className="font-mono">{result.matchedFromCatalog}</strong> con catálogo</> : null}
-                {result.rejected ? <> · <strong className="font-mono">{result.rejected}</strong> rechazados</> : null}
-                {result.skipped ? <> · <strong className="font-mono">{result.skipped}</strong> con error</> : null}
+                {(result.updated ?? 0) > 0 ? (
+                  <>
+                    {' '}
+                    · <strong className="font-mono">{result.updated}</strong> ya existían / repetidos (+stock)
+                  </>
+                ) : null}
+                {result.matchedFromCatalog ? (
+                  <>
+                    {' '}
+                    · <strong className="font-mono">{result.matchedFromCatalog}</strong> con catálogo
+                  </>
+                ) : null}
+                {result.rejected ? (
+                  <>
+                    {' '}
+                    · <strong className="font-mono">{result.rejected}</strong> rechazados
+                  </>
+                ) : null}
+                {result.skipped ? (
+                  <>
+                    {' '}
+                    · <strong className="font-mono">{result.skipped}</strong> con error de fila
+                  </>
+                ) : null}
               </p>
+              {(result.updated ?? 0) > 0 && !result.matchedFromCatalog ? (
+                <p className="mt-1 text-xs text-fg-muted">
+                  Los repetidos no se borran: se suma la cantidad al mismo nombre.
+                </p>
+              ) : null}
               {result.matches && result.matches.length > 0 && (
                 <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-fg">
                   {result.matches.slice(0, 20).map((m) => (
-                    <li key={`${m.row}-${m.catalog}`}>“{m.pasted}” → {m.catalog}</li>
+                    <li key={`${m.row}-${m.catalog}`}>
+                      “{m.pasted}” → {m.catalog}
+                    </li>
                   ))}
                 </ul>
               )}
               {result.errors.length > 0 && (
                 <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-warn">
                   {result.errors.slice(0, 15).map((e, i) => (
-                    <li key={i}>Fila {e.row}: {e.message}</li>
+                    <li key={i}>
+                      {e.row ? `Fila ${e.row}: ` : ''}
+                      {e.message}
+                    </li>
                   ))}
                 </ul>
               )}
