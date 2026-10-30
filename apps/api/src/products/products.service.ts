@@ -1,4 +1,4 @@
-import { Inject, Injectable, BadRequestException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, BadRequestException, ForbiddenException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConsignmentService } from '../consignment/consignment.service';
@@ -12,6 +12,7 @@ import { assertProductLimit } from '../billing/plan-guard';
 import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
 import { PublicCatalogService } from '../public-catalog/public-catalog.service';
+import { parseBulkCreateText } from './bulk-create-text';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -1291,6 +1292,114 @@ export class ProductsService {
       out.push({ id: id || undefined, barcode: barcode || undefined, stock, minStock });
     }
     return out;
+  }
+
+  /**
+   * Alta masiva desde texto pegado (CSV/TSV/plano).
+   * Crea productos nuevos; no actualiza existentes.
+   */
+  async bulkCreateFromText(
+    businessId: string,
+    text: string,
+  ): Promise<{
+    created: number;
+    skipped: number;
+    errors: Array<{ row: number; message: string }>;
+    ids: string[];
+  }> {
+    const parsed = parseBulkCreateText(text);
+    const errors = [...parsed.errors];
+    if (!parsed.rows.length) {
+      if (!errors.length) throw new BadRequestException('No se encontraron filas válidas para crear.');
+      return { created: 0, skipped: errors.length, errors, ids: [] };
+    }
+
+    const categoryCache = new Map<string, string>();
+    const resolveCategoryId = async (name: string | undefined): Promise<string | undefined> => {
+      const trimmed = name?.trim();
+      if (!trimmed) return undefined;
+      const key = trimmed.toLowerCase();
+      const cached = categoryCache.get(key);
+      if (cached) return cached;
+      const existing = await this.prisma.category.findFirst({
+        where: { businessId, name: { equals: trimmed, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (existing) {
+        categoryCache.set(key, existing.id);
+        return existing.id;
+      }
+      const created = await this.prisma.category.create({
+        data: { businessId, name: trimmed },
+      });
+      categoryCache.set(key, created.id);
+      return created.id;
+    };
+
+    const ids: string[] = [];
+    let created = 0;
+    let skipped = 0;
+    let limitHit = false;
+
+    for (const row of parsed.rows) {
+      if (limitHit) {
+        skipped += 1;
+        errors.push({ row: row.line, message: 'Omitido: se alcanzó el límite del plan.' });
+        continue;
+      }
+      try {
+        if (row.barcode) {
+          const dup = await this.prisma.product.findFirst({
+            where: { businessId, isActive: true, barcode: row.barcode },
+            select: { id: true, name: true },
+          });
+          if (dup) {
+            skipped += 1;
+            errors.push({
+              row: row.line,
+              message: `Ya existe un producto con código ${row.barcode} (${dup.name})`,
+            });
+            continue;
+          }
+        }
+        const categoryId = await resolveCategoryId(row.category);
+        const product = await this.create(businessId, {
+          name: row.name,
+          price: row.price,
+          cost: row.cost,
+          stock: row.stock,
+          minStock: row.minStock,
+          barcode: row.barcode,
+          categoryId,
+          brand: row.brand,
+          iva: row.iva,
+          expiresAt: row.expiresAt,
+          stockControl: row.stockControl,
+        });
+        if (!product?.id) {
+          skipped += 1;
+          errors.push({ row: row.line, message: 'No se pudo crear el producto.' });
+          continue;
+        }
+        created += 1;
+        ids.push(product.id);
+      } catch (err) {
+        skipped += 1;
+        let message = 'Error al crear';
+        if (err instanceof ForbiddenException || err instanceof BadRequestException) {
+          const raw = (err as { message?: string | string[] }).message;
+          message = Array.isArray(raw) ? String(raw[0] ?? message) : String(raw || message);
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
+        if (err instanceof ForbiddenException && /productos/i.test(message)) {
+          limitHit = true;
+        }
+        errors.push({ row: row.line, message });
+      }
+    }
+
+    return { created, skipped, errors, ids };
   }
 
   /** Importa stock (y opcionalmente stock_minimo) desde filas Excel. */
