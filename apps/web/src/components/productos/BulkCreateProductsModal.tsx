@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 
 type BulkResult = {
   created: number;
+  updated?: number;
   matchedFromCatalog?: number;
   skipped: number;
   errors: Array<{ row: number; message: string }>;
@@ -55,7 +56,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
         body: JSON.stringify({ text }),
       });
       setResult(res);
-      if (res.created > 0) {
+      if (res.created > 0 || (res.updated ?? 0) > 0) {
         onCreated(res);
       }
     } catch (err) {
@@ -157,28 +158,32 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           {result && (
             <div
               className={`rounded-xl border p-4 text-sm ${
-                result.created > 0
+                result.created > 0 || (result.updated ?? 0) > 0
                   ? 'border-ok/30 bg-[var(--ok-soft)] text-ok'
                   : 'border-warn/30 bg-[var(--warn-soft)] text-warn'
               }`}
             >
               <p>
-                Se crearon <strong className="font-mono">{result.created}</strong> producto
+                <strong className="font-mono">{result.created}</strong> creado
                 {result.created === 1 ? '' : 's'}
+                {(result.updated ?? 0) > 0 ? (
+                  <>
+                    {' '}
+                    · <strong className="font-mono">{result.updated}</strong> actualizado
+                    {result.updated === 1 ? '' : 's'} (sumó cantidad)
+                  </>
+                ) : null}
                 {result.matchedFromCatalog ? (
                   <>
                     {' '}
                     · <strong className="font-mono">{result.matchedFromCatalog}</strong> con foto/código del
                     catálogo público
                   </>
-                ) : result.created > 0 ? (
-                  <> · ninguno coincidió con el catálogo público</>
                 ) : null}
                 {result.skipped > 0 ? (
                   <>
                     {' '}
-                    · <strong className="font-mono">{result.skipped}</strong> con error u omitido
-                    {result.skipped === 1 ? '' : 's'}
+                    · <strong className="font-mono">{result.skipped}</strong> con error
                   </>
                 ) : null}
                 .
