@@ -1,20 +1,18 @@
 /**
  * Parseo de texto plano / CSV / TSV para alta masiva de productos.
- * Acepta separadores ; , o tab, con o sin encabezado.
+ * Formato principal: producto ; cantidad ; precio unitario
+ * Separadores: ; , o tab. Con o sin encabezado.
  */
 
 export type BulkCreateRow = {
   name: string;
   price: number;
-  cost?: number;
   stock?: number;
-  minStock?: number;
+  /** Campos opcionales si el usuario pega un CSV más completo */
+  cost?: number;
   barcode?: string;
   category?: string;
   brand?: string;
-  iva?: number;
-  expiresAt?: string;
-  stockControl?: boolean;
 };
 
 export type BulkParseError = { row: number; message: string };
@@ -33,22 +31,18 @@ const HEADER_ALIASES: Record<string, keyof BulkCreateRow | 'skip'> = {
   precio: 'price',
   price: 'price',
   precio_venta: 'price',
+  precio_unitario: 'price',
   pvp: 'price',
   costo: 'cost',
   cost: 'cost',
-  coste: 'cost',
   stock: 'stock',
   stock_actual: 'stock',
   cantidad: 'stock',
-  stock_minimo: 'minStock',
-  stock_mínimo: 'minStock',
-  minimo: 'minStock',
-  mínimo: 'minStock',
-  minstock: 'minStock',
+  qty: 'stock',
+  unidades: 'stock',
   codigo_barras: 'barcode',
   código_barras: 'barcode',
   codigo: 'barcode',
-  código: 'barcode',
   barcode: 'barcode',
   ean: 'barcode',
   categoria: 'category',
@@ -56,15 +50,52 @@ const HEADER_ALIASES: Record<string, keyof BulkCreateRow | 'skip'> = {
   category: 'category',
   marca: 'brand',
   brand: 'brand',
-  iva: 'iva',
-  vencimiento: 'expiresAt',
-  expiresat: 'expiresAt',
-  expires_at: 'expiresAt',
-  control_stock: 'stockControl',
-  stockcontrol: 'stockControl',
-  // columnas de export que no usamos al crear
   id: 'skip',
+  stock_minimo: 'skip',
+  iva: 'skip',
+  vencimiento: 'skip',
+  control_stock: 'skip',
 };
+
+export function normalizeProductName(raw: string): string {
+  return String(raw || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Score 0–100 de similitud entre el nombre pegado y una ficha pública. */
+export function scoreCatalogNameMatch(
+  query: string,
+  candidateName: string,
+  candidateBrand?: string | null,
+): number {
+  const q = normalizeProductName(query);
+  const n = normalizeProductName(candidateName);
+  if (!q || !n) return 0;
+  if (q === n) return 100;
+  if (n.startsWith(q) || q.startsWith(n)) return 88;
+
+  const qTokens = q.split(' ').filter((t) => t.length >= 2);
+  const nTokens = new Set(n.split(' ').filter((t) => t.length >= 2));
+  if (!qTokens.length) return 0;
+
+  const matched = qTokens.filter((t) => n.includes(t) || nTokens.has(t)).length;
+  const ratio = matched / qTokens.length;
+
+  if (ratio === 1 && qTokens.length >= 2) return 80;
+  if (ratio === 1) return 70;
+  if (ratio >= 0.75 && matched >= 2) return 62;
+  if (n.includes(q) || q.includes(n)) return 55;
+
+  const brand = normalizeProductName(candidateBrand || '');
+  if (brand && q.includes(brand) && matched >= 1) return 58;
+
+  return 0;
+}
 
 function normalizeHeader(raw: string): string {
   return raw
@@ -88,7 +119,6 @@ function detectDelimiter(sample: string): string {
   return counts[0].n > 0 ? counts[0].sep : ';';
 }
 
-/** Split CSV-like line respecting double quotes. */
 function splitLine(line: string, sep: string): string[] {
   const out: string[] = [];
   let cur = '';
@@ -126,7 +156,6 @@ function splitLine(line: string, sep: string): string[] {
 function parseNumber(raw: string): number | null {
   const s = raw.trim().replace(/\s/g, '');
   if (!s) return null;
-  // 1.234,56 (es-AR) o 1234.56
   let normalized = s;
   if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {
     normalized = s.replace(/\./g, '').replace(',', '.');
@@ -137,17 +166,9 @@ function parseNumber(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function parseBool(raw: string): boolean | undefined {
-  const s = raw.trim().toLowerCase();
-  if (!s) return undefined;
-  if (['1', 'true', 'si', 'sí', 'yes', 'y', 's'].includes(s)) return true;
-  if (['0', 'false', 'no', 'n'].includes(s)) return false;
-  return undefined;
-}
-
 function looksLikeHeader(cells: string[]): boolean {
   const mapped = cells.map((c) => HEADER_ALIASES[normalizeHeader(c)]).filter(Boolean);
-  return mapped.includes('name') || mapped.includes('price');
+  return mapped.includes('name') || mapped.includes('price') || mapped.includes('stock');
 }
 
 function buildColumnMap(headers: string[]): Partial<Record<keyof BulkCreateRow, number>> {
@@ -160,15 +181,14 @@ function buildColumnMap(headers: string[]): Partial<Record<keyof BulkCreateRow, 
   return map;
 }
 
-/** Sin encabezado: nombre;precio[;stock][;costo][;codigo][;categoria][;marca] */
+/**
+ * Sin encabezado (formato pedido):
+ *   producto ; cantidad ; precio_unitario
+ * Con 2 columnas: producto ; precio
+ */
 function positionalMap(cellCount: number): Partial<Record<keyof BulkCreateRow, number>> {
-  const map: Partial<Record<keyof BulkCreateRow, number>> = { name: 0, price: 1 };
-  if (cellCount >= 3) map.stock = 2;
-  if (cellCount >= 4) map.cost = 3;
-  if (cellCount >= 5) map.barcode = 4;
-  if (cellCount >= 6) map.category = 5;
-  if (cellCount >= 7) map.brand = 6;
-  return map;
+  if (cellCount <= 2) return { name: 0, price: 1 };
+  return { name: 0, stock: 1, price: 2 };
 }
 
 function cellAt(cells: string[], index: number | undefined): string {
@@ -183,12 +203,23 @@ function rowFromCells(
 ): { row?: BulkCreateRow & { line: number }; error?: BulkParseError } {
   const name = cellAt(cells, colMap.name).trim();
   if (!name) {
-    return { error: { row: line, message: 'Falta el nombre' } };
+    return { error: { row: line, message: 'Falta el nombre del producto' } };
   }
+
   const priceRaw = cellAt(cells, colMap.price);
   const price = parseNumber(priceRaw);
   if (price == null || price < 0) {
-    return { error: { row: line, message: `Precio inválido: "${priceRaw || '(vacío)'}"` } };
+    return { error: { row: line, message: `Precio unitario inválido: "${priceRaw || '(vacío)'}"` } };
+  }
+
+  const stockRaw = cellAt(cells, colMap.stock);
+  let stockNum: number | null = null;
+  if (stockRaw) {
+    stockNum = parseNumber(stockRaw);
+    if (stockNum == null || stockNum < 0) {
+      return { error: { row: line, message: `Cantidad inválida: "${stockRaw}"` } };
+    }
+    stockNum = Math.floor(stockNum);
   }
 
   const costRaw = cellAt(cells, colMap.cost);
@@ -197,46 +228,20 @@ function rowFromCells(
     return { error: { row: line, message: `Costo inválido: "${costRaw}"` } };
   }
 
-  const stockRaw = cellAt(cells, colMap.stock);
-  const stockNum = stockRaw ? parseNumber(stockRaw) : null;
-  if (stockRaw && (stockNum == null || stockNum < 0 || !Number.isInteger(stockNum))) {
-    return { error: { row: line, message: `Stock inválido: "${stockRaw}"` } };
-  }
-
-  const minRaw = cellAt(cells, colMap.minStock);
-  const minNum = minRaw ? parseNumber(minRaw) : null;
-  if (minRaw && (minNum == null || minNum < 0 || !Number.isInteger(minNum))) {
-    return { error: { row: line, message: `Stock mínimo inválido: "${minRaw}"` } };
-  }
-
-  const ivaRaw = cellAt(cells, colMap.iva);
-  const iva = ivaRaw ? parseNumber(ivaRaw) : null;
-  if (ivaRaw && (iva == null || iva < 0)) {
-    return { error: { row: line, message: `IVA inválido: "${ivaRaw}"` } };
-  }
-
-  const stockControlRaw = cellAt(cells, colMap.stockControl);
-  const stockControl = stockControlRaw ? parseBool(stockControlRaw) : undefined;
-
   const barcode = cellAt(cells, colMap.barcode).trim() || undefined;
   const category = cellAt(cells, colMap.category).trim() || undefined;
   const brand = cellAt(cells, colMap.brand).trim() || undefined;
-  const expiresAt = cellAt(cells, colMap.expiresAt).trim() || undefined;
 
   return {
     row: {
       line,
       name,
       price,
+      ...(stockNum != null ? { stock: stockNum } : {}),
       ...(cost != null ? { cost } : {}),
-      ...(stockNum != null ? { stock: Math.floor(stockNum) } : {}),
-      ...(minNum != null ? { minStock: Math.floor(minNum) } : {}),
       ...(barcode ? { barcode } : {}),
       ...(category ? { category } : {}),
       ...(brand ? { brand } : {}),
-      ...(iva != null ? { iva } : {}),
-      ...(expiresAt ? { expiresAt } : {}),
-      ...(stockControl !== undefined ? { stockControl } : {}),
     },
   };
 }
@@ -262,10 +267,10 @@ export function parseBulkCreateText(text: string): BulkParseResult {
   if (looksLikeHeader(firstCells)) {
     colMap = buildColumnMap(firstCells);
     if (colMap.name === undefined) {
-      return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir una columna de nombre.' }] };
+      return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir producto/nombre.' }] };
     }
     if (colMap.price === undefined) {
-      return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir una columna de precio.' }] };
+      return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir precio unitario.' }] };
     }
     start = 1;
   } else {
@@ -296,6 +301,7 @@ export function parseBulkCreateText(text: string): BulkParseResult {
   return { rows, errors };
 }
 
-export const BULK_CREATE_EXAMPLE = `nombre;precio;stock;costo;codigo_barras;categoria;marca
-Coca Cola 500ml;1500;24;900;7790895001234;Bebidas;Coca-Cola
-Alfajor Havanna;800;50;450;;Golosinas;Havanna`;
+export const BULK_CREATE_EXAMPLE = `producto;cantidad;precio
+Coca Cola 500ml;24;1500
+Alfajor Havanna;50;800
+Agua Villavicencio 2L;12;1200`;

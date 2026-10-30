@@ -1,42 +1,57 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseBulkCreateText } from '../src/products/bulk-create-text';
+import {
+  parseBulkCreateText,
+  scoreCatalogNameMatch,
+} from '../src/products/bulk-create-text';
 
 describe('parseBulkCreateText', () => {
-  it('parsea CSV con encabezado y ;', () => {
-    const text = `nombre;precio;stock;costo;codigo_barras;categoria;marca
-Coca;1500;24;900;123;Bebidas;Coca-Cola
-Alfajor;800;10;;`;
+  it('formato principal: producto;cantidad;precio', () => {
+    const text = `producto;cantidad;precio
+Coca;24;1500
+Alfajor;10;800`;
     const result = parseBulkCreateText(text);
     assert.equal(result.rows.length, 2);
     assert.equal(result.rows[0].name, 'Coca');
-    assert.equal(result.rows[0].price, 1500);
     assert.equal(result.rows[0].stock, 24);
-    assert.equal(result.rows[0].cost, 900);
-    assert.equal(result.rows[0].barcode, '123');
-    assert.equal(result.rows[0].category, 'Bebidas');
-    assert.equal(result.rows[0].brand, 'Coca-Cola');
+    assert.equal(result.rows[0].price, 1500);
     assert.equal(result.rows[1].name, 'Alfajor');
-    assert.equal(result.rows[1].price, 800);
     assert.equal(result.rows[1].stock, 10);
+    assert.equal(result.rows[1].price, 800);
   });
 
-  it('parsea sin encabezado nombre;precio;stock', () => {
-    const result = parseBulkCreateText('Gaseosa;1200;5');
+  it('sin encabezado: nombre;cantidad;precio', () => {
+    const result = parseBulkCreateText('Gaseosa;5;1200');
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0].name, 'Gaseosa');
-    assert.equal(result.rows[0].price, 1200);
     assert.equal(result.rows[0].stock, 5);
+    assert.equal(result.rows[0].price, 1200);
+  });
+
+  it('dos columnas: nombre;precio', () => {
+    const result = parseBulkCreateText('Item;12,50');
+    assert.equal(result.rows[0]?.price, 12.5);
+    assert.equal(result.rows[0]?.stock, undefined);
   });
 
   it('reporta precio inválido', () => {
-    const result = parseBulkCreateText('nombre;precio\nAlgo;abc');
+    const result = parseBulkCreateText('producto;cantidad;precio\nAlgo;2;abc');
     assert.equal(result.rows.length, 0);
-    assert.ok(result.errors.some((e) => /Precio inválido/i.test(e.message)));
+    assert.ok(result.errors.some((e) => /Precio unitario inválido/i.test(e.message)));
+  });
+});
+
+describe('scoreCatalogNameMatch', () => {
+  it('match exacto e insensible a mayúsculas/acentos', () => {
+    assert.equal(scoreCatalogNameMatch('Coca Cola', 'coca cola'), 100);
   });
 
-  it('acepta precio con coma decimal', () => {
-    const result = parseBulkCreateText('nombre;precio\nItem;12,50');
-    assert.equal(result.rows[0]?.price, 12.5);
+  it('match parcial por tokens', () => {
+    const score = scoreCatalogNameMatch('coca 500', 'Coca Cola 500ml');
+    assert.ok(score >= 55, `score=${score}`);
+  });
+
+  it('no matchea cosas distintas', () => {
+    assert.ok(scoreCatalogNameMatch('alfajor', 'Gaseosa Sprite') < 55);
   });
 });
