@@ -345,7 +345,7 @@ export class ProductsController {
 
   /**
    * Alta masiva directa (sin revisión ni catálogo):
-   * crea exactamente nombre/cantidad/precio pegados.
+   * crea exactamente nombre/cantidad/costo pegados (3.er valor = costo, no venta).
    */
   @Post('bulk-create')
   bulkCreate(@CurrentUser() user: User, @Body() body: { text?: string }) {

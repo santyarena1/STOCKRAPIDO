@@ -63,7 +63,7 @@ type Props = {
   onCreated: (result: ConfirmResult) => void;
 };
 
-const EXAMPLE = `producto;cantidad;precio
+const EXAMPLE = `producto;cantidad;costo
 Coca Cola 500ml;24;1500
 Alfajor Havanna;50;800`;
 
@@ -165,7 +165,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
 
   const loadPreview = async () => {
     if (!text.trim()) {
-      alert('Pegá la lista: producto, cantidad y precio.');
+      alert('Pegá la lista: producto, cantidad y costo.');
       return;
     }
     setBusy(true);
@@ -187,10 +187,10 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
     }
   };
 
-  /** Sube todo de una: nombre/cantidad/precio tal cual, sin catálogo ni revisión. */
+  /** Sube todo de una: nombre/cantidad/costo tal cual, sin catálogo ni revisión. */
   const uploadDirect = async () => {
     if (!text.trim()) {
-      alert('Pegá la lista: producto, cantidad y precio.');
+      alert('Pegá la lista: producto, cantidad y costo.');
       return;
     }
     setBusy(true);
@@ -324,7 +324,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           <div>
             <h2 className="text-xl font-bold text-fg">Carga masiva de productos</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              {step === 'paste' && 'Pegá producto, cantidad y precio. “Subir directo” guarda exactamente eso (sin catálogo). “Revisar” permite matchear fichas.'}
+              {step === 'paste' && 'Pegá producto, cantidad y costo. “Subir directo” guarda eso (sin catálogo). “Revisar” permite matchear fichas.'}
               {step === 'review' && 'Aprobá, rechazá o buscá un producto parecido antes de confirmar.'}
               {step === 'done' && 'Listo. Resumen de la carga.'}
             </p>
@@ -340,16 +340,19 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
               <div className="rounded-xl border border-hair-soft bg-raised p-3 text-xs text-fg-muted">
                 <p className="font-medium text-fg">Formato</p>
                 <p className="mt-1">
-                  <span className="font-mono">producto,cantidad,precio;</span> — el <span className="font-mono">;</span> final es opcional.
+                  <span className="font-mono">producto,cantidad,costo;</span> — el <span className="font-mono">;</span> final es opcional.
+                </p>
+                <p className="mt-1 text-warn">
+                  El tercer valor es <strong className="text-fg">costo</strong> (no precio de venta). El precio de venta no se modifica.
                 </p>
                 <ul className="mt-2 list-inside list-disc space-y-0.5">
                   <li>
-                    <strong className="text-fg">Subir directo:</strong> guarda el nombre/cantidad/precio tal cual, sin buscar en el catálogo.
+                    <strong className="text-fg">Subir directo:</strong> guarda nombre/cantidad/costo tal cual, sin buscar en el catálogo.
                   </li>
                   <li>
                     <strong className="text-fg">Revisar lista:</strong> te deja aprobar/rechazar y vincular fichas públicas.
                   </li>
-                  <li>Si el mismo nombre ya existe, suma la cantidad (no lo tira).</li>
+                  <li>Si el mismo nombre ya existe, suma la cantidad y actualiza el costo.</li>
                 </ul>
                 <button type="button" onClick={() => setText(EXAMPLE)} className="mt-2 text-sm font-medium text-brand hover:underline">
                   Cargar ejemplo
@@ -421,7 +424,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
                           <p className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">Fila {r.row} · pegado</p>
                           <p className="truncate font-semibold text-fg">{r.name}</p>
                           <p className="font-mono text-xs text-fg-muted">
-                            {r.stock} u · {money(r.price)}
+                            {r.stock} u · costo {money(r.cost ?? r.price)}
                           </p>
                         </div>
                         <div className="flex shrink-0 gap-1.5">
