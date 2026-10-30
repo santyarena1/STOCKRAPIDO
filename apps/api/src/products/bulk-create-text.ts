@@ -1,15 +1,16 @@
 /**
  * Parseo de texto plano / CSV / TSV para alta masiva de productos.
- * Formato principal: producto ; cantidad ; precio unitario
+ * Formato principal: producto ; cantidad ; costo unitario
  * Separadores: ; , o tab. Con o sin encabezado.
  */
 
 export type BulkCreateRow = {
   name: string;
+  /** Precio de venta (opcional; si no viene, 0). */
   price: number;
+  /** Costo unitario — columna principal de la lista pegada. */
+  cost: number;
   stock?: number;
-  /** Campos opcionales si el usuario pega un CSV más completo */
-  cost?: number;
   barcode?: string;
   category?: string;
   brand?: string;
@@ -28,13 +29,16 @@ const HEADER_ALIASES: Record<string, keyof BulkCreateRow | 'skip'> = {
   producto: 'name',
   descripcion: 'name',
   descripción: 'name',
-  precio: 'price',
-  price: 'price',
-  precio_venta: 'price',
-  precio_unitario: 'price',
-  pvp: 'price',
+  // En esta carga, "precio" / "precio unitario" = costo (no venta).
+  precio: 'cost',
+  precio_unitario: 'cost',
   costo: 'cost',
   cost: 'cost',
+  costo_unitario: 'cost',
+  // Precio de venta solo con encabezados explícitos.
+  precio_venta: 'price',
+  pvp: 'price',
+  price: 'price',
   stock: 'stock',
   stock_actual: 'stock',
   cantidad: 'stock',
@@ -179,7 +183,7 @@ function parseNumber(raw: string): number | null {
 
 function looksLikeHeader(cells: string[]): boolean {
   const mapped = cells.map((c) => HEADER_ALIASES[normalizeHeader(c)]).filter(Boolean);
-  return mapped.includes('name') || mapped.includes('price') || mapped.includes('stock');
+  return mapped.includes('name') || mapped.includes('price') || mapped.includes('cost') || mapped.includes('stock');
 }
 
 function buildColumnMap(headers: string[]): Partial<Record<keyof BulkCreateRow, number>> {
@@ -194,12 +198,12 @@ function buildColumnMap(headers: string[]): Partial<Record<keyof BulkCreateRow, 
 
 /**
  * Sin encabezado (formato pedido):
- *   producto ; cantidad ; precio_unitario
- * Con 2 columnas: producto ; precio
+ *   producto ; cantidad ; costo_unitario
+ * Con 2 columnas: producto ; costo
  */
 function positionalMap(cellCount: number): Partial<Record<keyof BulkCreateRow, number>> {
-  if (cellCount <= 2) return { name: 0, price: 1 };
-  return { name: 0, stock: 1, price: 2 };
+  if (cellCount <= 2) return { name: 0, cost: 1 };
+  return { name: 0, stock: 1, cost: 2 };
 }
 
 function cellAt(cells: string[], index: number | undefined): string {
@@ -217,10 +221,10 @@ function rowFromCells(
     return { error: { row: line, message: 'Falta el nombre del producto' } };
   }
 
-  const priceRaw = cellAt(cells, colMap.price);
-  const price = parseNumber(priceRaw);
-  if (price == null || price < 0) {
-    return { error: { row: line, message: `Precio unitario inválido: "${priceRaw || '(vacío)'}"` } };
+  const costRaw = cellAt(cells, colMap.cost);
+  const cost = parseNumber(costRaw);
+  if (cost == null || cost < 0) {
+    return { error: { row: line, message: `Costo unitario inválido: "${costRaw || '(vacío)'}"` } };
   }
 
   const stockRaw = cellAt(cells, colMap.stock);
@@ -233,10 +237,14 @@ function rowFromCells(
     stockNum = Math.floor(stockNum);
   }
 
-  const costRaw = cellAt(cells, colMap.cost);
-  const cost = costRaw ? parseNumber(costRaw) : null;
-  if (costRaw && (cost == null || cost < 0)) {
-    return { error: { row: line, message: `Costo inválido: "${costRaw}"` } };
+  const priceRaw = cellAt(cells, colMap.price);
+  let salePrice = 0;
+  if (priceRaw) {
+    const parsedPrice = parseNumber(priceRaw);
+    if (parsedPrice == null || parsedPrice < 0) {
+      return { error: { row: line, message: `Precio de venta inválido: "${priceRaw}"` } };
+    }
+    salePrice = parsedPrice;
   }
 
   const barcode = cellAt(cells, colMap.barcode).trim() || undefined;
@@ -247,9 +255,9 @@ function rowFromCells(
     row: {
       line,
       name,
-      price,
+      cost,
+      price: salePrice,
       ...(stockNum != null ? { stock: stockNum } : {}),
-      ...(cost != null ? { cost } : {}),
       ...(barcode ? { barcode } : {}),
       ...(category ? { category } : {}),
       ...(brand ? { brand } : {}),
@@ -280,8 +288,8 @@ export function parseBulkCreateText(text: string): BulkParseResult {
     if (colMap.name === undefined) {
       return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir producto/nombre.' }] };
     }
-    if (colMap.price === undefined) {
-      return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir precio unitario.' }] };
+    if (colMap.cost === undefined) {
+      return { rows: [], errors: [{ row: 1, message: 'El encabezado debe incluir costo (o precio = costo).' }] };
     }
     start = 1;
   } else {
@@ -312,7 +320,7 @@ export function parseBulkCreateText(text: string): BulkParseResult {
   return { rows, errors };
 }
 
-export const BULK_CREATE_EXAMPLE = `producto;cantidad;precio
+export const BULK_CREATE_EXAMPLE = `producto;cantidad;costo
 Coca Cola 500ml;24;1500
 Alfajor Havanna;50;800
 Agua Villavicencio 2L;12;1200`;

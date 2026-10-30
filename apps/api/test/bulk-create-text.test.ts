@@ -6,41 +6,45 @@ import {
 } from '../src/products/bulk-create-text';
 
 describe('parseBulkCreateText', () => {
-  it('formato principal: producto;cantidad;precio', () => {
-    const text = `producto;cantidad;precio
+  it('formato principal: producto;cantidad;costo', () => {
+    const text = `producto;cantidad;costo
 Coca;24;1500
 Alfajor;10;800`;
     const result = parseBulkCreateText(text);
     assert.equal(result.rows.length, 2);
     assert.equal(result.rows[0].name, 'Coca');
     assert.equal(result.rows[0].stock, 24);
-    assert.equal(result.rows[0].price, 1500);
+    assert.equal(result.rows[0].cost, 1500);
+    assert.equal(result.rows[0].price, 0);
     assert.equal(result.rows[1].name, 'Alfajor');
     assert.equal(result.rows[1].stock, 10);
-    assert.equal(result.rows[1].price, 800);
+    assert.equal(result.rows[1].cost, 800);
+    assert.equal(result.rows[1].price, 0);
   });
 
-  it('sin encabezado: nombre;cantidad;precio', () => {
+  it('sin encabezado: nombre;cantidad;costo', () => {
     const result = parseBulkCreateText('Gaseosa;5;1200');
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0].name, 'Gaseosa');
     assert.equal(result.rows[0].stock, 5);
-    assert.equal(result.rows[0].price, 1200);
+    assert.equal(result.rows[0].cost, 1200);
+    assert.equal(result.rows[0].price, 0);
   });
 
-  it('dos columnas: nombre;precio', () => {
+  it('dos columnas: nombre;costo', () => {
     const result = parseBulkCreateText('Item;12,50');
-    assert.equal(result.rows[0]?.price, 12.5);
+    assert.equal(result.rows[0]?.cost, 12.5);
+    assert.equal(result.rows[0]?.price, 0);
     assert.equal(result.rows[0]?.stock, undefined);
   });
 
-  it('reporta precio inválido', () => {
-    const result = parseBulkCreateText('producto;cantidad;precio\nAlgo;2;abc');
+  it('reporta costo inválido', () => {
+    const result = parseBulkCreateText('producto;cantidad;costo\nAlgo;2;abc');
     assert.equal(result.rows.length, 0);
-    assert.ok(result.errors.some((e) => /Precio unitario inválido/i.test(e.message)));
+    assert.ok(result.errors.some((e) => /Costo unitario inválido/i.test(e.message)));
   });
 
-  it('tolera CSV con comas y ; al final de cada línea', () => {
+  it('tolera CSV con comas y ; al final de cada línea (costo)', () => {
     const text = `Bombón Bon o Bon Blanco 40g,4,733;
 Bombón Bon o Bon Negro 40g,4,733;
 Bizcocho Don Satur Grasa 200g,2,1000;`;
@@ -49,11 +53,21 @@ Bizcocho Don Satur Grasa 200g,2,1000;`;
     assert.equal(result.rows.length, 3);
     assert.equal(result.rows[0].name, 'Bombón Bon o Bon Blanco 40g');
     assert.equal(result.rows[0].stock, 4);
-    assert.equal(result.rows[0].price, 733);
-    assert.equal(result.rows[2].price, 1000);
+    assert.equal(result.rows[0].cost, 733);
+    assert.equal(result.rows[0].price, 0);
+    assert.equal(result.rows[2].cost, 1000);
   });
 
-  it('lista real con repetidos: parsea todas las filas (sin descartar duplicados)', () => {
+  it('encabezado "precio" se interpreta como costo', () => {
+    const text = `producto;cantidad;precio
+Coca;24;1500`;
+    const result = parseBulkCreateText(text);
+    assert.equal(result.errors.length, 0, JSON.stringify(result.errors));
+    assert.equal(result.rows[0].cost, 1500);
+    assert.equal(result.rows[0].price, 0);
+  });
+
+  it('lista real con repetidos: parsea todas las filas como costo', () => {
     const text = `Bombón Bon o Bon Blanco 40g,4,733;
 Alfajor Milka Tri Mousse Blanco 55g,3,1329;
 Alfajor Milka Tri Mousse Blanco 55g,3,1329;
@@ -66,7 +80,8 @@ Caramelos Menthoplus Manzana,12,597;`;
     assert.equal(result.rows.length, 7);
     assert.equal(result.rows[5].name, 'Chocolate Sapito Chocolatosos');
     assert.equal(result.rows[5].stock, 24);
-    assert.equal(result.rows[5].price, 231);
+    assert.equal(result.rows[5].cost, 231);
+    assert.equal(result.rows[5].price, 0);
   });
 });
 

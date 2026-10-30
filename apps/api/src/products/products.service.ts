@@ -1650,7 +1650,14 @@ export class ProductsService {
         const price = Number(item.price);
         if (!Number.isFinite(price) || price < 0) {
           skipped += 1;
-          errors.push({ row: item.row, message: 'Precio inválido' });
+          errors.push({ row: item.row, message: 'Precio de venta inválido' });
+          continue;
+        }
+        const costNum = item.cost != null ? Number(item.cost) : NaN;
+        const hasCost = Number.isFinite(costNum) && costNum >= 0;
+        if (!hasCost) {
+          skipped += 1;
+          errors.push({ row: item.row, message: 'Costo inválido' });
           continue;
         }
         const stock = Math.max(0, Math.floor(Number(item.stock ?? 0) || 0));
@@ -1678,8 +1685,8 @@ export class ProductsService {
           await this.prisma.product.update({
             where: { id: existing.id },
             data: {
-              price: new Decimal(price),
-              ...(item.cost != null ? { cost: new Decimal(item.cost) } : {}),
+              cost: new Decimal(costNum),
+              ...(price > 0 ? { price: new Decimal(price) } : {}),
             },
           });
           updated += 1;
@@ -1710,7 +1717,10 @@ export class ProductsService {
             }
             await this.prisma.product.update({
               where: { id: dup.id },
-              data: { price: new Decimal(price) },
+              data: {
+                cost: new Decimal(costNum),
+                ...(price > 0 ? { price: new Decimal(price) } : {}),
+              },
             });
             updated += 1;
             ids.push(dup.id);
@@ -1741,7 +1751,10 @@ export class ProductsService {
             }
             await this.prisma.product.update({
               where: { id: alreadyLinked.id },
-              data: { price: new Decimal(price) },
+              data: {
+                cost: new Decimal(costNum),
+                ...(price > 0 ? { price: new Decimal(price) } : {}),
+              },
             });
             updated += 1;
             ids.push(alreadyLinked.id);
@@ -1766,8 +1779,8 @@ export class ProductsService {
 
         const product = await this.create(businessId, {
           name: pub?.name?.trim() || name,
-          price,
-          cost: item.cost,
+          price: price > 0 ? price : 0,
+          cost: costNum,
           stock,
           barcode: effectiveBarcode,
           categoryId,
@@ -1837,10 +1850,11 @@ export class ProductsService {
   }
 
   /**
-   * Carga directa: crea exactamente lo pegado (nombre/cantidad/precio).
+   * Carga directa: crea exactamente lo pegado (nombre/cantidad/costo).
    * NO busca en catálogo público ni cambia nombres/códigos/fotos.
-   * Si el mismo nombre ya existe (o se repite en el pegado), suma stock y actualiza precio.
-   * La revisión con catálogo es solo vía preview + confirm.
+   * El 3.er valor es COSTO (no precio de venta). Precio de venta queda 0 en altas nuevas
+   * y no se pisa en productos existentes.
+   * Si el mismo nombre ya existe (o se repite), suma stock y actualiza costo.
    */
   async bulkCreateFromText(businessId: string, text: string) {
     const parsed = parseBulkCreateText(text);
@@ -1889,18 +1903,19 @@ export class ProductsService {
         const qty = Math.max(0, Math.floor(row.stock ?? 0));
         let existingId = nameToId.get(key);
 
+        let existingMeta: { id: string; price: unknown; cost: unknown } | null = null;
         if (!existingId) {
-          const existing = await this.prisma.product.findFirst({
+          existingMeta = await this.prisma.product.findFirst({
             where: {
               businessId,
               isActive: true,
               name: { equals: row.name.trim(), mode: 'insensitive' },
             },
-            select: { id: true },
+            select: { id: true, price: true, cost: true },
           });
-          if (existing) {
-            existingId = existing.id;
-            nameToId.set(key, existing.id);
+          if (existingMeta) {
+            existingId = existingMeta.id;
+            nameToId.set(key, existingMeta.id);
           }
         }
 
@@ -1909,11 +1924,21 @@ export class ProductsService {
           if (qty > 0) {
             await this.adjustStock(existingId, businessId, qty, 'carga_masiva', `Fila ${row.line}`);
           }
+          // Si una carga anterior dejó el número en venta y costo vacío, lo corregimos.
+          const wronglyAsSale =
+            row.price <= 0 &&
+            existingMeta != null &&
+            existingMeta.cost == null &&
+            Number(existingMeta.price) === row.cost;
           await this.prisma.product.update({
             where: { id: existingId },
             data: {
-              price: new Decimal(row.price),
-              ...(row.cost != null ? { cost: new Decimal(row.cost) } : {}),
+              cost: new Decimal(row.cost),
+              ...(row.price > 0
+                ? { price: new Decimal(row.price) }
+                : wronglyAsSale
+                  ? { price: new Decimal(0) }
+                  : {}),
             },
           });
           updated += 1;
@@ -1923,7 +1948,8 @@ export class ProductsService {
 
         const product = await this.create(businessId, {
           name: row.name.trim(),
-          price: row.price,
+          // Alta nueva: costo de la lista; venta 0 si no vino precio_venta explícito.
+          price: row.price > 0 ? row.price : 0,
           cost: row.cost,
           stock: qty,
         });
