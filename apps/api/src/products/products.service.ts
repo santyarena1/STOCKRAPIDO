@@ -1296,11 +1296,31 @@ export class ProductsService {
     return out;
   }
 
-  /**
-   * Busca en el catálogo público por código o por nombre (flexible).
-   * Prefiere fichas con imagen + código y score alto de similitud.
-   */
-  private async findPublicCatalogMatch(row: {
+  private isTeatroTenant(businessName: string, businessId: string): boolean {
+    const allow = (process.env.INVENTORY_WIPE_BUSINESS_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (allow.includes(businessId)) return true;
+    const n = businessName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    return n.includes('teatro');
+  }
+
+  private nameSearchTokens(name: string): string[] {
+    return name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length >= 3)
+      .slice(0, 4);
+  }
+
+  private async findPublicCatalogCandidates(row: {
     barcode?: string;
     name: string;
     brand?: string;
@@ -1320,18 +1340,6 @@ export class ProductsService {
       subcategory: string | null;
     };
 
-    const rank = (candidates: Pub[], query: string) => {
-      const scored = candidates
-        .map((c) => ({
-          c,
-          score: scoreCatalogNameMatch(query, c.name, c.brand),
-          boost: (c.imageUrl?.trim() ? 3 : 0) + (c.barcode?.trim() ? 2 : 0),
-        }))
-        .filter((x) => x.score >= 55)
-        .sort((a, b) => b.score - a.score || b.boost - a.boost);
-      return scored[0]?.c ?? null;
-    };
-
     if (row.barcode?.trim()) {
       const byCode = await this.prisma.publicProduct.findMany({
         where: { status: 'active', barcode: row.barcode.trim() },
@@ -1339,25 +1347,14 @@ export class ProductsService {
         take: 8,
       });
       if (byCode.length) {
-        return (
-          byCode.find((c) => c.imageUrl?.trim())
-          ?? byCode[0]
-        );
+        return byCode.map((c) => ({ ...c, score: 100 }));
       }
     }
 
     const name = row.name.trim();
-    if (name.length < 2) return null;
+    if (name.length < 2) return [] as Array<Pub & { score: number }>;
 
-    const tokens = name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((t) => t.length >= 3)
-      .slice(0, 4);
-
+    const tokens = this.nameSearchTokens(name);
     const or: Array<Record<string, unknown>> = [
       { name: { equals: name, mode: 'insensitive' } },
       { name: { contains: name, mode: 'insensitive' } },
@@ -1367,166 +1364,367 @@ export class ProductsService {
       or.push({ name: { contains: token, mode: 'insensitive' } });
       or.push({ keywords: { contains: token, mode: 'insensitive' } });
     }
-    if (row.brand?.trim()) {
-      or.push({ brand: { equals: row.brand.trim(), mode: 'insensitive' } });
-    }
 
     const candidates = await this.prisma.publicProduct.findMany({
       where: { status: 'active', OR: or },
       orderBy: { updatedAt: 'desc' },
-      take: 50,
+      take: 40,
     });
-    return rank(candidates, name);
+
+    return candidates
+      .map((c) => ({
+        ...c,
+        score: scoreCatalogNameMatch(name, c.name, c.brand),
+      }))
+      .filter((c) => c.score >= 50)
+      .sort(
+        (a, b) =>
+          b.score - a.score
+          || (b.imageUrl ? 1 : 0) - (a.imageUrl ? 1 : 0)
+          || (b.barcode ? 1 : 0) - (a.barcode ? 1 : 0),
+      )
+      .slice(0, 8);
   }
 
-  /**
-   * Alta masiva desde texto pegado (CSV/TSV/plano).
-   * Crea productos nuevos; si ya existe (código/nombre/ficha), suma la cantidad y actualiza precio.
-   */
-  async bulkCreateFromText(
+  private async findLocalCandidates(businessId: string, name: string, barcode?: string) {
+    const or: Array<Record<string, unknown>> = [
+      { name: { equals: name.trim(), mode: 'insensitive' } },
+      { name: { contains: name.trim(), mode: 'insensitive' } },
+    ];
+    if (barcode?.trim()) or.push({ barcode: barcode.trim() });
+    for (const token of this.nameSearchTokens(name)) {
+      or.push({ name: { contains: token, mode: 'insensitive' } });
+    }
+
+    const candidates = await this.prisma.product.findMany({
+      where: { businessId, isActive: true, OR: or },
+      select: {
+        id: true,
+        name: true,
+        barcode: true,
+        imageUrl: true,
+        brand: true,
+        price: true,
+        stock: true,
+        sourcePublicProductId: true,
+      },
+      take: 30,
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return candidates
+      .map((c) => ({
+        ...c,
+        price: Number(c.price),
+        score: barcode && c.barcode === barcode
+          ? 100
+          : scoreCatalogNameMatch(name, c.name, c.brand),
+      }))
+      .filter((c) => c.score >= 50)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+  }
+
+  private async resolveCategoryIdCached(
     businessId: string,
-    text: string,
-  ): Promise<{
-    created: number;
-    updated: number;
-    matchedFromCatalog: number;
-    skipped: number;
-    errors: Array<{ row: number; message: string }>;
-    matches: Array<{ row: number; pasted: string; catalog: string; barcode?: string }>;
-    ids: string[];
-  }> {
+    name: string | undefined,
+    cache: Map<string, string>,
+  ): Promise<string | undefined> {
+    const trimmed = name?.trim();
+    if (!trimmed) return undefined;
+    const key = trimmed.toLowerCase();
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const existing = await this.prisma.category.findFirst({
+      where: { businessId, name: { equals: trimmed, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) {
+      cache.set(key, existing.id);
+      return existing.id;
+    }
+    const createdCat = await this.prisma.category.create({
+      data: { businessId, name: trimmed },
+    });
+    cache.set(key, createdCat.id);
+    return createdCat.id;
+  }
+
+  /** Preview de carga masiva: sugiere match local o catálogo público por fila. */
+  async bulkCreatePreview(businessId: string, text: string) {
     const parsed = parseBulkCreateText(text);
-    const errors = [...parsed.errors];
-    const matches: Array<{ row: number; pasted: string; catalog: string; barcode?: string }> = [];
+    if (!parsed.rows.length && parsed.errors.length) {
+      return { rows: [], parseErrors: parsed.errors };
+    }
     if (!parsed.rows.length) {
-      if (!errors.length) throw new BadRequestException('No se encontraron filas válidas para crear.');
-      return {
-        created: 0,
-        updated: 0,
-        matchedFromCatalog: 0,
-        skipped: errors.length,
-        errors,
-        matches,
-        ids: [],
-      };
+      throw new BadRequestException('No se encontraron filas válidas para crear.');
+    }
+
+    const rows: Array<{
+      row: number;
+      name: string;
+      price: number;
+      stock: number;
+      cost?: number;
+      barcode?: string;
+      suggestedAction: 'update_local' | 'link_catalog' | 'create_new';
+      suggestedLocal: {
+        id: string;
+        name: string;
+        barcode: string | null;
+        imageUrl: string | null;
+        brand: string | null;
+        price: number;
+        stock: number;
+        score: number;
+      } | null;
+      suggestedCatalog: {
+        id: string;
+        name: string;
+        barcode: string | null;
+        imageUrl: string | null;
+        brand: string | null;
+        category: string | null;
+        score: number;
+      } | null;
+      localAlternatives: Array<{
+        id: string;
+        name: string;
+        barcode: string | null;
+        imageUrl: string | null;
+        brand: string | null;
+        price: number;
+        stock: number;
+        score: number;
+      }>;
+      catalogAlternatives: Array<{
+        id: string;
+        name: string;
+        barcode: string | null;
+        imageUrl: string | null;
+        brand: string | null;
+        category: string | null;
+        score: number;
+      }>;
+    }> = [];
+    for (const row of parsed.rows) {
+      const catalog = await this.findPublicCatalogCandidates(row);
+      const bestCatalog = catalog[0] ?? null;
+      const locals = await this.findLocalCandidates(
+        businessId,
+        row.name,
+        row.barcode || bestCatalog?.barcode || undefined,
+      );
+      const bestLocal = locals[0] ?? null;
+
+      let suggestedAction: 'update_local' | 'link_catalog' | 'create_new' = 'create_new';
+      if (bestLocal && bestLocal.score >= 70) suggestedAction = 'update_local';
+      else if (bestCatalog && bestCatalog.score >= 55) suggestedAction = 'link_catalog';
+
+      rows.push({
+        row: row.line,
+        name: row.name,
+        price: row.price,
+        stock: row.stock ?? 0,
+        cost: row.cost,
+        barcode: row.barcode,
+        suggestedAction,
+        suggestedLocal: bestLocal
+          ? {
+              id: bestLocal.id,
+              name: bestLocal.name,
+              barcode: bestLocal.barcode,
+              imageUrl: bestLocal.imageUrl,
+              brand: bestLocal.brand,
+              price: bestLocal.price,
+              stock: bestLocal.stock,
+              score: bestLocal.score,
+            }
+          : null,
+        suggestedCatalog: bestCatalog
+          ? {
+              id: bestCatalog.id,
+              name: bestCatalog.name,
+              barcode: bestCatalog.barcode,
+              imageUrl: bestCatalog.imageUrl,
+              brand: bestCatalog.brand,
+              category: bestCatalog.category,
+              score: bestCatalog.score,
+            }
+          : null,
+        localAlternatives: locals.slice(0, 5).map((l) => ({
+          id: l.id,
+          name: l.name,
+          barcode: l.barcode,
+          imageUrl: l.imageUrl,
+          brand: l.brand,
+          price: l.price,
+          stock: l.stock,
+          score: l.score,
+        })),
+        catalogAlternatives: catalog.slice(0, 5).map((c) => ({
+          id: c.id,
+          name: c.name,
+          barcode: c.barcode,
+          imageUrl: c.imageUrl,
+          brand: c.brand,
+          category: c.category,
+          score: c.score,
+        })),
+      });
+    }
+
+    return { rows, parseErrors: parsed.errors };
+  }
+
+  async bulkCreateSearch(businessId: string, q: string) {
+    const term = q.trim();
+    if (term.length < 2) return { local: [], catalog: [] };
+    const [local, catalog] = await Promise.all([
+      this.findLocalCandidates(businessId, term),
+      this.findPublicCatalogCandidates({ name: term }),
+    ]);
+    return {
+      local: local.map((l) => ({
+        id: l.id,
+        name: l.name,
+        barcode: l.barcode,
+        imageUrl: l.imageUrl,
+        brand: l.brand,
+        price: l.price,
+        stock: l.stock,
+        score: l.score,
+      })),
+      catalog: catalog.map((c) => ({
+        id: c.id,
+        name: c.name,
+        barcode: c.barcode,
+        imageUrl: c.imageUrl,
+        brand: c.brand,
+        category: c.category,
+        score: c.score,
+      })),
+    };
+  }
+
+  async bulkCreateConfirm(
+    businessId: string,
+    items: Array<{
+      row: number;
+      name: string;
+      price: number;
+      stock?: number;
+      cost?: number;
+      action: 'approve' | 'reject';
+      localProductId?: string;
+      publicProductId?: string;
+    }>,
+  ) {
+    if (!Array.isArray(items) || !items.length) {
+      throw new BadRequestException('No hay ítems para confirmar.');
     }
 
     const categoryCache = new Map<string, string>();
-    const resolveCategoryId = async (name: string | undefined): Promise<string | undefined> => {
-      const trimmed = name?.trim();
-      if (!trimmed) return undefined;
-      const key = trimmed.toLowerCase();
-      const cached = categoryCache.get(key);
-      if (cached) return cached;
-      const existing = await this.prisma.category.findFirst({
-        where: { businessId, name: { equals: trimmed, mode: 'insensitive' } },
-        select: { id: true },
-      });
-      if (existing) {
-        categoryCache.set(key, existing.id);
-        return existing.id;
-      }
-      const createdCat = await this.prisma.category.create({
-        data: { businessId, name: trimmed },
-      });
-      categoryCache.set(key, createdCat.id);
-      return createdCat.id;
-    };
-
-    const findExistingLocal = async (opts: {
-      barcode?: string;
-      name: string;
-      publicProductId?: string;
-    }) => {
-      if (opts.barcode) {
-        const byCode = await this.prisma.product.findFirst({
-          where: { businessId, isActive: true, barcode: opts.barcode },
-          select: { id: true, name: true, price: true, stock: true },
-        });
-        if (byCode) return byCode;
-      }
-      if (opts.publicProductId) {
-        const byPub = await this.prisma.product.findFirst({
-          where: { businessId, isActive: true, sourcePublicProductId: opts.publicProductId },
-          select: { id: true, name: true, price: true, stock: true },
-        });
-        if (byPub) return byPub;
-      }
-      const byName = await this.prisma.product.findFirst({
-        where: { businessId, isActive: true, name: { equals: opts.name.trim(), mode: 'insensitive' } },
-        select: { id: true, name: true, price: true, stock: true },
-      });
-      return byName;
-    };
-
-    const applyExistingRow = async (
-      existing: { id: string; name: string },
-      row: { line: number; price: number; stock?: number; cost?: number },
-      pubName?: string,
-    ) => {
-      const qty = Math.max(0, Math.floor(row.stock ?? 0));
-      if (qty > 0) {
-        await this.adjustStock(existing.id, businessId, qty, 'carga_masiva', `Fila ${row.line}`);
-      }
-      await this.prisma.product.update({
-        where: { id: existing.id },
-        data: {
-          price: new Decimal(row.price),
-          ...(row.cost != null ? { cost: new Decimal(row.cost) } : {}),
-        },
-      });
-      return {
-        id: existing.id,
-        note: pubName
-          ? `Actualizado (ya existía / match catálogo: ${pubName}): +${qty} u.`
-          : `Actualizado (ya existía “${existing.name}”): +${qty} u.`,
-      };
-    };
-
+    const errors: Array<{ row: number; message: string }> = [];
+    const matches: Array<{ row: number; pasted: string; catalog: string; barcode?: string }> = [];
     const ids: string[] = [];
     let created = 0;
     let updated = 0;
     let matchedFromCatalog = 0;
     let skipped = 0;
+    let rejected = 0;
     let limitHit = false;
 
-    for (const row of parsed.rows) {
-      if (limitHit) {
-        skipped += 1;
-        errors.push({ row: row.line, message: 'Omitido: se alcanzó el límite del plan.' });
+    for (const item of items) {
+      if (item.action === 'reject') {
+        rejected += 1;
         continue;
       }
+      if (limitHit) {
+        skipped += 1;
+        errors.push({ row: item.row, message: 'Omitido: se alcanzó el límite del plan.' });
+        continue;
+      }
+
       try {
-        const pub = await this.findPublicCatalogMatch(row);
-        const effectiveBarcode = row.barcode?.trim() || pub?.barcode?.trim() || undefined;
-        const catalogName = pub?.name?.trim() || row.name;
-
-        const existing = await findExistingLocal({
-          barcode: effectiveBarcode,
-          name: catalogName,
-          publicProductId: pub?.id,
-        });
-        // También buscar por el nombre pegado si difiere del del catálogo
-        const existingOrPasted =
-          existing
-          ?? (catalogName.toLowerCase() !== row.name.trim().toLowerCase()
-            ? await findExistingLocal({ name: row.name })
-            : null);
-
-        if (existingOrPasted) {
-          const result = await applyExistingRow(existingOrPasted, row, pub?.name);
-          updated += 1;
-          ids.push(result.id);
-          if (pub) {
-            matchedFromCatalog += 1;
-            matches.push({
-              row: row.line,
-              pasted: row.name,
-              catalog: pub.name,
-              barcode: pub.barcode?.trim() || undefined,
-            });
-          }
+        const price = Number(item.price);
+        if (!Number.isFinite(price) || price < 0) {
+          skipped += 1;
+          errors.push({ row: item.row, message: 'Precio inválido' });
           continue;
+        }
+        const stock = Math.max(0, Math.floor(Number(item.stock ?? 0) || 0));
+        const name = String(item.name || '').trim();
+        if (!name) {
+          skipped += 1;
+          errors.push({ row: item.row, message: 'Falta el nombre' });
+          continue;
+        }
+
+        // 1) Actualizar producto local elegido
+        if (item.localProductId) {
+          const existing = await this.prisma.product.findFirst({
+            where: { id: item.localProductId, businessId, isActive: true },
+            select: { id: true, name: true },
+          });
+          if (!existing) {
+            skipped += 1;
+            errors.push({ row: item.row, message: 'Producto local no encontrado' });
+            continue;
+          }
+          if (stock > 0) {
+            await this.adjustStock(existing.id, businessId, stock, 'carga_masiva', `Fila ${item.row}`);
+          }
+          await this.prisma.product.update({
+            where: { id: existing.id },
+            data: {
+              price: new Decimal(price),
+              ...(item.cost != null ? { cost: new Decimal(item.cost) } : {}),
+            },
+          });
+          updated += 1;
+          ids.push(existing.id);
+          continue;
+        }
+
+        // 2) Crear (opcionalmente con ficha pública)
+        let pub: Awaited<ReturnType<typeof this.findPublicCatalogCandidates>>[number] | null = null;
+        if (item.publicProductId) {
+          const found = await this.prisma.publicProduct.findFirst({
+            where: { id: item.publicProductId, status: 'active' },
+          });
+          if (found) {
+            pub = { ...found, score: 100 };
+          }
+        }
+
+        const effectiveBarcode = pub?.barcode?.trim() || undefined;
+        if (effectiveBarcode) {
+          const dup = await this.prisma.product.findFirst({
+            where: { businessId, isActive: true, barcode: effectiveBarcode },
+            select: { id: true, name: true },
+          });
+          if (dup) {
+            if (stock > 0) {
+              await this.adjustStock(dup.id, businessId, stock, 'carga_masiva', `Fila ${item.row}`);
+            }
+            await this.prisma.product.update({
+              where: { id: dup.id },
+              data: { price: new Decimal(price) },
+            });
+            updated += 1;
+            ids.push(dup.id);
+            if (pub) {
+              matchedFromCatalog += 1;
+              matches.push({
+                row: item.row,
+                pasted: name,
+                catalog: pub.name,
+                barcode: pub.barcode?.trim() || undefined,
+              });
+            }
+            continue;
+          }
         }
 
         let sourcePublicProductId: string | undefined;
@@ -1536,21 +1734,44 @@ export class ProductsService {
             select: { id: true },
           });
           if (!alreadyLinked) sourcePublicProductId = pub.id;
+          else {
+            // Ya vinculado: sumar stock al local existente
+            if (stock > 0) {
+              await this.adjustStock(alreadyLinked.id, businessId, stock, 'carga_masiva', `Fila ${item.row}`);
+            }
+            await this.prisma.product.update({
+              where: { id: alreadyLinked.id },
+              data: { price: new Decimal(price) },
+            });
+            updated += 1;
+            ids.push(alreadyLinked.id);
+            matchedFromCatalog += 1;
+            matches.push({
+              row: item.row,
+              pasted: name,
+              catalog: pub.name,
+              barcode: pub.barcode?.trim() || undefined,
+            });
+            continue;
+          }
         }
 
-        const categoryName = row.category?.trim() || pub?.category?.trim() || undefined;
-        const categoryId = await resolveCategoryId(categoryName);
+        const categoryId = await this.resolveCategoryIdCached(
+          businessId,
+          pub?.category || undefined,
+          categoryCache,
+        );
         const imageUrl =
           pub?.imageUrl && /^https?:\/\//i.test(pub.imageUrl.trim()) ? pub.imageUrl.trim() : undefined;
 
         const product = await this.create(businessId, {
-          name: catalogName,
-          price: row.price,
-          cost: row.cost,
-          stock: row.stock,
+          name: pub?.name?.trim() || name,
+          price,
+          cost: item.cost,
+          stock,
           barcode: effectiveBarcode,
           categoryId,
-          brand: row.brand?.trim() || pub?.brand?.trim() || undefined,
+          brand: pub?.brand?.trim() || undefined,
           imageUrl,
           unitsPerBox: pub?.unitsPerBox?.trim() || undefined,
           weight: pub?.weight?.trim() || undefined,
@@ -1562,7 +1783,7 @@ export class ProductsService {
         });
         if (!product?.id) {
           skipped += 1;
-          errors.push({ row: row.line, message: 'No se pudo crear el producto.' });
+          errors.push({ row: item.row, message: 'No se pudo crear el producto.' });
           continue;
         }
         created += 1;
@@ -1570,44 +1791,24 @@ export class ProductsService {
         if (pub) {
           matchedFromCatalog += 1;
           matches.push({
-            row: row.line,
-            pasted: row.name,
+            row: item.row,
+            pasted: name,
             catalog: pub.name,
             barcode: pub.barcode?.trim() || undefined,
           });
           if (sourcePublicProductId) {
-            await this.prisma.catalogImportLog.create({
-              data: {
-                businessId,
-                publicProductId: pub.id,
-                localProductId: product.id,
-              },
-            }).catch(() => undefined);
+            await this.prisma.catalogImportLog
+              .create({
+                data: {
+                  businessId,
+                  publicProductId: pub.id,
+                  localProductId: product.id,
+                },
+              })
+              .catch(() => undefined);
           }
         }
       } catch (err) {
-        // Carrera / código recién creado en esta misma carga → reintentar como update
-        const messageRaw =
-          err instanceof Error ? err.message : String(err);
-        if (/código|barcode|única|unique|Ya existe/i.test(messageRaw)) {
-          try {
-            const pub = await this.findPublicCatalogMatch(row);
-            const effectiveBarcode = row.barcode?.trim() || pub?.barcode?.trim() || undefined;
-            const existing = await findExistingLocal({
-              barcode: effectiveBarcode,
-              name: pub?.name?.trim() || row.name,
-              publicProductId: pub?.id,
-            });
-            if (existing) {
-              await applyExistingRow(existing, row, pub?.name);
-              updated += 1;
-              ids.push(existing.id);
-              continue;
-            }
-          } catch {
-            // cae al error normal
-          }
-        }
         skipped += 1;
         let message = 'Error al crear';
         if (err instanceof ForbiddenException || err instanceof BadRequestException) {
@@ -1619,11 +1820,112 @@ export class ProductsService {
         if (err instanceof ForbiddenException && /productos/i.test(message)) {
           limitHit = true;
         }
-        errors.push({ row: row.line, message });
+        errors.push({ row: item.row, message });
       }
     }
 
-    return { created, updated, matchedFromCatalog, skipped, errors, matches, ids };
+    return {
+      created,
+      updated,
+      matchedFromCatalog,
+      skipped,
+      rejected,
+      errors,
+      matches,
+      ids,
+    };
+  }
+
+  /**
+   * Alta masiva directa: arma preview y confirma todo como aprobado
+   * (compatibilidad; la UI usa preview + confirm con revisión).
+   */
+  async bulkCreateFromText(businessId: string, text: string) {
+    const preview = await this.bulkCreatePreview(businessId, text);
+    const items = preview.rows.map((r) => ({
+      row: r.row,
+      name: r.name,
+      price: r.price,
+      stock: r.stock,
+      cost: r.cost,
+      action: 'approve' as const,
+      localProductId:
+        r.suggestedAction === 'update_local' ? r.suggestedLocal?.id : undefined,
+      publicProductId:
+        r.suggestedAction === 'link_catalog' ? r.suggestedCatalog?.id : undefined,
+    }));
+    const result = await this.bulkCreateConfirm(businessId, items);
+    return {
+      ...result,
+      parseErrors: preview.parseErrors,
+    };
+  }
+
+  /**
+   * Vacía el inventario del negocio. Solo permitido para el tenant Teatro
+   * (nombre contiene "teatro") o IDs en INVENTORY_WIPE_BUSINESS_IDS.
+   */
+  async wipeInventory(businessId: string, confirm: string) {
+    if (confirm !== 'VACIAR') {
+      throw new BadRequestException('Escribí VACIAR para confirmar.');
+    }
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Negocio no encontrado');
+    if (!this.isTeatroTenant(business.name, business.id)) {
+      throw new ForbiddenException('Vaciar inventario solo está habilitado para el tenant Teatro.');
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { businessId },
+      select: { id: true },
+    });
+    const ids = products.map((p) => p.id);
+    if (!ids.length) {
+      return { deleted: 0, deactivated: 0, message: 'No había productos.' };
+    }
+
+    await this.prisma.productBatch.deleteMany({ where: { businessId } });
+    await this.prisma.catalogImportLog.deleteMany({ where: { businessId } });
+    await this.prisma.stockMove.deleteMany({ where: { productId: { in: ids } } });
+
+    const purchased = await this.prisma.purchaseItem.findMany({
+      where: { productId: { in: ids } },
+      select: { productId: true },
+      distinct: ['productId'],
+    });
+    const keepIds = [...new Set(purchased.map((p) => p.productId))];
+
+    let deactivated = 0;
+    if (keepIds.length) {
+      const res = await this.prisma.product.updateMany({
+        where: { businessId, id: { in: keepIds } },
+        data: {
+          isActive: false,
+          stock: 0,
+          barcode: null,
+          allCodes: null,
+          sourcePublicProductId: null,
+          incomplete: true,
+        },
+      });
+      deactivated = res.count;
+    }
+
+    const del = await this.prisma.product.deleteMany({
+      where: {
+        businessId,
+        ...(keepIds.length ? { id: { notIn: keepIds } } : {}),
+      },
+    });
+
+    return {
+      deleted: del.count,
+      deactivated,
+      message: `Inventario vaciado: ${del.count} eliminados, ${deactivated} desactivados (con historial de compras).`,
+    };
   }
 
   /** Importa stock (y opcionalmente stock_minimo) desde filas Excel. */
