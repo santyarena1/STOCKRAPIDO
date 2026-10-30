@@ -108,8 +108,15 @@ function normalizeHeader(raw: string): string {
     .replace(/[^a-z0-9_]/g, '');
 }
 
+/** Quita ; o , sobrantes al final (listas tipo `nombre,4,733;`). */
+function stripTrailingSeparators(line: string): string {
+  return line.trim().replace(/[;,]+$/g, '').trim();
+}
+
 function detectDelimiter(sample: string): string {
-  const first = sample.split(/\r?\n/).find((line) => line.trim()) ?? '';
+  const first = stripTrailingSeparators(
+    sample.split(/\r?\n/).find((line) => line.trim()) ?? '',
+  );
   const counts = [
     { sep: ';', n: (first.match(/;/g) || []).length },
     { sep: '\t', n: (first.match(/\t/g) || []).length },
@@ -120,14 +127,15 @@ function detectDelimiter(sample: string): string {
 }
 
 function splitLine(line: string, sep: string): string[] {
+  const cleaned = stripTrailingSeparators(line);
   const out: string[] = [];
   let cur = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (line[i + 1] === '"') {
+        if (cleaned[i + 1] === '"') {
           cur += '"';
           i++;
         } else {
@@ -150,11 +158,14 @@ function splitLine(line: string, sep: string): string[] {
     cur += ch;
   }
   out.push(cur);
-  return out.map((c) => c.trim());
+  const cells = out.map((c) => c.trim().replace(/^[;,]+|[;,]+$/g, '').trim());
+  while (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+  return cells;
 }
 
 function parseNumber(raw: string): number | null {
-  const s = raw.trim().replace(/\s/g, '');
+  // Tolera basura típica de pegado: "733;", "$1.500", "1.500,-"
+  let s = raw.trim().replace(/\s/g, '').replace(/^[;$€]+/, '').replace(/[;,$€]+$/g, '');
   if (!s) return null;
   let normalized = s;
   if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {

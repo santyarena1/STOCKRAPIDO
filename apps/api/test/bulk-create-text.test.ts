@@ -39,6 +39,19 @@ Alfajor;10;800`;
     assert.equal(result.rows.length, 0);
     assert.ok(result.errors.some((e) => /Precio unitario inválido/i.test(e.message)));
   });
+
+  it('tolera CSV con comas y ; al final de cada línea', () => {
+    const text = `Bombón Bon o Bon Blanco 40g,4,733;
+Bombón Bon o Bon Negro 40g,4,733;
+Bizcocho Don Satur Grasa 200g,2,1000;`;
+    const result = parseBulkCreateText(text);
+    assert.equal(result.errors.length, 0, JSON.stringify(result.errors));
+    assert.equal(result.rows.length, 3);
+    assert.equal(result.rows[0].name, 'Bombón Bon o Bon Blanco 40g');
+    assert.equal(result.rows[0].stock, 4);
+    assert.equal(result.rows[0].price, 733);
+    assert.equal(result.rows[2].price, 1000);
+  });
 });
 
 describe('scoreCatalogNameMatch', () => {

@@ -98,8 +98,8 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
               <li>
                 Tres columnas: <span className="font-mono">producto;cantidad;precio</span>
               </li>
-              <li>Separá con <span className="font-mono">;</span>, coma o tab. El encabezado es opcional.</li>
-              <li>Ejemplo sin encabezado: <span className="font-mono">Coca Cola 500ml;24;1500</span></li>
+              <li>Separá con coma o <span className="font-mono">;</span>. El <span className="font-mono">;</span> al final de la línea no molesta.</li>
+              <li>Ejemplo: <span className="font-mono">Coca Cola 500ml,24,1500;</span></li>
               <li>Máximo 500 por carga. El catálogo público completa foto/código/nombre cuando hay match.</li>
             </ul>
             <button type="button" onClick={loadExample} className="mt-2 text-sm font-medium text-brand hover:underline">
