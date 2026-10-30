@@ -39,12 +39,15 @@ type ProductForCatalog = {
   category?: { name: string } | null;
 };
 
-const SYNC_BUSINESS_LIMIT = 500;
-const SYNC_GLOBAL_LIMIT = 300;
+const SYNC_PAGE_SIZE = 100;
+const SYNC_MAX_PAGES = 50; // hasta 5000 productos por negocio por corrida
 
 @Injectable()
 export class PublicCatalogService {
   private readonly logger = new Logger(PublicCatalogService.name);
+  /** Evita republicar Carhue en cada request del mismo cold start. */
+  private carhueForceSyncedAt = 0;
+  private carhueLastResult: { businesses: number; synced: number; names: string[] } | null = null;
 
   constructor(private prisma: PrismaService) {}
 
@@ -205,8 +208,13 @@ export class PublicCatalogService {
   /** Sincroniza productos locales al catálogo comunitario (backfill + mantenimiento). */
   async syncCommunityCatalog(requestingBusinessId: string) {
     try {
-      await this.syncBusinessProducts(requestingBusinessId, SYNC_BUSINESS_LIMIT);
-      await this.syncPendingProducts(SYNC_GLOBAL_LIMIT);
+      await this.forcePublishAllEligible(requestingBusinessId, {
+        includeIncomplete: false,
+        refreshPublished: false,
+      });
+      // Carhue: subir / refrescar TODO su inventario al catálogo público
+      await this.maybeForcePublishCarhue();
+      await this.syncPendingProducts(SYNC_PAGE_SIZE * 3);
     } catch (err) {
       this.logger.warn(
         `Sync catálogo comunitario parcial: ${err instanceof Error ? err.message : err}`,
@@ -214,7 +222,103 @@ export class PublicCatalogService {
     }
   }
 
-  async syncBusinessProducts(businessId: string, limit = SYNC_BUSINESS_LIMIT) {
+  private async maybeForcePublishCarhue() {
+    await this.forcePublishCarhueNow();
+  }
+
+  /** Publica/refresca todo el inventario de negocios “Carhue” (con cooldown). */
+  async forcePublishCarhueNow() {
+    const cooldownMs = 10 * 60 * 1000; // 10 min por instancia serverless
+    if (Date.now() - this.carhueForceSyncedAt < cooldownMs && this.carhueLastResult) {
+      return { ...this.carhueLastResult, cached: true as const };
+    }
+    const result = await this.forcePublishNamedBusinesses('carhue', {
+      includeIncomplete: true,
+      refreshPublished: true,
+    });
+    this.carhueForceSyncedAt = Date.now();
+    this.carhueLastResult = result;
+    if (result.businesses > 0) {
+      this.logger.log(
+        `Catálogo público Carhue: ${result.businesses} negocio(s), ${result.synced} productos publicados/actualizados`,
+      );
+    }
+    return { ...result, cached: false as const };
+  }
+
+  /**
+   * Publica (o refresca) todos los productos elegibles de un negocio al catálogo público.
+   * Pagina para no quedarse en el tope de 500 del sync viejo.
+   */
+  async forcePublishAllEligible(
+    businessId: string,
+    opts: { includeIncomplete?: boolean; refreshPublished?: boolean } = {},
+  ) {
+    await ensureCatalogShareConsent(this.prisma, businessId);
+    const includeIncomplete = opts.includeIncomplete === true;
+    const refreshPublished = opts.refreshPublished === true;
+
+    let synced = 0;
+    let cursor: string | undefined;
+    for (let page = 0; page < SYNC_MAX_PAGES; page += 1) {
+      const products = await this.prisma.product.findMany({
+        where: {
+          businessId,
+          isActive: true,
+          sourcePublicProductId: null,
+          ...(includeIncomplete ? {} : { incomplete: false }),
+          ...(refreshPublished ? {} : { publishToCatalog: false }),
+        },
+        include: { category: { select: { name: true } } },
+        take: SYNC_PAGE_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+      });
+      if (!products.length) break;
+      for (const product of products) {
+        try {
+          await this.upsertPublicFromProduct(businessId, product);
+          synced += 1;
+        } catch (err) {
+          this.logger.warn(
+            `No se pudo publicar ${product.id}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+      cursor = products[products.length - 1]?.id;
+      if (products.length < SYNC_PAGE_SIZE) break;
+    }
+    return { synced };
+  }
+
+  /** Busca negocios por nombre (ej. Carhue) y publica todo su inventario. */
+  async forcePublishNamedBusinesses(
+    nameContains: string,
+    opts: { includeIncomplete?: boolean; refreshPublished?: boolean } = {},
+  ) {
+    const needle = nameContains.trim();
+    if (needle.length < 3) return { businesses: 0, synced: 0, names: [] as string[] };
+    const businesses = await this.prisma.business.findMany({
+      where: { name: { contains: needle, mode: 'insensitive' } },
+      select: { id: true, name: true },
+      take: 20,
+    });
+    let synced = 0;
+    for (const b of businesses) {
+      const r = await this.forcePublishAllEligible(b.id, {
+        includeIncomplete: opts.includeIncomplete ?? true,
+        refreshPublished: opts.refreshPublished ?? true,
+      });
+      synced += r.synced;
+    }
+    return {
+      businesses: businesses.length,
+      synced,
+      names: businesses.map((b) => b.name),
+    };
+  }
+
+  async syncBusinessProducts(businessId: string, limit = SYNC_PAGE_SIZE * 5) {
     await ensureCatalogShareConsent(this.prisma, businessId);
     const products = await this.prisma.product.findMany({
       where: {
@@ -234,7 +338,7 @@ export class PublicCatalogService {
     return { synced: products.length };
   }
 
-  async syncPendingProducts(limit = SYNC_GLOBAL_LIMIT) {
+  async syncPendingProducts(limit = SYNC_PAGE_SIZE * 3) {
     const products = await this.prisma.product.findMany({
       where: {
         isActive: true,
@@ -264,7 +368,7 @@ export class PublicCatalogService {
       include: { category: { select: { name: true } } },
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
-    if (!product.isActive || product.incomplete) {
+    if (!product.isActive) {
       throw new NotFoundException('El producto no está listo para compartir en el catálogo.');
     }
     return this.upsertPublicFromProduct(businessId, product);

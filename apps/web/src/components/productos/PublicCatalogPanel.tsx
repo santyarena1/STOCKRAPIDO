@@ -159,6 +159,8 @@ export function PublicCatalogPanel() {
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [publishBusy, setPublishBusy] = useState<'mine' | 'carhue' | null>(null);
+  const [publishMsg, setPublishMsg] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -270,6 +272,69 @@ export function PublicCatalogPanel() {
     if (!catalogReady || tab !== 'search') return;
     void fetchList();
   }, [catalogReady, fetchList, tab]);
+
+  // Al abrir el catálogo, forzar publicación de Carhue (fichas con código/foto).
+  useEffect(() => {
+    if (!catalogReady) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await api<{ businesses: number; synced: number; names: string[] }>(
+          '/public-catalog/force-publish-carhue',
+          { method: 'POST' },
+        );
+        if (cancelled || !r.businesses) return;
+        setPublishMsg(
+          `Carhue: ${r.synced} productos publicados/actualizados en el catálogo (${r.names.join(', ')}).`,
+        );
+        void fetchList();
+      } catch {
+        /* silencioso: el sync del search también lo intenta */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogReady, fetchList]);
+
+  const publishMine = async () => {
+    if (readOnly) return alert('Tu cuenta está en solo lectura.');
+    setPublishBusy('mine');
+    setPublishMsg(null);
+    try {
+      const r = await api<{ synced: number }>('/public-catalog/force-publish-all', { method: 'POST' });
+      setPublishMsg(`Se publicaron/actualizaron ${r.synced} productos de tu inventario en el catálogo público.`);
+      void fetchList();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo publicar el inventario');
+    } finally {
+      setPublishBusy(null);
+    }
+  };
+
+  const publishCarhue = async () => {
+    if (readOnly) return alert('Tu cuenta está en solo lectura.');
+    setPublishBusy('carhue');
+    setPublishMsg(null);
+    try {
+      const r = await api<{ businesses: number; synced: number; names: string[] }>(
+        '/public-catalog/force-publish-carhue',
+        { method: 'POST' },
+      );
+      if (!r.businesses) {
+        setPublishMsg('No se encontró un negocio con “Carhue” en el nombre.');
+      } else {
+        setPublishMsg(
+          `Carhue listo: ${r.synced} productos en catálogo público (${r.names.join(', ')}).`,
+        );
+      }
+      void fetchList();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo publicar Carhue');
+    } finally {
+      setPublishBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (tab === 'history') void fetchHistory();
@@ -504,22 +569,43 @@ export function PublicCatalogPanel() {
         />
       )}
 
-      <div className="inline-flex rounded-lg border border-hair overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-lg border border-hair overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setTab('search')}
+            className={`px-4 py-2 text-sm font-semibold ${tab === 'search' ? 'bg-brand-highlight text-brand' : 'bg-raised text-fg-muted'}`}
+          >
+            Buscar fichas
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('history')}
+            className={`px-4 py-2 text-sm font-semibold ${tab === 'history' ? 'bg-brand-highlight text-brand' : 'bg-raised text-fg-muted'}`}
+          >
+            Historial importados
+          </button>
+        </div>
         <button
           type="button"
-          onClick={() => setTab('search')}
-          className={`px-4 py-2 text-sm font-semibold ${tab === 'search' ? 'bg-brand-highlight text-brand' : 'bg-raised text-fg-muted'}`}
+          disabled={!!publishBusy || readOnly}
+          onClick={() => void publishMine()}
+          className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50"
         >
-          Buscar fichas
+          {publishBusy === 'mine' ? 'Publicando…' : 'Publicar mi inventario'}
         </button>
         <button
           type="button"
-          onClick={() => setTab('history')}
-          className={`px-4 py-2 text-sm font-semibold ${tab === 'history' ? 'bg-brand-highlight text-brand' : 'bg-raised text-fg-muted'}`}
+          disabled={!!publishBusy || readOnly}
+          onClick={() => void publishCarhue()}
+          className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight-soft px-3 py-2 text-sm font-medium text-brand hover:bg-brand-highlight disabled:opacity-50"
         >
-          Historial importados
+          {publishBusy === 'carhue' ? 'Subiendo Carhue…' : 'Subir catálogo Carhue'}
         </button>
       </div>
+      {publishMsg ? (
+        <div className="rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-3 py-2 text-sm text-ok">{publishMsg}</div>
+      ) : null}
 
       {tab === 'search' ? (
         <>

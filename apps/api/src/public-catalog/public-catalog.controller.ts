@@ -44,6 +44,24 @@ export class PublicCatalogController {
     return this.catalog.publishFromProduct(u.businessId, productId);
   }
 
+  /** Publica / refresca TODO el inventario del negocio actual en el catálogo público. */
+  @Post('force-publish-all')
+  forcePublishAll(@CurrentUser() u: User) {
+    return this.catalog.forcePublishAllEligible(u.businessId, {
+      includeIncomplete: true,
+      refreshPublished: true,
+    });
+  }
+
+  /**
+   * Fuerza la publicación de negocios cuyo nombre contiene "carhue"
+   * (para subir fichas con código/foto al catálogo comunitario).
+   */
+  @Post('force-publish-carhue')
+  forcePublishCarhue() {
+    return this.catalog.forcePublishCarhueNow();
+  }
+
   @Post('unpublish/:publicProductId')
   unpublish(@CurrentUser() u: User, @Param('publicProductId') publicProductId: string) {
     return this.catalog.unpublish(u.businessId, publicProductId);
