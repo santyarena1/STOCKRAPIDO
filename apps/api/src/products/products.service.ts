@@ -1381,13 +1381,14 @@ export class ProductsService {
 
   /**
    * Alta masiva desde texto pegado (CSV/TSV/plano).
-   * Crea productos nuevos; si hay match en catálogo público, asocia foto/código/nombre.
+   * Crea productos nuevos; si ya existe (código/nombre/ficha), suma la cantidad y actualiza precio.
    */
   async bulkCreateFromText(
     businessId: string,
     text: string,
   ): Promise<{
     created: number;
+    updated: number;
     matchedFromCatalog: number;
     skipped: number;
     errors: Array<{ row: number; message: string }>;
@@ -1399,7 +1400,15 @@ export class ProductsService {
     const matches: Array<{ row: number; pasted: string; catalog: string; barcode?: string }> = [];
     if (!parsed.rows.length) {
       if (!errors.length) throw new BadRequestException('No se encontraron filas válidas para crear.');
-      return { created: 0, matchedFromCatalog: 0, skipped: errors.length, errors, matches, ids: [] };
+      return {
+        created: 0,
+        updated: 0,
+        matchedFromCatalog: 0,
+        skipped: errors.length,
+        errors,
+        matches,
+        ids: [],
+      };
     }
 
     const categoryCache = new Map<string, string>();
@@ -1424,8 +1433,59 @@ export class ProductsService {
       return createdCat.id;
     };
 
+    const findExistingLocal = async (opts: {
+      barcode?: string;
+      name: string;
+      publicProductId?: string;
+    }) => {
+      if (opts.barcode) {
+        const byCode = await this.prisma.product.findFirst({
+          where: { businessId, isActive: true, barcode: opts.barcode },
+          select: { id: true, name: true, price: true, stock: true },
+        });
+        if (byCode) return byCode;
+      }
+      if (opts.publicProductId) {
+        const byPub = await this.prisma.product.findFirst({
+          where: { businessId, isActive: true, sourcePublicProductId: opts.publicProductId },
+          select: { id: true, name: true, price: true, stock: true },
+        });
+        if (byPub) return byPub;
+      }
+      const byName = await this.prisma.product.findFirst({
+        where: { businessId, isActive: true, name: { equals: opts.name.trim(), mode: 'insensitive' } },
+        select: { id: true, name: true, price: true, stock: true },
+      });
+      return byName;
+    };
+
+    const applyExistingRow = async (
+      existing: { id: string; name: string },
+      row: { line: number; price: number; stock?: number; cost?: number },
+      pubName?: string,
+    ) => {
+      const qty = Math.max(0, Math.floor(row.stock ?? 0));
+      if (qty > 0) {
+        await this.adjustStock(existing.id, businessId, qty, 'carga_masiva', `Fila ${row.line}`);
+      }
+      await this.prisma.product.update({
+        where: { id: existing.id },
+        data: {
+          price: new Decimal(row.price),
+          ...(row.cost != null ? { cost: new Decimal(row.cost) } : {}),
+        },
+      });
+      return {
+        id: existing.id,
+        note: pubName
+          ? `Actualizado (ya existía / match catálogo: ${pubName}): +${qty} u.`
+          : `Actualizado (ya existía “${existing.name}”): +${qty} u.`,
+      };
+    };
+
     const ids: string[] = [];
     let created = 0;
+    let updated = 0;
     let matchedFromCatalog = 0;
     let skipped = 0;
     let limitHit = false;
@@ -1439,20 +1499,34 @@ export class ProductsService {
       try {
         const pub = await this.findPublicCatalogMatch(row);
         const effectiveBarcode = row.barcode?.trim() || pub?.barcode?.trim() || undefined;
+        const catalogName = pub?.name?.trim() || row.name;
 
-        if (effectiveBarcode) {
-          const dup = await this.prisma.product.findFirst({
-            where: { businessId, isActive: true, barcode: effectiveBarcode },
-            select: { id: true, name: true },
-          });
-          if (dup) {
-            skipped += 1;
-            errors.push({
+        const existing = await findExistingLocal({
+          barcode: effectiveBarcode,
+          name: catalogName,
+          publicProductId: pub?.id,
+        });
+        // También buscar por el nombre pegado si difiere del del catálogo
+        const existingOrPasted =
+          existing
+          ?? (catalogName.toLowerCase() !== row.name.trim().toLowerCase()
+            ? await findExistingLocal({ name: row.name })
+            : null);
+
+        if (existingOrPasted) {
+          const result = await applyExistingRow(existingOrPasted, row, pub?.name);
+          updated += 1;
+          ids.push(result.id);
+          if (pub) {
+            matchedFromCatalog += 1;
+            matches.push({
               row: row.line,
-              message: `Ya existe un producto con código ${effectiveBarcode} (${dup.name})`,
+              pasted: row.name,
+              catalog: pub.name,
+              barcode: pub.barcode?.trim() || undefined,
             });
-            continue;
           }
+          continue;
         }
 
         let sourcePublicProductId: string | undefined;
@@ -1470,8 +1544,7 @@ export class ProductsService {
           pub?.imageUrl && /^https?:\/\//i.test(pub.imageUrl.trim()) ? pub.imageUrl.trim() : undefined;
 
         const product = await this.create(businessId, {
-          // Del pegado: nombre, cantidad, precio (y opcionales). Del catálogo: foto, código, buen nombre…
-          name: pub?.name?.trim() || row.name,
+          name: catalogName,
           price: row.price,
           cost: row.cost,
           stock: row.stock,
@@ -1513,6 +1586,28 @@ export class ProductsService {
           }
         }
       } catch (err) {
+        // Carrera / código recién creado en esta misma carga → reintentar como update
+        const messageRaw =
+          err instanceof Error ? err.message : String(err);
+        if (/código|barcode|única|unique|Ya existe/i.test(messageRaw)) {
+          try {
+            const pub = await this.findPublicCatalogMatch(row);
+            const effectiveBarcode = row.barcode?.trim() || pub?.barcode?.trim() || undefined;
+            const existing = await findExistingLocal({
+              barcode: effectiveBarcode,
+              name: pub?.name?.trim() || row.name,
+              publicProductId: pub?.id,
+            });
+            if (existing) {
+              await applyExistingRow(existing, row, pub?.name);
+              updated += 1;
+              ids.push(existing.id);
+              continue;
+            }
+          } catch {
+            // cae al error normal
+          }
+        }
         skipped += 1;
         let message = 'Error al crear';
         if (err instanceof ForbiddenException || err instanceof BadRequestException) {
@@ -1528,7 +1623,7 @@ export class ProductsService {
       }
     }
 
-    return { created, matchedFromCatalog, skipped, errors, matches, ids };
+    return { created, updated, matchedFromCatalog, skipped, errors, matches, ids };
   }
 
   /** Importa stock (y opcionalmente stock_minimo) desde filas Excel. */

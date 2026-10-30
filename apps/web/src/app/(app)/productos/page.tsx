@@ -963,10 +963,11 @@ export default function ProductosPage() {
       onCreated={(result) => {
         setBulkMessage(
           `Carga masiva: ${result.created} creado${result.created === 1 ? '' : 's'}` +
+            (result.updated ? ` · ${result.updated} actualizado${result.updated === 1 ? '' : 's'} (+stock)` : '') +
             (result.matchedFromCatalog
               ? ` · ${result.matchedFromCatalog} con ficha del catálogo público`
               : '') +
-            (result.skipped ? ` · ${result.skipped} con error u omitido${result.skipped === 1 ? '' : 's'}` : ''),
+            (result.skipped ? ` · ${result.skipped} con error` : ''),
         );
         void fetchProducts();
         void loadIncompleteProducts();
