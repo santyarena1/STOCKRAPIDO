@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 
 type BulkResult = {
   created: number;
+  matchedFromCatalog?: number;
   skipped: number;
   errors: Array<{ row: number; message: string }>;
   ids: string[];
@@ -74,7 +75,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           <div>
             <h2 className="text-xl font-bold text-fg">Carga masiva de productos</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              Pegá un CSV o texto plano. Columnas: nombre, precio, stock, costo, código, categoría, marca…
+              Pegá un CSV o texto plano. Si el producto ya está en el catálogo público, le asociamos foto, código y nombre.
             </p>
           </div>
           <button
@@ -160,6 +161,13 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
               <p>
                 Se crearon <strong className="font-mono">{result.created}</strong> producto
                 {result.created === 1 ? '' : 's'}
+                {result.matchedFromCatalog ? (
+                  <>
+                    {' '}
+                    · <strong className="font-mono">{result.matchedFromCatalog}</strong> vinculados al
+                    catálogo público (foto/código/nombre)
+                  </>
+                ) : null}
                 {result.skipped > 0 ? (
                   <>
                     {' '}

@@ -963,6 +963,9 @@ export default function ProductosPage() {
       onCreated={(result) => {
         setBulkMessage(
           `Carga masiva: ${result.created} creado${result.created === 1 ? '' : 's'}` +
+            (result.matchedFromCatalog
+              ? ` · ${result.matchedFromCatalog} con ficha del catálogo público`
+              : '') +
             (result.skipped ? ` · ${result.skipped} con error u omitido${result.skipped === 1 ? '' : 's'}` : ''),
         );
         void fetchProducts();
