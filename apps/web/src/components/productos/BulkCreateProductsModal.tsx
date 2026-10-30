@@ -8,6 +8,7 @@ type BulkResult = {
   matchedFromCatalog?: number;
   skipped: number;
   errors: Array<{ row: number; message: string }>;
+  matches?: Array<{ row: number; pasted: string; catalog: string; barcode?: string }>;
   ids: string[];
 };
 
@@ -17,9 +18,10 @@ type Props = {
   onCreated: (result: BulkResult) => void;
 };
 
-const EXAMPLE = `nombre;precio;stock;costo;codigo_barras;categoria;marca
-Coca Cola 500ml;1500;24;900;7790895001234;Bebidas;Coca-Cola
-Alfajor Havanna;800;50;450;;Golosinas;Havanna`;
+const EXAMPLE = `producto;cantidad;precio
+Coca Cola 500ml;24;1500
+Alfajor Havanna;50;800
+Agua Villavicencio 2L;12;1200`;
 
 export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
   const [text, setText] = useState('');
@@ -42,7 +44,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
 
   const submit = async () => {
     if (!text.trim()) {
-      alert('Pegá o subí una lista de productos (CSV o texto plano).');
+      alert('Pegá o subí una lista: producto, cantidad y precio unitario.');
       return;
     }
     setBusy(true);
@@ -75,7 +77,7 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           <div>
             <h2 className="text-xl font-bold text-fg">Carga masiva de productos</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              Pegá un CSV o texto plano. Si el producto ya está en el catálogo público, le asociamos foto, código y nombre.
+              Solo producto, cantidad y precio unitario. Si hay ficha en el catálogo público, le pegamos foto, código y buen nombre.
             </p>
           </div>
           <button
@@ -93,10 +95,12 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
           <div className="rounded-xl border border-hair-soft bg-raised p-3 text-xs text-fg-muted">
             <p className="font-medium text-fg">Formato</p>
             <ul className="mt-1.5 list-inside list-disc space-y-0.5">
-              <li>Separá columnas con <span className="font-mono">;</span>, coma o tab.</li>
-              <li>Con encabezado: <span className="font-mono">nombre;precio;stock;costo;codigo_barras;categoria;marca</span></li>
-              <li>Sin encabezado: <span className="font-mono">Nombre;1500;24</span> (nombre y precio son obligatorios).</li>
-              <li>Máximo 500 productos por carga. Las categorías nuevas se crean solas.</li>
+              <li>
+                Tres columnas: <span className="font-mono">producto;cantidad;precio</span>
+              </li>
+              <li>Separá con <span className="font-mono">;</span>, coma o tab. El encabezado es opcional.</li>
+              <li>Ejemplo sin encabezado: <span className="font-mono">Coca Cola 500ml;24;1500</span></li>
+              <li>Máximo 500 por carga. El catálogo público completa foto/código/nombre cuando hay match.</li>
             </ul>
             <button type="button" onClick={loadExample} className="mt-2 text-sm font-medium text-brand hover:underline">
               Cargar ejemplo
@@ -164,9 +168,11 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
                 {result.matchedFromCatalog ? (
                   <>
                     {' '}
-                    · <strong className="font-mono">{result.matchedFromCatalog}</strong> vinculados al
-                    catálogo público (foto/código/nombre)
+                    · <strong className="font-mono">{result.matchedFromCatalog}</strong> con foto/código del
+                    catálogo público
                   </>
+                ) : result.created > 0 ? (
+                  <> · ninguno coincidió con el catálogo público</>
                 ) : null}
                 {result.skipped > 0 ? (
                   <>
@@ -177,6 +183,19 @@ export function BulkCreateProductsModal({ open, onClose, onCreated }: Props) {
                 ) : null}
                 .
               </p>
+              {result.matches && result.matches.length > 0 && (
+                <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-xs text-fg">
+                  {result.matches.slice(0, 15).map((m) => (
+                    <li key={`m-${m.row}`}>
+                      “{m.pasted}” → <strong>{m.catalog}</strong>
+                      {m.barcode ? ` · ${m.barcode}` : ''}
+                    </li>
+                  ))}
+                  {result.matches.length > 15 ? (
+                    <li>… y {result.matches.length - 15} matches más</li>
+                  ) : null}
+                </ul>
+              )}
               {result.errors.length > 0 && (
                 <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-fg">
                   {result.errors.slice(0, 20).map((err, i) => (
