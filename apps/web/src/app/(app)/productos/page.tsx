@@ -108,6 +108,10 @@ function formatMoneyArs(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
 }
 
+function formatUnits(n: number) {
+  return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(n);
+}
+
 function alpha<T>(items: T[], name: (item: T) => string) {
   return [...items].sort((a, b) => name(a).localeCompare(name(b), 'es', { sensitivity: 'base' }));
 }
@@ -295,7 +299,31 @@ export default function ProductosPage() {
     }
   }, []);
 
-  useEffect(() => { if (!hydrated) return; Promise.allSettled([api<Facets>('/products/facets'), api<StockSummary>('/reports/stock-summary'), api<{ name?: string; posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me')]).then(([facetResult, summaryResult, businessResult]) => { if (facetResult.status === 'fulfilled') setFacets(facetResult.value); if (summaryResult.status === 'fulfilled') setStockSummary(summaryResult.value); if (businessResult.status === 'fulfilled') { setBusinessName(businessResult.value.name || ''); const ids = businessResult.value.posConfig?.hiddenCategoryIds; setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []); } }); }, [hydrated]);
+  const refreshStockSummary = useCallback(async () => {
+    try {
+      const summary = await api<StockSummary>('/reports/stock-summary');
+      setStockSummary(summary);
+    } catch {
+      /* silencioso: la lista de productos sigue usable */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    Promise.allSettled([
+      api<Facets>('/products/facets'),
+      api<StockSummary>('/reports/stock-summary'),
+      api<{ name?: string; posConfig?: { hiddenCategoryIds?: string[] } }>('/business/me'),
+    ]).then(([facetResult, summaryResult, businessResult]) => {
+      if (facetResult.status === 'fulfilled') setFacets(facetResult.value);
+      if (summaryResult.status === 'fulfilled') setStockSummary(summaryResult.value);
+      if (businessResult.status === 'fulfilled') {
+        setBusinessName(businessResult.value.name || '');
+        const ids = businessResult.value.posConfig?.hiddenCategoryIds;
+        setHiddenCategoryIds(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+      }
+    });
+  }, [hydrated]);
 
   const wipeInventory = async () => {
     if (!canWipeInventory || wipingInventory) return;
@@ -314,6 +342,7 @@ export default function ProductosPage() {
       setSelected(new Set());
       await fetchProducts();
       await loadIncompleteProducts();
+      await refreshStockSummary();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'No se pudo vaciar el inventario');
     } finally {
@@ -391,7 +420,9 @@ export default function ProductosPage() {
       setImporting(true); setImportResult(null); const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null; const form = new FormData(); form.append('file', file);
       const res = await fetch(`${getApiBaseUrl()}/products/import-stock`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
       const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error((data as { message?: string }).message || res.statusText);
-      setImportResult(data as { updated: number; errors: Array<{ row: number; message: string }> }); fetchProducts();
+      setImportResult(data as { updated: number; errors: Array<{ row: number; message: string }> });
+      void fetchProducts();
+      void refreshStockSummary();
     } catch (err) { alert(err instanceof Error ? err.message : 'Error al importar'); }
     finally { setImporting(false); e.target.value = ''; }
   };
@@ -453,7 +484,9 @@ export default function ProductosPage() {
     try {
       const result = await api<{ updated: number; skipped: { id: string; reason: string }[] }>('/products/bulk', { method: 'POST', body: JSON.stringify({ ids: [...selected], action, value }) });
       setBulkMessage(`${result.updated} actualizados${result.skipped.length ? ` · ${result.skipped.length} omitidos: ${result.skipped.slice(0, 3).map((item) => item.reason).join('; ')}` : ''}`);
-      setSelected(new Set()); setBulkMenuOpen(false); setBulkDialog(null); await fetchProducts();
+      setSelected(new Set()); setBulkMenuOpen(false); setBulkDialog(null);
+      await fetchProducts();
+      await refreshStockSummary();
     } catch (error) { alert(error instanceof Error ? error.message : 'Error en acción masiva'); }
   };
   const openBulkDialog = (dialog: Omit<BulkDialog, 'value'>) => { setBulkMenuOpen(false); setBulkDialog({ ...dialog, value: '' }); };
@@ -748,6 +781,111 @@ export default function ProductosPage() {
     {photoProgress && <p className="text-sm text-fg-muted">{photoProgress}</p>}
     {bulkMessage && <div className="rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-4 py-3 text-sm text-ok">{bulkMessage}</div>}
 
+    {stockSummary ? (
+      <section className="rounded-xl border border-hair-soft bg-surface" data-tour="productos-stock-summary">
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-raised p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-fg-muted">Unidades en stock</p>
+            <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-fg">{formatUnits(stockSummary.totalUnits)}</p>
+            <p className="mt-1 font-mono text-xs text-fg-faint">
+              {formatUnits(stockSummary.productCount)} productos · con stock {formatUnits(stockSummary.productsWithStock)} · sin stock {formatUnits(stockSummary.productsNoStock)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-hair-soft bg-raised p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-fg-muted">Valor a costo</p>
+            <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</p>
+            <p className="mt-1 font-mono text-xs text-fg-faint">
+              stock × costo unitario
+              {stockSummary.productsWithoutCostWithStock > 0 ? (
+                <span className="text-warn"> · {formatUnits(stockSummary.productsWithoutCostWithStock)} sin costo</span>
+              ) : null}
+            </p>
+          </div>
+          <div className="rounded-xl border border-hair-soft bg-raised p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-fg-muted">Valor a venta</p>
+            <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</p>
+            <p className="mt-1 font-mono text-xs text-ok">
+              Margen potencial {formatMoneyArs(stockSummary.potentialMargin)}
+            </p>
+          </div>
+        </div>
+        <div className="border-t border-hair-soft px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setShowStats((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 py-1.5 text-left text-sm text-fg-muted hover:text-fg"
+          >
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-warn">{formatUnits(stockSummary.lowStockCount)} stock bajo</span>
+              <span className="text-crit">
+                {formatUnits(stockSummary.expiringUnitsInWindow)} u. por vencer ({stockSummary.expiringDaysWindow} días)
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs">
+              {showStats ? 'Menos' : 'Más detalle'}
+              <ChevronDown className={`h-4 w-4 transition-transform ${showStats ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+          {showStats ? (
+            <div className="space-y-4 pb-3 pt-1">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <button
+                  type="button"
+                  onClick={() => changeFilter('lowStock', true)}
+                  className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4 text-left"
+                >
+                  <p className="text-xs text-warn">Stock bajo</p>
+                  <p className="font-mono text-3xl font-bold text-warn">{formatUnits(stockSummary.lowStockCount)}</p>
+                  <p className="font-mono text-xs text-fg-muted">Productos en o bajo el mínimo</p>
+                </button>
+                <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4">
+                  <p className="text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p>
+                  <p className="font-mono text-3xl font-bold text-crit">{formatUnits(stockSummary.expiringUnitsInWindow)}</p>
+                  <p className="font-mono text-xs text-fg-muted">{formatUnits(stockSummary.expiringProductsCount)} productos</p>
+                </div>
+                <div className="rounded-xl border border-hair-soft bg-raised p-4">
+                  <p className="text-xs text-fg-muted">Costo por lotes</p>
+                  <p className="font-mono text-2xl font-bold tabular-nums text-fg">{formatMoneyArs(stockSummary.valueAtCostBatches)}</p>
+                  <p className="font-mono text-xs text-fg-faint">Si usás compras/lotes</p>
+                </div>
+                <div className="rounded-xl border border-hair-soft bg-raised p-4">
+                  <p className="text-xs text-fg-muted">Sin costo con stock</p>
+                  <p className="font-mono text-2xl font-bold tabular-nums text-warn">{formatUnits(stockSummary.productsWithoutCostWithStock)}</p>
+                  <p className="font-mono text-xs text-fg-faint">Completá el costo para valuación</p>
+                </div>
+              </div>
+              {(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-fg">Lotes por vencer</h3>
+                    {stockSummary.expiringBatches.map((batch) => (
+                      <div key={batch.id} className="flex justify-between border-t border-hair-soft py-2 text-sm">
+                        <Link href={`/productos/${batch.productId}`} className="text-brand">{batch.productName}</Link>
+                        <span className="font-mono text-fg-muted">
+                          {batch.qty} · {new Date(batch.expiresAt).toLocaleDateString('es-AR')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-fg">Próximo vencimiento por producto</h3>
+                    {stockSummary.expiringByProduct.map((item, index) => (
+                      <div key={`${item.name}-${index}`} className="flex justify-between border-t border-hair-soft py-2 text-sm">
+                        <span className="text-fg">{item.name}</span>
+                        <span className="font-mono text-fg-muted">
+                          {item.qtyExpiring} · {new Date(`${item.expiresAt}T12:00:00`).toLocaleDateString('es-AR')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </section>
+    ) : null}
+
     <section data-tour="productos-filters" className="space-y-3 rounded-xl border border-hair-soft bg-surface p-3 sm:p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="relative min-w-0 flex-1">
@@ -939,55 +1077,6 @@ export default function ProductosPage() {
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted"><p><span className="font-mono tabular-nums text-fg">{total}</span> productos · Página <span className="font-mono">{page}</span> de <span className="font-mono">{totalPages || 1}</span></p><div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg border border-hair px-3 py-2 disabled:opacity-40">Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-hair px-3 py-2 disabled:opacity-40">Siguiente</button><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg">{[25, 50, 100, 200].map((size) => <option key={size} value={size}>{size} por página</option>)}</select></div></div>
     </>}
 
-    {stockSummary && (
-      <section className="rounded-xl border border-hair-soft bg-surface" data-tour="productos-stock-summary">
-        <button
-          type="button"
-          onClick={() => setShowStats((current) => !current)}
-          className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
-        >
-          <span className="text-sm font-medium text-fg">Estadísticas de inventario</span>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-            <span><span className="font-mono tabular-nums text-fg">{stockSummary.productCount}</span> productos</span>
-            <span>Venta <span className="font-mono tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</span></span>
-            <span className="text-warn">{stockSummary.lowStockCount} stock bajo</span>
-            <span className="text-crit">{stockSummary.expiringUnitsInWindow} por vencer</span>
-            <ChevronDown className={`h-4 w-4 text-fg-faint transition-transform ${showStats ? 'rotate-180' : ''}`} />
-          </span>
-        </button>
-        {showStats && (
-          <div className="space-y-4 border-t border-hair-soft p-4">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div className="rounded-xl border border-hair-soft border-l-4 border-l-[color:var(--brand-accent)] bg-raised p-4"><p className="text-xs text-fg-muted">Productos</p><p className="font-mono text-3xl font-bold tabular-nums text-fg">{stockSummary.productCount}</p><p className="font-mono text-xs text-fg-faint">Con stock {stockSummary.productsWithStock} · Sin stock {stockSummary.productsNoStock}</p></div>
-              <div className="rounded-xl border border-hair-soft bg-raised p-4"><p className="text-xs text-fg-muted">Valor de venta</p><p className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(stockSummary.valueAtSale)}</p><p className="font-mono text-xs text-ok">Margen {formatMoneyArs(stockSummary.potentialMargin)}</p></div>
-              <button type="button" onClick={() => changeFilter('lowStock', true)} className="rounded-xl border border-warn/30 border-l-4 border-l-warn bg-[var(--warn-soft)] p-4 text-left"><p className="text-xs text-warn">Stock bajo</p><p className="font-mono text-3xl font-bold text-warn">{stockSummary.lowStockCount}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.totalUnits} unidades totales</p></button>
-              <div className="rounded-xl border border-crit/30 border-l-4 border-l-crit bg-[var(--crit-soft)] p-4"><p className="text-xs text-crit">Por vencer ({stockSummary.expiringDaysWindow} días)</p><p className="font-mono text-3xl font-bold text-crit">{stockSummary.expiringUnitsInWindow}</p><p className="font-mono text-xs text-fg-muted">{stockSummary.expiringProductsCount} productos</p></div>
-            </div>
-            <details className="rounded-xl border border-hair-soft bg-raised p-4">
-              <summary className="cursor-pointer font-medium text-fg">Más estadísticas y vencimientos</summary>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <p className="text-sm text-fg-muted">Costo productos <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostProduct)}</strong></p>
-                <p className="text-sm text-fg-muted">Costo lotes <strong className="block font-mono text-fg">{formatMoneyArs(stockSummary.valueAtCostBatches)}</strong></p>
-                <p className="text-sm text-fg-muted">Sin costo con stock <strong className="block font-mono text-warn">{stockSummary.productsWithoutCostWithStock}</strong></p>
-              </div>
-              {(stockSummary.expiringBatches.length > 0 || stockSummary.expiringByProduct.length > 0) && (
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div>
-                    <h3 className="mb-2 text-sm font-semibold text-fg">Lotes por vencer</h3>
-                    {stockSummary.expiringBatches.map((batch) => <div key={batch.id} className="flex justify-between border-t border-hair-soft py-2 text-sm"><Link href={`/productos/${batch.productId}`} className="text-brand">{batch.productName}</Link><span className="font-mono text-fg-muted">{batch.qty} · {new Date(batch.expiresAt).toLocaleDateString('es-AR')}</span></div>)}
-                  </div>
-                  <div>
-                    <h3 className="mb-2 text-sm font-semibold text-fg">Próximo vencimiento por producto</h3>
-                    {stockSummary.expiringByProduct.map((item, index) => <div key={`${item.name}-${index}`} className="flex justify-between border-t border-hair-soft py-2 text-sm"><span className="text-fg">{item.name}</span><span className="font-mono text-fg-muted">{item.qtyExpiring} · {new Date(`${item.expiresAt}T12:00:00`).toLocaleDateString('es-AR')}</span></div>)}
-                  </div>
-                </div>
-              )}
-            </details>
-          </div>
-        )}
-      </section>
-    )}
-
     {quickViewProduct && (() => { const product = quickViewProduct; const rows: [string, string | null][] = [['Marca', product.brand ?? null], ['Categoría', product.category?.name ?? null], ['Subcategoría', product.subcategory ?? null], ['Cód. de barras', product.barcode ?? null], ['EAN bulto', product.eanBox ?? null], ['SKU proveedor', product.supplierSku ?? null], ['Ref. proveedor', product.supplierRef ?? null], ['ID externo', product.externalId ?? null], ['Costo', product.cost != null && Number(product.cost) > 0 ? formatMoneyArs(Number(product.cost)) : null], ['Precio', formatMoneyArs(Number(product.price))], ['IVA', product.iva != null ? `${Number(product.iva)}%` : null], ['Unidades por bulto', product.unitsPerBox ?? null], ['Peso', product.weight ?? null], ['Formato', product.format ?? null], ['Sabor', product.flavor ?? null], ['Presentación', product.presentation ?? null], ['Stock', String(product.stock)], ['Stock mínimo', String(product.minStock)], ['Control de stock', product.stockControl ? 'Sí' : 'No'], ['Producto silencioso', product.silent ? 'Sí' : 'No'], ['Origen', product.sourceProvider ?? null], ['Vencimiento', product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : null]]; const filled = rows.filter(([, value]) => value != null && value !== '' && value !== '—'); return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setQuickViewProduct(null)}><div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-hair bg-surface shadow-xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center gap-3 border-b border-hair-soft p-4">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" /> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-raised2 text-sm font-bold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}<div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold text-fg">{product.name}</h2><p className="text-xs text-fg-faint">Vista rápida · {filled.length} datos completos</p></div><button type="button" onClick={() => setQuickViewProduct(null)} className="rounded-lg px-2 py-1 text-fg-muted hover:bg-raised" aria-label="Cerrar vista rápida">✕</button></div><div className="flex-1 overflow-y-auto p-4"><dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">{filled.map(([label, value]) => <div key={label} className="flex flex-col border-b border-hair-soft/60 pb-2"><dt className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">{label}</dt><dd className="mt-0.5 truncate text-sm text-fg">{value}</dd></div>)}</dl></div><div className="flex justify-end border-t border-hair-soft p-4"><Link href={`/productos/${product.id}`} className="text-sm font-medium text-brand hover:underline">Editar</Link></div></div></div>; })()}
 
     {bulkDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setBulkDialog(null); }}><div className="w-full max-w-md rounded-2xl border border-hair bg-surface p-5 shadow-2xl"><h2 className="text-xl font-bold text-fg">{bulkDialog.title}</h2><p className="mt-1 text-sm text-fg-muted">Se aplicará a <span className="font-mono text-brand">{selected.size}</span> productos.</p><label className="mt-5 block text-sm font-medium text-fg-muted">{bulkDialog.label}{bulkDialog.kind === 'category' ? <select autoFocus value={bulkDialog.value} onChange={(event) => setBulkDialog({ ...bulkDialog, value: event.target.value })} className="mt-2 h-12 w-full rounded-xl border border-hair bg-raised px-3 text-fg"><option value="">Elegí una categoría</option>{facets.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select> : <input autoFocus type={bulkDialog.kind === 'number' ? 'number' : 'text'} step={bulkDialog.kind === 'number' ? '0.01' : undefined} value={bulkDialog.value} onChange={(event) => setBulkDialog({ ...bulkDialog, value: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') submitBulkDialog(); if (event.key === 'Escape') setBulkDialog(null); }} className="mt-2 h-12 w-full rounded-xl border border-hair bg-raised px-3 font-mono text-fg" />}</label><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setBulkDialog(null)} className="rounded-xl border border-hair px-4 py-2.5 text-sm text-fg-muted">Cancelar</button><button type="button" onClick={submitBulkDialog} className="btn-brand rounded-xl px-5 py-2.5 text-sm font-semibold">Aplicar</button></div></div></div>}
@@ -1011,6 +1100,7 @@ export default function ProductosPage() {
         );
         void fetchProducts();
         void loadIncompleteProducts();
+        void refreshStockSummary();
       }}
     />
     </>
