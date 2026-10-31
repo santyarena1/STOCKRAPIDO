@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.42',
+    date: '2026-10-31',
+    summary: 'El ajuste de stock baja de verdad (y se puede fijar el número).',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Ajuste de stock sin control ya descuenta',
+        desc: 'Si el producto no tenía “control de stock”, al restar unidades el movimiento se guardaba pero el número no bajaba. Ahora sí. En la ficha también podés fijar el stock final (ej. 29) sin confundirlo con sumar 29.',
+      },
+    ],
+  },
+  {
     version: 'v1.41',
     date: '2026-10-31',
     summary: 'Teatro: edición rápida de precios desde el celular.',

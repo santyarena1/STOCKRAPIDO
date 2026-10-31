@@ -110,6 +110,8 @@ export default function EditarProductoPage() {
   const [form, setForm] = useState({ name: '', barcode: '', categoryId: '', cost: '', price: '', minStock: '', brand: '', stockControl: true, silent: false, expiresAt: '', imageUrl: '', unitsPerBox: '', weight: '', format: '', flavor: '', presentation: '', subcategory: '' });
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
+  const [setStockValue, setSetStockValue] = useState('');
+  const [adjustBusy, setAdjustBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [silentBusy, setSilentBusy] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
@@ -370,23 +372,55 @@ export default function EditarProductoPage() {
     }
   };
 
-  const handleAdjust = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const qty = parseInt(adjustQty, 10);
-    if (!qty || !adjustReason.trim()) return;
+  const applyStockDelta = async (qty: number, reason: string) => {
+    if (!Number.isFinite(qty) || qty === 0) {
+      alert('Indicá una cantidad distinta de cero.');
+      return;
+    }
+    if (!reason.trim()) {
+      alert('Elegí un motivo del ajuste.');
+      return;
+    }
+    setAdjustBusy(true);
     try {
       const updated = await api<Product>(`/products/${id}/stock`, {
         method: 'POST',
-        body: JSON.stringify({ qty, reason: adjustReason }),
+        body: JSON.stringify({ qty, reason }),
       });
       setProduct(updated);
       setAdjustQty('');
+      setSetStockValue('');
       setAdjustReason('');
       const m = await api<StockMove[]>(`/products/${id}/stock-moves`);
       setMoves(m);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setAdjustBusy(false);
     }
+  };
+
+  const handleAdjust = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const qty = parseInt(adjustQty, 10);
+    await applyStockDelta(qty, adjustReason);
+  };
+
+  /** Fija el stock en un número absoluto (ej. 29) calculando el delta. */
+  const handleSetStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!product) return;
+    const target = parseInt(setStockValue, 10);
+    if (!Number.isFinite(target) || target < 0) {
+      alert('Indicá el stock final (0 o más).');
+      return;
+    }
+    const delta = target - product.stock;
+    if (delta === 0) {
+      alert(`El stock ya es ${product.stock}.`);
+      return;
+    }
+    await applyStockDelta(delta, adjustReason || 'ajuste');
   };
 
   if (loading) return <Loader full />;
@@ -706,6 +740,11 @@ export default function EditarProductoPage() {
           <div data-tour="editar-producto-stock" className="w-full rounded-xl border border-hair-soft bg-surface p-4 sm:p-5">
             <h3 className="font-medium text-fg mb-1">Stock actual</h3>
             <p className="text-2xl font-bold text-fg mb-1">{product.stock} unidades</p>
+            {!product.stockControl && (
+              <p className="mb-3 rounded-lg border border-warn/30 bg-[var(--warn-soft)] px-3 py-2 text-sm text-warn">
+                Control de stock desactivado. Igual podés ajustar el número; conviene activar el control si querés llevar lotes y descuentos por venta.
+              </p>
+            )}
             {nextExpiry && (
               <p className="text-sm text-fg-muted mb-3">
                 Próximo vencimiento: {new Date(nextExpiry.date).toLocaleDateString('es-AR')} ({nextExpiry.qty} un.)
@@ -747,32 +786,56 @@ export default function EditarProductoPage() {
                 </tbody>
               </table>
             </div>
-            <form data-tour="editar-producto-ajuste" onSubmit={handleAdjust} className="space-y-2">
-              <div className="flex gap-2 items-end">
+            <div className="mb-3">
+              <label className="mb-0.5 block text-xs text-fg-faint">Motivo (para fijar o ajustar)</label>
+              <select
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                className="w-full rounded border border-hair-soft bg-raised px-2 py-1.5 text-fg"
+              >
+                <option value="">Elegir motivo...</option>
+                {STOCK_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+            <form data-tour="editar-producto-fijar-stock" onSubmit={handleSetStock} className="mb-4 space-y-2 rounded-lg border border-hair-soft bg-raised/40 p-3">
+              <p className="text-sm font-medium text-fg">Fijar stock en un número</p>
+              <p className="text-xs text-fg-faint">Si hay 30 y querés 29, escribí 29 acá (no uses el campo de abajo con “29”, porque sumaría 29).</p>
+              <div className="flex flex-wrap items-end gap-2">
                 <div>
-                  <label className="block text-xs text-fg-faint mb-0.5">Cantidad (+/-)</label>
+                  <label className="mb-0.5 block text-xs text-fg-faint">Stock final</label>
                   <input
                     type="number"
-                    placeholder="Ej: 10 o -5"
-                    value={adjustQty}
-                    onChange={(e) => setAdjustQty(e.target.value)}
-                    className="w-24 px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
+                    min={0}
+                    inputMode="numeric"
+                    placeholder={String(product.stock)}
+                    value={setStockValue}
+                    onChange={(e) => setSetStockValue(e.target.value)}
+                    className="w-28 rounded border border-hair-soft bg-raised px-2 py-1.5 font-mono text-fg"
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-xs text-fg-faint mb-0.5">Motivo</label>
-                  <select
-                    value={adjustReason}
-                    onChange={(e) => setAdjustReason(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
-                  >
-                    <option value="">Elegir motivo...</option>
-                    {STOCK_REASONS.map((r) => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
+                <button type="submit" disabled={adjustBusy} className="rounded btn-brand px-3 py-1.5 text-sm disabled:opacity-50">
+                  {adjustBusy ? 'Guardando…' : 'Fijar stock'}
+                </button>
+              </div>
+            </form>
+            <form data-tour="editar-producto-ajuste" onSubmit={handleAdjust} className="space-y-2">
+              <p className="text-sm font-medium text-fg">Ajuste relativo (+/−)</p>
+              <div className="flex flex-wrap gap-2 items-end">
+                <div>
+                  <label className="block text-xs text-fg-faint mb-0.5">Cantidad (+/−)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej: 10 o -1"
+                    value={adjustQty}
+                    onChange={(e) => setAdjustQty(e.target.value)}
+                    className="w-28 px-2 py-1.5 rounded bg-raised border border-hair-soft text-fg"
+                  />
                 </div>
-                <button type="submit" className="px-3 py-1.5 rounded btn-brand text-sm">Ajustar</button>
+                <button type="submit" disabled={adjustBusy} className="px-3 py-1.5 rounded btn-brand text-sm disabled:opacity-50">
+                  {adjustBusy ? 'Guardando…' : 'Ajustar'}
+                </button>
               </div>
             </form>
           </div>
