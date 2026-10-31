@@ -1021,11 +1021,24 @@ export class ProductsService {
   async adjustStock(id: string, businessId: string, qty: number, reason: string, reference?: string) {
     const product = await this.prisma.product.findFirst({ where: { id, businessId } });
     if (!product) return null;
+    if (!Number.isFinite(qty) || qty === 0) {
+      throw new BadRequestException('La cantidad del ajuste debe ser distinta de cero.');
+    }
     await this.prisma.stockMove.create({
       data: { productId: id, qty, reason, reference },
     });
     if (qty < 0) {
-      await this.deductStockFromBatches(id, businessId, Math.abs(qty));
+      const abs = Math.abs(qty);
+      // Con control de stock: FIFO por lotes. Sin control: bajar Product.stock igual
+      // (antes el egreso era no-op y el usuario veía el mismo número tras “ajustar”).
+      if (product.stockControl) {
+        await this.deductStockFromBatches(id, businessId, abs);
+      } else {
+        await this.prisma.product.update({
+          where: { id },
+          data: { stock: Math.max(0, product.stock - abs) },
+        });
+      }
     } else {
       await this.prisma.productBatch.create({
         data: {
