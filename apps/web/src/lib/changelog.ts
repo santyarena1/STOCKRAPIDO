@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.40',
+    date: '2026-10-31',
+    summary: 'Teatro: redondear todo el inventario a $500.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Redondear precios a $500 (Teatro)',
+        desc: 'En Productos hay un botón que redondea TODOS los precios del inventario hacia arriba a múltiplos de $500. Ej.: $1.100 → $1.500, $900 → $1.000. Solo para el negocio Teatro.',
+      },
+    ],
+  },
+  {
     version: 'v1.39',
     date: '2026-10-17',
     summary: 'Punto rojo para productos silenciosos en el POS.',

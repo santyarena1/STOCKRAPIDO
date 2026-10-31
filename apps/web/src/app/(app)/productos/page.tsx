@@ -214,11 +214,13 @@ export default function ProductosPage() {
   const [showBulkCreate, setShowBulkCreate] = useState(false);
   const [businessName, setBusinessName] = useState('');
   const [wipingInventory, setWipingInventory] = useState(false);
+  const [roundingPrices, setRoundingPrices] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
-  const canWipeInventory = /teatro/i.test(
+  const isTeatroTenant = /teatro/i.test(
     businessName.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
   );
+  const canWipeInventory = isTeatroTenant;
 
   useEffect(() => {
     if (!bulkMenuOpen) return;
@@ -341,6 +343,31 @@ export default function ProductosPage() {
       }
     });
   }, [hydrated]);
+
+  const roundAllInventoryPrices = async () => {
+    if (!isTeatroTenant || roundingPrices) return;
+    if (
+      !confirm(
+        '¿Redondear TODOS los precios del inventario hacia arriba a múltiplos de $500?\n\nEjemplos: $1.100 → $1.500 · $900 → $1.000 · $1.000 se mantiene.\n\nAfecta a todo el catálogo de Teatro, no solo a los seleccionados.',
+      )
+    ) {
+      return;
+    }
+    setRoundingPrices(true);
+    try {
+      const res = await api<{ updated: number; unchanged: number; total: number; message: string }>(
+        '/products/round-prices-up',
+        { method: 'POST', body: JSON.stringify({ step: 500 }) },
+      );
+      setBulkMessage(res.message || `Redondeados ${res.updated} de ${res.total} productos.`);
+      await fetchProducts();
+      await refreshStockSummary();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudieron redondear los precios');
+    } finally {
+      setRoundingPrices(false);
+    }
+  };
 
   const wipeInventory = async () => {
     if (!canWipeInventory || wipingInventory) return;
@@ -803,6 +830,16 @@ export default function ProductosPage() {
             <Upload className="h-4 w-4" />
             Carga masiva
           </button>
+          {isTeatroTenant ? (
+            <button
+              type="button"
+              disabled={roundingPrices}
+              onClick={() => void roundAllInventoryPrices()}
+              className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-medium text-brand hover:bg-raised2 disabled:opacity-50"
+            >
+              {roundingPrices ? 'Redondeando…' : 'Redondear precios a $500'}
+            </button>
+          ) : null}
           {canWipeInventory ? (
             <button
               type="button"

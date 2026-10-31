@@ -360,6 +360,16 @@ export class ProductsController {
     return this.products.bulkCreateFromText(user.businessId, text);
   }
 
+  /** Redondear todos los precios hacia arriba a $500 (solo tenant Teatro). */
+  @Post('round-prices-up')
+  roundPricesUp(
+    @CurrentUser() user: User,
+    @Body() body?: { step?: number },
+  ) {
+    const step = body?.step == null ? 500 : Number(body.step);
+    return this.products.roundAllPricesUp(user.businessId, step);
+  }
+
   /** Vaciar inventario (solo tenant Teatro). */
   @Post('wipe-inventory')
   wipeInventory(

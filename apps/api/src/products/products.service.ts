@@ -13,6 +13,7 @@ import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
 import { PublicCatalogService } from '../public-catalog/public-catalog.service';
 import { parseBulkCreateText, scoreCatalogNameMatch } from './bulk-create-text';
+import { roundPriceUpToStep } from './round-price';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -2035,6 +2036,65 @@ export class ProductsService {
       matches: [],
       ids,
       parseErrors,
+    };
+  }
+
+  /**
+   * Redondea TODOS los precios del inventario hacia arriba al múltiplo de `step`
+   * (por defecto 500). Solo tenant Teatro.
+   * Ej.: 1100→1500, 900→1000, 1000 se mantiene.
+   */
+  async roundAllPricesUp(businessId: string, step = 500) {
+    if (!Number.isFinite(step) || step <= 0) {
+      throw new BadRequestException('El paso de redondeo debe ser mayor a 0.');
+    }
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Negocio no encontrado');
+    if (!this.isTeatroTenant(business.name, business.id)) {
+      throw new ForbiddenException('Redondear precios del inventario solo está habilitado para el tenant Teatro.');
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { businessId },
+      select: { id: true, price: true },
+    });
+    const toUpdate: { id: string; next: number }[] = [];
+    let unchanged = 0;
+    for (const product of products) {
+      const current = Number(product.price);
+      const next = roundPriceUpToStep(current, step);
+      if (next === current) {
+        unchanged++;
+        continue;
+      }
+      toUpdate.push({ id: product.id, next });
+    }
+
+    const chunkSize = 80;
+    for (let i = 0; i < toUpdate.length; i += chunkSize) {
+      const chunk = toUpdate.slice(i, i + chunkSize);
+      await this.prisma.$transaction(
+        chunk.map((row) =>
+          this.prisma.product.updateMany({
+            where: { id: row.id, businessId },
+            data: { price: new Decimal(row.next) },
+          }),
+        ),
+      );
+    }
+
+    return {
+      total: products.length,
+      updated: toUpdate.length,
+      unchanged,
+      step,
+      message:
+        toUpdate.length === 0
+          ? `Ningún precio cambió: los ${products.length} productos ya estaban en múltiplos de $${step}.`
+          : `Se redondearon ${toUpdate.length} de ${products.length} productos hacia arriba a múltiplos de $${step} (${unchanged} ya estaban redondeados).`,
     };
   }
 
