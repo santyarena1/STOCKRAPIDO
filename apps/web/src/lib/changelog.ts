@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.40',
+    date: '2026-10-31',
+    summary: 'Redondear precios hacia arriba a $500.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Redondear precios a $500 (hacia arriba)',
+        desc: 'En Productos → Acciones rápidas podés redondear los seleccionados al múltiplo de $500 hacia arriba. Ej.: $1.100 → $1.500, $900 → $1.000. Usá “Seleccionar todos los de esta búsqueda” si querés aplicar a todo el catálogo.',
+      },
+    ],
+  },
+  {
     version: 'v1.39',
     date: '2026-10-17',
     summary: 'Punto rojo para productos silenciosos en el POS.',

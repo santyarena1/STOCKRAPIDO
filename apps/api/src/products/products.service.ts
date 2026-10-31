@@ -13,6 +13,7 @@ import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
 import { PublicCatalogService } from '../public-catalog/public-catalog.service';
 import { parseBulkCreateText, scoreCatalogNameMatch } from './bulk-create-text';
+import { roundPriceUpToStep } from './round-price';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -39,6 +40,7 @@ export type ProductBulkInput = {
     | 'setPrice'
     | 'applyMarkup'
     | 'adjustPrice'
+    | 'roundPriceUp'
     | 'setCategory'
     | 'setBrand'
     | 'setIva'
@@ -551,6 +553,7 @@ export class ProductsService {
       'setPrice',
       'applyMarkup',
       'adjustPrice',
+      'roundPriceUp',
       'setCategory',
       'setBrand',
       'setIva',
@@ -574,6 +577,36 @@ export class ProductsService {
     const skipped = ids
       .filter((id) => !foundIds.has(id))
       .map((id) => ({ id, reason: 'Producto no encontrado en el negocio.' }));
+
+    if (input.action === 'roundPriceUp') {
+      // Por defecto $500: 1100→1500, 900→1000. value opcional = paso.
+      const step =
+        input.value === undefined || input.value === null || input.value === ''
+          ? 500
+          : this.numericBulkValue(input.value, 'El paso de redondeo');
+      if (step <= 0) throw new BadRequestException('El paso de redondeo debe ser mayor a 0.');
+      const toUpdate: { id: string; next: number }[] = [];
+      for (const product of products) {
+        const current = Number(product.price);
+        const next = roundPriceUpToStep(current, step);
+        if (next === current) {
+          skipped.push({ id: product.id, reason: `Ya estaba en múltiplo de ${step}.` });
+          continue;
+        }
+        toUpdate.push({ id: product.id, next });
+      }
+      if (toUpdate.length) {
+        await this.prisma.$transaction(
+          toUpdate.map((row) =>
+            this.prisma.product.updateMany({
+              where: { id: row.id, businessId },
+              data: { price: new Decimal(row.next) },
+            }),
+          ),
+        );
+      }
+      return { updated: toUpdate.length, skipped };
+    }
 
     if (input.action === 'applyMarkup') {
       const markup = this.numericBulkValue(input.value, 'El porcentaje de markup');
