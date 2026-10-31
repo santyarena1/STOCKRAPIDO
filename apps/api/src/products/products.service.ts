@@ -40,7 +40,6 @@ export type ProductBulkInput = {
     | 'setPrice'
     | 'applyMarkup'
     | 'adjustPrice'
-    | 'roundPriceUp'
     | 'setCategory'
     | 'setBrand'
     | 'setIva'
@@ -553,7 +552,6 @@ export class ProductsService {
       'setPrice',
       'applyMarkup',
       'adjustPrice',
-      'roundPriceUp',
       'setCategory',
       'setBrand',
       'setIva',
@@ -577,36 +575,6 @@ export class ProductsService {
     const skipped = ids
       .filter((id) => !foundIds.has(id))
       .map((id) => ({ id, reason: 'Producto no encontrado en el negocio.' }));
-
-    if (input.action === 'roundPriceUp') {
-      // Por defecto $500: 1100→1500, 900→1000. value opcional = paso.
-      const step =
-        input.value === undefined || input.value === null || input.value === ''
-          ? 500
-          : this.numericBulkValue(input.value, 'El paso de redondeo');
-      if (step <= 0) throw new BadRequestException('El paso de redondeo debe ser mayor a 0.');
-      const toUpdate: { id: string; next: number }[] = [];
-      for (const product of products) {
-        const current = Number(product.price);
-        const next = roundPriceUpToStep(current, step);
-        if (next === current) {
-          skipped.push({ id: product.id, reason: `Ya estaba en múltiplo de ${step}.` });
-          continue;
-        }
-        toUpdate.push({ id: product.id, next });
-      }
-      if (toUpdate.length) {
-        await this.prisma.$transaction(
-          toUpdate.map((row) =>
-            this.prisma.product.updateMany({
-              where: { id: row.id, businessId },
-              data: { price: new Decimal(row.next) },
-            }),
-          ),
-        );
-      }
-      return { updated: toUpdate.length, skipped };
-    }
 
     if (input.action === 'applyMarkup') {
       const markup = this.numericBulkValue(input.value, 'El porcentaje de markup');
@@ -2068,6 +2036,65 @@ export class ProductsService {
       matches: [],
       ids,
       parseErrors,
+    };
+  }
+
+  /**
+   * Redondea TODOS los precios del inventario hacia arriba al múltiplo de `step`
+   * (por defecto 500). Solo tenant Teatro.
+   * Ej.: 1100→1500, 900→1000, 1000 se mantiene.
+   */
+  async roundAllPricesUp(businessId: string, step = 500) {
+    if (!Number.isFinite(step) || step <= 0) {
+      throw new BadRequestException('El paso de redondeo debe ser mayor a 0.');
+    }
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Negocio no encontrado');
+    if (!this.isTeatroTenant(business.name, business.id)) {
+      throw new ForbiddenException('Redondear precios del inventario solo está habilitado para el tenant Teatro.');
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { businessId },
+      select: { id: true, price: true },
+    });
+    const toUpdate: { id: string; next: number }[] = [];
+    let unchanged = 0;
+    for (const product of products) {
+      const current = Number(product.price);
+      const next = roundPriceUpToStep(current, step);
+      if (next === current) {
+        unchanged++;
+        continue;
+      }
+      toUpdate.push({ id: product.id, next });
+    }
+
+    const chunkSize = 80;
+    for (let i = 0; i < toUpdate.length; i += chunkSize) {
+      const chunk = toUpdate.slice(i, i + chunkSize);
+      await this.prisma.$transaction(
+        chunk.map((row) =>
+          this.prisma.product.updateMany({
+            where: { id: row.id, businessId },
+            data: { price: new Decimal(row.next) },
+          }),
+        ),
+      );
+    }
+
+    return {
+      total: products.length,
+      updated: toUpdate.length,
+      unchanged,
+      step,
+      message:
+        toUpdate.length === 0
+          ? `Ningún precio cambió: los ${products.length} productos ya estaban en múltiplos de $${step}.`
+          : `Se redondearon ${toUpdate.length} de ${products.length} productos hacia arriba a múltiplos de $${step} (${unchanged} ya estaban redondeados).`,
     };
   }
 
