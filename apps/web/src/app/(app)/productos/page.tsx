@@ -8,6 +8,7 @@ import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PublicCatalogPanel } from '@/components/productos/PublicCatalogPanel';
 import { BulkCreateProductsModal } from '@/components/productos/BulkCreateProductsModal';
+import { QuickPriceEdit } from '@/components/productos/QuickPriceEdit';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
@@ -215,12 +216,37 @@ export default function ProductosPage() {
   const [businessName, setBusinessName] = useState('');
   const [wipingInventory, setWipingInventory] = useState(false);
   const [roundingPrices, setRoundingPrices] = useState(false);
+  const [quickPriceEdit, setQuickPriceEdit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
   const isTeatroTenant = /teatro/i.test(
     businessName.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
   );
   const canWipeInventory = isTeatroTenant;
+  const quickPriceEnabled = isTeatroTenant && quickPriceEdit;
+
+  useEffect(() => {
+    try {
+      setQuickPriceEdit(localStorage.getItem('sr-teatro-quick-price-edit') === '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    if (!isTeatroTenant) return;
+    try {
+      localStorage.setItem('sr-teatro-quick-price-edit', quickPriceEdit ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [isTeatroTenant, quickPriceEdit]);
+
+  const applyLocalPrice = useCallback((productId: string, price: number) => {
+    setProducts((current) =>
+      current.map((product) => (product.id === productId ? { ...product, price } : product)),
+    );
+    setQuickViewProduct((current) => (current?.id === productId ? { ...current, price } : current));
+  }, []);
 
   useEffect(() => {
     if (!bulkMenuOpen) return;
@@ -803,7 +829,20 @@ export default function ProductosPage() {
     if (key === 'brand') return <span className="text-fg-muted">{product.brand || '—'}</span>;
     if (key === 'type') return <span className="text-fg-muted">{product.format || '—'}</span>;
     if (key === 'cost') return cost == null ? <span className="text-fg-faint">—</span> : <UnitPriceDisplay cost={product.cost} unitsPerBox={product.unitsPerBox} unitsPerBoxNum={product.unitsPerBoxNum} costBox={product.costBox} showCost showPrice={false} showBulkInternal={showBulkInternal} />;
-    if (key === 'price') return <UnitPriceDisplay price={product.price} unitsPerBox={product.unitsPerBox} unitsPerBoxNum={product.unitsPerBoxNum} priceBox={product.priceBox} showBulkInternal={showBulkInternal} />;
+    if (key === 'price') {
+      if (quickPriceEnabled) {
+        return (
+          <QuickPriceEdit
+            productId={product.id}
+            price={product.price}
+            enabled
+            className="font-mono text-sm font-bold tabular-nums text-brand"
+            onSaved={applyLocalPrice}
+          />
+        );
+      }
+      return <UnitPriceDisplay price={product.price} unitsPerBox={product.unitsPerBox} unitsPerBoxNum={product.unitsPerBoxNum} priceBox={product.priceBox} showBulkInternal={showBulkInternal} />;
+    }
     if (key === 'margin') return <span className={`font-mono tabular-nums ${margin != null && margin >= 0 ? 'text-ok' : 'text-crit'}`}>{margin == null ? '—' : formatMoneyArs(margin)}</span>;
     if (key === 'stock') return <span className={`rounded-md border px-2 py-1 font-mono text-xs tabular-nums ${product.stock <= product.minStock ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{product.stock}</span>;
     if (key === 'minStock') return <span className="font-mono tabular-nums text-fg-faint">{product.minStock}</span>;
@@ -817,7 +856,15 @@ export default function ProductosPage() {
   return <Container className="space-y-6">
     <PageHeader
       title="Productos"
-      subtitle={sectionTab === 'community' ? 'Importá fichas sin precio del catálogo comunitario.' : view === 'cards' ? 'Tocá un producto para editarlo' : 'Gestioná catálogo, precios, costos y niveles de stock.'}
+      subtitle={
+        sectionTab === 'community'
+          ? 'Importá fichas sin precio del catálogo comunitario.'
+          : quickPriceEnabled
+            ? 'Edición rápida: tocá el precio de venta y escribí el valor exacto.'
+            : view === 'cards'
+              ? 'Tocá un producto para editarlo'
+              : 'Gestioná catálogo, precios, costos y niveles de stock.'
+      }
       actions={
         sectionTab === 'inventory' ? (
         <>
@@ -831,14 +878,28 @@ export default function ProductosPage() {
             Carga masiva
           </button>
           {isTeatroTenant ? (
-            <button
-              type="button"
-              disabled={roundingPrices}
-              onClick={() => void roundAllInventoryPrices()}
-              className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-medium text-brand hover:bg-raised2 disabled:opacity-50"
-            >
-              {roundingPrices ? 'Redondeando…' : 'Redondear precios a $500'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setQuickPriceEdit((current) => !current)}
+                aria-pressed={quickPriceEdit}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50 ${
+                  quickPriceEdit
+                    ? 'border-[color:var(--brand-accent)] bg-brand-highlight text-brand'
+                    : 'border-hair bg-raised text-fg hover:bg-raised2'
+                }`}
+              >
+                {quickPriceEdit ? 'Edición rápida ON' : 'Edición rápida'}
+              </button>
+              <button
+                type="button"
+                disabled={roundingPrices}
+                onClick={() => void roundAllInventoryPrices()}
+                className="rounded-lg border border-[color:var(--brand-accent)] bg-brand-highlight px-3 py-2 text-sm font-medium text-brand hover:bg-raised2 disabled:opacity-50"
+              >
+                {roundingPrices ? 'Redondeando…' : 'Redondear precios a $500'}
+              </button>
+            </>
           ) : null}
           {canWipeInventory ? (
             <button
@@ -877,6 +938,11 @@ export default function ProductosPage() {
       <Link href="/productos/imagenes" className={toolBtn}>Imágenes</Link>
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportStock} />
     </div>
+    {quickPriceEnabled && (
+      <div className="rounded-xl border border-[color:var(--brand-accent)]/40 bg-brand-highlight px-4 py-3 text-sm text-brand">
+        Edición rápida activa: tocá el <strong>precio de venta</strong> en la lista o en las tarjetas y escribí el valor exacto (sin redondeo). Enter o afuera del campo guarda.
+      </div>
+    )}
     {exportMsg && <p className="text-sm text-warn">{exportMsg}</p>}
     {importResult && <div className="rounded-lg border border-hair bg-raised p-3 text-sm text-fg">Importación: <strong className="font-mono">{importResult.updated}</strong> producto(s) actualizado(s). {importResult.errors.length > 0 && <span className="text-warn">Errores en {importResult.errors.length} fila(s): {importResult.errors.slice(0, 5).map((error) => `Fila ${error.row}: ${error.message}`).join('; ')}</span>}</div>}
     {photoProgress && <p className="text-sm text-fg-muted">{photoProgress}</p>}
@@ -1120,7 +1186,17 @@ export default function ProductosPage() {
             <p className="mt-1 truncate text-sm text-fg-faint">{product.category?.name || 'Sin categoría'} · {product.brand || 'Sin marca'}</p>
             <DeliveryProductReadinessInline providers={deliveryReadiness[product.id] ?? []} />
             {product.points != null && <span className="mt-2 self-start rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-1 font-mono text-xs text-warn">★ {product.points} pts</span>}
-            <div className="mt-4 flex items-end justify-between gap-3 border-t border-hair-soft pt-4"><span className="font-mono text-2xl font-bold tabular-nums text-brand">{formatMoneyArs(Number(product.price))}</span><span className="flex items-center gap-2 text-sm text-fg-muted"><span className={`h-2.5 w-2.5 rounded-full ${lowStock ? 'bg-warn' : 'bg-ok'}`} /><span className="font-mono tabular-nums">{product.stock}</span></span></div>
+            <div className="mt-4 flex items-end justify-between gap-3 border-t border-hair-soft pt-4">
+              <QuickPriceEdit
+                productId={product.id}
+                price={product.price}
+                enabled={quickPriceEnabled}
+                className="font-mono text-2xl font-bold tabular-nums text-brand"
+                inputClassName="w-28 min-h-11 rounded-lg border border-[color:var(--brand-accent)] bg-surface px-2 py-1.5 font-mono text-xl font-bold tabular-nums text-brand outline-none"
+                onSaved={applyLocalPrice}
+              />
+              <span className="flex items-center gap-2 text-sm text-fg-muted"><span className={`h-2.5 w-2.5 rounded-full ${lowStock ? 'bg-warn' : 'bg-ok'}`} /><span className="font-mono tabular-nums">{product.stock}</span></span>
+            </div>
             <span className="mt-4 block w-full rounded-xl border border-hair bg-raised px-4 py-2.5 text-center text-sm font-semibold text-fg-muted transition-colors group-hover:border-[color:var(--brand-accent)] group-hover:bg-brand-highlight-soft group-hover:text-brand">Editar</span>
             <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openLabels([product.id]); }} className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-hair bg-surface px-4 py-2.5 text-sm font-semibold text-fg-muted hover:bg-raised">
               <Printer className="h-4 w-4" />Imprimir etiqueta
@@ -1173,7 +1249,7 @@ export default function ProductosPage() {
 
     {selected.size > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--brand-accent)] bg-surface p-3 shadow-lg"><div className="flex items-center gap-3"><strong className="font-mono text-brand">{selected.size} seleccionados</strong><button type="button" onClick={() => setSelected(new Set())} className="text-sm text-fg-muted hover:text-fg">Limpiar</button><button type="button" disabled={labelsBusy} onClick={() => void selectAllMatching()} className="text-sm text-fg-muted hover:text-fg disabled:opacity-50">Seleccionar todos los de esta búsqueda</button><button type="button" disabled={photoBusy} onClick={() => void applyFirstPhotos()} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">{photoBusy ? (photoProgress || 'Buscando…') : 'Primera foto'}</button><button type="button" disabled={labelsBusy} onClick={() => void openLabels([...selected])} className="rounded-lg border border-hair px-3 py-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50">Imprimir etiquetas</button></div><div ref={bulkMenuRef} className="relative"><button type="button" onClick={() => setBulkMenuOpen((current) => !current)} aria-expanded={bulkMenuOpen} className="btn-brand flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold">Acciones rápidas <ChevronDown className={`h-4 w-4 transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} /></button>{bulkMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-hair bg-surface p-2 shadow-2xl"><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Estado</p><button type="button" onClick={() => void runBulk('setActive', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Habilitar</button><button type="button" onClick={() => void runBulk('setActive', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Deshabilitar</button><button type="button" onClick={() => void runBulk('setSilent', true)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Marcar como silencioso</button><button type="button" onClick={() => void runBulk('setSilent', false)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Quitar silencioso</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Catálogo</p><button type="button" onClick={() => openBulkDialog({ action: 'setCategory', title: 'Cambiar categoría', label: 'Nueva categoría', kind: 'category' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar categoría</button><button type="button" onClick={() => openBulkDialog({ action: 'setBrand', title: 'Cambiar marca', label: 'Nueva marca', kind: 'text' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar marca</button><button type="button" onClick={() => openBulkDialog({ action: 'setIva', title: 'Cambiar IVA', label: 'IVA (%)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Cambiar IVA</button><button type="button" onClick={() => void exportSelected()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Exportar seleccionados</button><button type="button" disabled={labelsBusy} onClick={() => { setBulkMenuOpen(false); void openLabels([...selected]); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised disabled:opacity-50">Imprimir etiquetas</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Precio</p><button type="button" onClick={() => void openApplyMarkupDialog()} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Aplicar rentabilidad %</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustPrice', title: 'Ajustar precio', label: 'Porcentaje (usá negativo para bajar)', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar precio ±%</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Inventario</p><button type="button" onClick={() => openBulkDialog({ action: 'setStock', title: 'Fijar stock', label: 'Cantidad final', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Fijar stock</button><button type="button" onClick={() => openBulkDialog({ action: 'adjustStock', title: 'Ajustar stock', label: 'Cantidad a sumar o restar', kind: 'number' })} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Ajustar stock ±</button><div className="my-1 border-t border-hair-soft" /><p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Admin</p><button type="button" onClick={() => confirm('¿Dejar de sincronizar los productos seleccionados?') && void runBulk('stopSync')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-fg hover:bg-raised">Dejar de sincronizar</button><button type="button" onClick={() => confirm('¿Eliminar definitivamente los productos seleccionados?') && void runBulk('delete')} className="w-full rounded-lg px-3 py-2 text-left text-sm text-crit hover:bg-[var(--crit-soft)]">Eliminar</button></div>}</div></div>}
 
-    <div data-tour="productos-table"><div className="hidden overflow-x-auto rounded-xl border border-hair-soft bg-surface md:block"><table className="w-full text-sm"><thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3"><input type="checkbox" checked={products.length > 0 && products.every((product) => selected.has(product.id))} onChange={(event) => setSelected(event.target.checked ? new Set(products.map((product) => product.id)) : new Set())} /></th>{visibleColumns.map((column) => <th key={column.key} className="whitespace-nowrap p-3 text-left">{SORTABLE[column.key] ? <button type="button" onClick={() => changeSort(SORTABLE[column.key]!)} className="hover:text-fg">{column.label}{sort === SORTABLE[column.key] ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}</button> : column.label}</th>)}</tr></thead><tbody className="divide-y divide-hair-soft">{products.map((product) => <tr key={product.id} className="hover:bg-raised/70"><td className="p-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></td>{visibleColumns.map((column) => <td key={column.key} className={`whitespace-nowrap p-3 ${['cost', 'price', 'margin', 'stock', 'minStock'].includes(column.key) ? 'text-right font-mono tabular-nums' : ''}`}>{renderCell(product, column.key)}</td>)}</tr>)}{!loading && products.length === 0 && <tr><td colSpan={visibleColumns.length + 1} className="p-10 text-center text-fg-faint">No hay productos para estos filtros.</td></tr>}</tbody></table></div><div className="space-y-3 md:hidden">{products.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); return <article key={product.id} className="rounded-xl border border-hair-soft bg-surface p-3"><div className="flex items-start gap-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} className="mt-3 shrink-0" />{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-hair-soft bg-white object-contain" /> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair-soft bg-raised2 text-sm font-semibold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}<div className="min-w-0 flex-1"><span className="flex items-center gap-1.5"><Link href={`/productos/${product.id}`} className="truncate text-[14.5px] font-semibold leading-tight text-fg">{product.name}</Link>{product.silent && <span title="Producto silencioso" className="shrink-0 rounded border border-[color:var(--brand-accent)] bg-brand-highlight px-1 text-[9px] font-bold uppercase leading-4 text-brand">PS</span>}</span><p className="mt-1 truncate font-mono text-[10.5px] text-fg-faint">{product.barcode || 'Sin código'}{product.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 ? ` · bulto ×${product.unitsPerBoxNum}` : ''}</p></div><div className="shrink-0 text-right"><p className="font-mono text-base font-bold tabular-nums text-brand">{formatMoneyArs(Number(product.price))}</p><p className="font-mono text-[10.5px] tabular-nums text-fg-faint">{product.cost == null ? 'sin costo' : `costo ${formatMoneyArs(Number(product.cost))}`}</p></div></div><div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-hair-soft pt-3"><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Stock</span><span className={`mt-1 inline-flex rounded-md border px-2 py-0.5 font-mono text-xs tabular-nums ${product.stock <= product.minStock ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{product.stock}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Categoría</span><span className="mt-1 block truncate text-sm text-fg-muted">{product.category?.name || '—'}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Origen</span>{product.sourceProvider ? <span className="mt-1 inline-flex rounded-md border border-hair bg-raised2 px-2 py-0.5 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="mt-1 block text-sm text-fg-faint">—</span>}</div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">{product.incomplete ? 'Estado' : 'Vencimiento'}</span>{product.incomplete ? <span className="mt-1 inline-flex rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-0.5 text-xs text-warn">Incompleto</span> : <span className={`mt-1 block font-mono text-xs tabular-nums ${expiryDays != null && expiryDays <= 30 ? 'text-crit' : 'text-fg-muted'}`}>{product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : '—'}</span>}</div></div><div className="mt-3 flex justify-end gap-3 border-t border-hair-soft pt-3"><button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setQuickViewProduct(product); }} className="text-sm font-medium text-fg-muted">👁️ Vista rápida</button><button type="button" onClick={() => void openLabels([product.id])} className="text-sm font-medium text-fg-muted">Etiqueta</button><Link href={`/productos/${product.id}`} className="text-sm font-medium text-brand">Editar</Link></div></article>; })}{!loading && products.length === 0 && <p className="rounded-xl border border-hair-soft bg-surface p-6 text-center text-fg-faint">No hay productos para estos filtros.</p>}</div>{loading && <Loader />}</div>
+    <div data-tour="productos-table"><div className="hidden overflow-x-auto rounded-xl border border-hair-soft bg-surface md:block"><table className="w-full text-sm"><thead className="bg-raised text-xs uppercase tracking-wide text-fg-faint"><tr><th className="p-3"><input type="checkbox" checked={products.length > 0 && products.every((product) => selected.has(product.id))} onChange={(event) => setSelected(event.target.checked ? new Set(products.map((product) => product.id)) : new Set())} /></th>{visibleColumns.map((column) => <th key={column.key} className="whitespace-nowrap p-3 text-left">{SORTABLE[column.key] ? <button type="button" onClick={() => changeSort(SORTABLE[column.key]!)} className="hover:text-fg">{column.label}{sort === SORTABLE[column.key] ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}</button> : column.label}</th>)}</tr></thead><tbody className="divide-y divide-hair-soft">{products.map((product) => <tr key={product.id} className="hover:bg-raised/70"><td className="p-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} /></td>{visibleColumns.map((column) => <td key={column.key} className={`whitespace-nowrap p-3 ${['cost', 'price', 'margin', 'stock', 'minStock'].includes(column.key) ? 'text-right font-mono tabular-nums' : ''}`}>{renderCell(product, column.key)}</td>)}</tr>)}{!loading && products.length === 0 && <tr><td colSpan={visibleColumns.length + 1} className="p-10 text-center text-fg-faint">No hay productos para estos filtros.</td></tr>}</tbody></table></div><div className="space-y-3 md:hidden">{products.map((product) => { const expiryDays = daysUntilExpiry(product.expiresAt); return <article key={product.id} className="rounded-xl border border-hair-soft bg-surface p-3"><div className="flex items-start gap-3"><input type="checkbox" checked={selected.has(product.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(product.id); else next.delete(product.id); return next; })} className="mt-3 shrink-0" />{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-hair-soft bg-white object-contain" /> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair-soft bg-raised2 text-sm font-semibold text-fg-muted">{product.name.trim().slice(0, 2).toUpperCase()}</span>}<div className="min-w-0 flex-1"><span className="flex items-center gap-1.5"><Link href={`/productos/${product.id}`} className="truncate text-[14.5px] font-semibold leading-tight text-fg">{product.name}</Link>{product.silent && <span title="Producto silencioso" className="shrink-0 rounded border border-[color:var(--brand-accent)] bg-brand-highlight px-1 text-[9px] font-bold uppercase leading-4 text-brand">PS</span>}</span><p className="mt-1 truncate font-mono text-[10.5px] text-fg-faint">{product.barcode || 'Sin código'}{product.unitsPerBoxNum != null && product.unitsPerBoxNum >= 2 ? ` · bulto ×${product.unitsPerBoxNum}` : ''}</p></div><div className="shrink-0 text-right"><QuickPriceEdit productId={product.id} price={product.price} enabled={quickPriceEnabled} className="font-mono text-base font-bold tabular-nums text-brand" inputClassName="w-24 min-h-11 rounded-lg border border-[color:var(--brand-accent)] bg-surface px-2 py-1.5 font-mono text-base font-bold tabular-nums text-brand outline-none" onSaved={applyLocalPrice} /><p className="font-mono text-[10.5px] tabular-nums text-fg-faint">{product.cost == null ? 'sin costo' : `costo ${formatMoneyArs(Number(product.cost))}`}</p></div></div><div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-hair-soft pt-3"><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Stock</span><span className={`mt-1 inline-flex rounded-md border px-2 py-0.5 font-mono text-xs tabular-nums ${product.stock <= product.minStock ? 'border-warn/30 bg-[var(--warn-soft)] text-warn' : 'border-hair bg-raised2 text-fg'}`}>{product.stock}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Categoría</span><span className="mt-1 block truncate text-sm text-fg-muted">{product.category?.name || '—'}</span></div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">Origen</span>{product.sourceProvider ? <span className="mt-1 inline-flex rounded-md border border-hair bg-raised2 px-2 py-0.5 text-xs text-fg-muted">{product.sourceProvider}</span> : <span className="mt-1 block text-sm text-fg-faint">—</span>}</div><div><span className="block text-[10.5px] font-medium uppercase tracking-wide text-fg-faint">{product.incomplete ? 'Estado' : 'Vencimiento'}</span>{product.incomplete ? <span className="mt-1 inline-flex rounded-md border border-warn/30 bg-[var(--warn-soft)] px-2 py-0.5 text-xs text-warn">Incompleto</span> : <span className={`mt-1 block font-mono text-xs tabular-nums ${expiryDays != null && expiryDays <= 30 ? 'text-crit' : 'text-fg-muted'}`}>{product.expiresAt ? new Date(product.expiresAt).toLocaleDateString('es-AR') : '—'}</span>}</div></div><div className="mt-3 flex justify-end gap-3 border-t border-hair-soft pt-3"><button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setQuickViewProduct(product); }} className="text-sm font-medium text-fg-muted">👁️ Vista rápida</button><button type="button" onClick={() => void openLabels([product.id])} className="text-sm font-medium text-fg-muted">Etiqueta</button><Link href={`/productos/${product.id}`} className="text-sm font-medium text-brand">Editar</Link></div></article>; })}{!loading && products.length === 0 && <p className="rounded-xl border border-hair-soft bg-surface p-6 text-center text-fg-faint">No hay productos para estos filtros.</p>}</div>{loading && <Loader />}</div>
 
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted"><p><span className="font-mono tabular-nums text-fg">{total}</span> productos · Página <span className="font-mono">{page}</span> de <span className="font-mono">{totalPages || 1}</span></p><div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg border border-hair px-3 py-2 disabled:opacity-40">Anterior</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-hair px-3 py-2 disabled:opacity-40">Siguiente</button><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg">{[25, 50, 100, 200].map((size) => <option key={size} value={size}>{size} por página</option>)}</select></div></div>
     </>}

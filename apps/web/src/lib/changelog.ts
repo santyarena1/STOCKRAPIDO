@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.41',
+    date: '2026-10-31',
+    summary: 'Teatro: edición rápida de precios desde el celular.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Edición rápida de precio de venta (Teatro)',
+        desc: 'En Productos activá “Edición rápida” y tocá el precio (celular o PC) para escribirlo a mano, sin redondeos. Enter o tocar afuera guarda.',
+      },
+    ],
+  },
+  {
     version: 'v1.40',
     date: '2026-10-31',
     summary: 'Teatro: redondear todo el inventario a $500.',
