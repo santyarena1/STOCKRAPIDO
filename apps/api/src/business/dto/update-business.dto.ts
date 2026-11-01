@@ -113,6 +113,22 @@ export class BusinessPantallasDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+
+  @IsOptional()
+  logoXPct?: number;
+
+  @IsOptional()
+  logoYPct?: number;
+
+  @IsOptional()
+  logoWidthPct?: number;
+
+  @IsOptional()
+  logoOpacityPct?: number;
 }
 
 export class BusinessPreciosClarosDto {

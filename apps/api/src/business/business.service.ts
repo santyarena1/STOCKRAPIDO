@@ -4,6 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { isTeatroTenant } from '../common/teatro';
 import {
   PANTALLAS_DEFAULT_DWELL_SEC,
+  PANTALLAS_DEFAULT_LOGO_OPACITY,
+  PANTALLAS_DEFAULT_LOGO_WIDTH,
+  PANTALLAS_DEFAULT_LOGO_X,
+  PANTALLAS_DEFAULT_LOGO_Y,
   PANTALLAS_DEFAULT_TRANSITION_MS,
   mergePosConfigUpdate,
   sanitizePosConfigForApi,
@@ -252,6 +256,8 @@ export class BusinessService {
     const imageUrls = Array.isArray(p.imageUrls)
       ? p.imageUrls.filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
       : [];
+    const logoUrl =
+      typeof p.logoUrl === 'string' && p.logoUrl.trim() ? p.logoUrl.trim() : undefined;
     return {
       businessName: business.name,
       imageUrls,
@@ -265,6 +271,23 @@ export class BusinessService {
           : PANTALLAS_DEFAULT_TRANSITION_MS,
       animation: p.animation === 'slide' || p.animation === 'zoom' ? p.animation : 'fade',
       fit: p.fit === 'contain' ? 'contain' : 'cover',
+      logoUrl,
+      logoXPct:
+        typeof p.logoXPct === 'number' && Number.isFinite(p.logoXPct)
+          ? p.logoXPct
+          : PANTALLAS_DEFAULT_LOGO_X,
+      logoYPct:
+        typeof p.logoYPct === 'number' && Number.isFinite(p.logoYPct)
+          ? p.logoYPct
+          : PANTALLAS_DEFAULT_LOGO_Y,
+      logoWidthPct:
+        typeof p.logoWidthPct === 'number' && Number.isFinite(p.logoWidthPct)
+          ? p.logoWidthPct
+          : PANTALLAS_DEFAULT_LOGO_WIDTH,
+      logoOpacityPct:
+        typeof p.logoOpacityPct === 'number' && Number.isFinite(p.logoOpacityPct)
+          ? p.logoOpacityPct
+          : PANTALLAS_DEFAULT_LOGO_OPACITY,
     };
   }
 

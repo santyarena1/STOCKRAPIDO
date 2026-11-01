@@ -23,6 +23,11 @@ export type Business = {
       fit?: 'cover' | 'contain';
       shareToken?: string;
       enabled?: boolean;
+      logoUrl?: string;
+      logoXPct?: number;
+      logoYPct?: number;
+      logoWidthPct?: number;
+      logoOpacityPct?: number;
     };
   };
 };

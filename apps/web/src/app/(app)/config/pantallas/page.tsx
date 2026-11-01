@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MultiImageUploader } from '@/components/ImageUploader';
+import { ImageUploader, MultiImageUploader } from '@/components/ImageUploader';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { api } from '@/lib/api';
 import { getPublicPantallasUrl } from '@/lib/env-urls';
@@ -17,6 +17,11 @@ type PantallasForm = {
   fit: 'cover' | 'contain';
   enabled: boolean;
   shareToken: string;
+  logoUrl: string;
+  logoXPct: number;
+  logoYPct: number;
+  logoWidthPct: number;
+  logoOpacityPct: number;
 };
 
 const DEFAULTS: PantallasForm = {
@@ -27,6 +32,11 @@ const DEFAULTS: PantallasForm = {
   fit: 'cover',
   enabled: true,
   shareToken: '',
+  logoUrl: '',
+  logoXPct: 88,
+  logoYPct: 88,
+  logoWidthPct: 14,
+  logoOpacityPct: 100,
 };
 
 function fromBusiness(business: Business | null): PantallasForm {
@@ -39,6 +49,11 @@ function fromBusiness(business: Business | null): PantallasForm {
     fit: p?.fit === 'contain' ? 'contain' : 'cover',
     enabled: p?.enabled !== false,
     shareToken: typeof p?.shareToken === 'string' ? p.shareToken : '',
+    logoUrl: typeof p?.logoUrl === 'string' ? p.logoUrl : '',
+    logoXPct: typeof p?.logoXPct === 'number' ? p.logoXPct : DEFAULTS.logoXPct,
+    logoYPct: typeof p?.logoYPct === 'number' ? p.logoYPct : DEFAULTS.logoYPct,
+    logoWidthPct: typeof p?.logoWidthPct === 'number' ? p.logoWidthPct : DEFAULTS.logoWidthPct,
+    logoOpacityPct: typeof p?.logoOpacityPct === 'number' ? p.logoOpacityPct : DEFAULTS.logoOpacityPct,
   };
 }
 
@@ -48,6 +63,112 @@ function moveItem(urls: string[], from: number, to: number) {
   const [item] = next.splice(from, 1);
   next.splice(to, 0, item);
   return next;
+}
+
+function LogoPlacementPreview({
+  bgUrl,
+  logoUrl,
+  logoXPct,
+  logoYPct,
+  logoWidthPct,
+  logoOpacityPct,
+  fit,
+  onMove,
+}: {
+  bgUrl?: string;
+  logoUrl: string;
+  logoXPct: number;
+  logoYPct: number;
+  logoWidthPct: number;
+  logoOpacityPct: number;
+  fit: 'cover' | 'contain';
+  onMove: (xPct: number, yPct: number) => void;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+
+  const setFromPointer = useCallback(
+    (clientX: number, clientY: number) => {
+      const el = stageRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
+      onMove(Math.min(100, Math.max(0, x)), Math.min(100, Math.max(0, y)));
+    },
+    [onMove],
+  );
+
+  useEffect(() => {
+    const onMoveWin = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      setFromPointer(e.clientX, e.clientY);
+    };
+    const onUp = () => {
+      dragging.current = false;
+    };
+    window.addEventListener('pointermove', onMoveWin);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMoveWin);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [setFromPointer]);
+
+  return (
+    <div
+      ref={stageRef}
+      className="relative aspect-video w-full overflow-hidden rounded-xl border border-hair bg-black select-none touch-none"
+      onPointerDown={(e) => {
+        if (!logoUrl) return;
+        dragging.current = true;
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        setFromPointer(e.clientX, e.clientY);
+      }}
+    >
+      {bgUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={bgUrl}
+          alt=""
+          draggable={false}
+          className={`pointer-events-none absolute inset-0 h-full w-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-white/40">
+          Vista previa 16:9 — subí una foto para ver el fondo
+        </div>
+      )}
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl}
+          alt="Logo"
+          draggable={false}
+          className="absolute pointer-events-none object-contain drop-shadow-lg"
+          style={{
+            left: `${logoXPct}%`,
+            top: `${logoYPct}%`,
+            width: `${logoWidthPct}%`,
+            opacity: logoOpacityPct / 100,
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-end justify-center p-3 pointer-events-none">
+          <span className="rounded bg-black/50 px-2 py-1 text-[11px] text-white/70">
+            Subí un PNG sin fondo y arrastralo acá
+          </span>
+        </div>
+      )}
+      {logoUrl ? (
+        <div className="absolute left-2 top-2 rounded bg-black/55 px-2 py-1 text-[10px] text-white/80 pointer-events-none">
+          Arrastrá el logo para ubicarlo
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function PantallasConfigPage() {
@@ -74,6 +195,10 @@ export default function PantallasConfigPage() {
     [form.shareToken],
   );
 
+  const onLogoMove = useCallback((xPct: number, yPct: number) => {
+    setForm((f) => ({ ...f, logoXPct: Math.round(xPct * 10) / 10, logoYPct: Math.round(yPct * 10) / 10 }));
+  }, []);
+
   if (loading || !business) {
     return <p className="text-sm text-fg-muted">Cargando…</p>;
   }
@@ -94,6 +219,11 @@ export default function PantallasConfigPage() {
               animation: form.animation,
               fit: form.fit,
               enabled: form.enabled,
+              logoUrl: form.logoUrl || '',
+              logoXPct: form.logoXPct,
+              logoYPct: form.logoYPct,
+              logoWidthPct: form.logoWidthPct,
+              logoOpacityPct: form.logoOpacityPct,
               ...(form.shareToken ? { shareToken: form.shareToken } : {}),
             },
           },
@@ -204,6 +334,90 @@ export default function PantallasConfigPage() {
               ))}
             </ul>
           )}
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-hair-soft bg-raised/40 p-3 sm:p-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-fg">Logo encima (PNG sin fondo)</label>
+            <p className="mb-2 text-xs text-fg-faint">
+              Ideal PNG transparente (publicidad del lugar). Se ve sobre todas las fotos. Arrastralo en la
+              vista previa para ubicarlo; con el tamaño y la opacidad lo afinás.
+            </p>
+            <ImageUploader
+              value={form.logoUrl}
+              onChange={(url) => setForm((f) => ({ ...f, logoUrl: url }))}
+              maxPx={1600}
+              quality={0.92}
+              transparentBg
+              label="Subir logo PNG"
+              previewClass="h-16 w-28 object-contain bg-transparent"
+            />
+          </div>
+
+          <LogoPlacementPreview
+            bgUrl={form.imageUrls[0]}
+            logoUrl={form.logoUrl}
+            logoXPct={form.logoXPct}
+            logoYPct={form.logoYPct}
+            logoWidthPct={form.logoWidthPct}
+            logoOpacityPct={form.logoOpacityPct}
+            fit={form.fit}
+            onMove={onLogoMove}
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-fg-muted">
+                Tamaño ({form.logoWidthPct}% del ancho)
+              </label>
+              <input
+                type="range"
+                min={4}
+                max={45}
+                step={0.5}
+                value={form.logoWidthPct}
+                onChange={(e) => setForm((f) => ({ ...f, logoWidthPct: Number(e.target.value) }))}
+                className="w-full"
+                disabled={!form.logoUrl}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-fg-muted">
+                Opacidad ({form.logoOpacityPct}%)
+              </label>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                step={1}
+                value={form.logoOpacityPct}
+                onChange={(e) => setForm((f) => ({ ...f, logoOpacityPct: Number(e.target.value) }))}
+                className="w-full"
+                disabled={!form.logoUrl}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { label: 'Arriba izq.', x: 12, y: 12 },
+                { label: 'Arriba der.', x: 88, y: 12 },
+                { label: 'Centro', x: 50, y: 50 },
+                { label: 'Abajo izq.', x: 12, y: 88 },
+                { label: 'Abajo der.', x: 88, y: 88 },
+              ] as const
+            ).map((spot) => (
+              <button
+                key={spot.label}
+                type="button"
+                disabled={!form.logoUrl}
+                onClick={() => setForm((f) => ({ ...f, logoXPct: spot.x, logoYPct: spot.y }))}
+                className="rounded-lg border border-hair px-2.5 py-1.5 text-xs text-fg disabled:opacity-40"
+              >
+                {spot.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

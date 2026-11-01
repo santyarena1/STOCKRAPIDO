@@ -90,11 +90,25 @@ export type PantallasPosConfig = {
   fit?: 'cover' | 'contain';
   shareToken?: string;
   enabled?: boolean;
+  /** Logo PNG (ideal sin fondo) superpuesto sobre las fotos. */
+  logoUrl?: string;
+  /** Posición del centro del logo: % del ancho (0–100). */
+  logoXPct?: number;
+  /** Posición del centro del logo: % del alto (0–100). */
+  logoYPct?: number;
+  /** Ancho del logo como % del ancho de la pantalla (2–60). */
+  logoWidthPct?: number;
+  /** Opacidad 0–100. */
+  logoOpacityPct?: number;
 };
 
 export const PANTALLAS_MAX_IMAGES = 30;
 export const PANTALLAS_DEFAULT_DWELL_SEC = 8;
 export const PANTALLAS_DEFAULT_TRANSITION_MS = 900;
+export const PANTALLAS_DEFAULT_LOGO_X = 88;
+export const PANTALLAS_DEFAULT_LOGO_Y = 88;
+export const PANTALLAS_DEFAULT_LOGO_WIDTH = 14;
+export const PANTALLAS_DEFAULT_LOGO_OPACITY = 100;
 
 type PosConfigPatchBody = {
   posConfig?: {
@@ -371,6 +385,41 @@ export function mergePosConfigUpdate(
       else delete next.shareToken;
     }
     if ('enabled' in inc) next.enabled = Boolean(inc.enabled);
+    if ('logoUrl' in inc) {
+      const v = inc.logoUrl;
+      if (typeof v === 'string' && v.trim() !== '') {
+        const s = v.trim();
+        if (!s.startsWith('http://') && !s.startsWith('https://') && !s.startsWith('data:')) {
+          throw new Error('El logo debe usar una URL http(s) o data:.');
+        }
+        if (s.length > MAX_LOGO_DATA_URL_CHARS) {
+          throw new Error('El logo es demasiado grande (máx. ~350 KB en data URL).');
+        }
+        next.logoUrl = s;
+      } else {
+        delete next.logoUrl;
+      }
+    }
+    if ('logoXPct' in inc) {
+      const n = Number(inc.logoXPct);
+      if (!Number.isFinite(n)) throw new Error('La posición X del logo debe ser un número.');
+      next.logoXPct = Math.min(100, Math.max(0, Math.round(n * 10) / 10));
+    }
+    if ('logoYPct' in inc) {
+      const n = Number(inc.logoYPct);
+      if (!Number.isFinite(n)) throw new Error('La posición Y del logo debe ser un número.');
+      next.logoYPct = Math.min(100, Math.max(0, Math.round(n * 10) / 10));
+    }
+    if ('logoWidthPct' in inc) {
+      const n = Number(inc.logoWidthPct);
+      if (!Number.isFinite(n)) throw new Error('El tamaño del logo debe ser un número.');
+      next.logoWidthPct = Math.min(60, Math.max(2, Math.round(n * 10) / 10));
+    }
+    if ('logoOpacityPct' in inc) {
+      const n = Number(inc.logoOpacityPct);
+      if (!Number.isFinite(n)) throw new Error('La opacidad del logo debe ser un número.');
+      next.logoOpacityPct = Math.min(100, Math.max(0, Math.round(n)));
+    }
     base.pantallas = next;
   }
 

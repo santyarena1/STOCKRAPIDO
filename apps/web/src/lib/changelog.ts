@@ -29,7 +29,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       {
         tag: 'NUEVO',
         title: 'Pantallas (Teatro)',
-        desc: 'En Configuración → Pantallas podés subir fotos horizontales en alta resolución, elegir tiempo por imagen, transición y animación (fade / deslizar / zoom). Se abre un link en pestaña nueva, sin login, listo para pantalla completa en TVs de ~65″.',
+        desc: 'En Configuración → Pantallas podés subir fotos horizontales en alta resolución, elegir tiempo por imagen, transición y animación (fade / deslizar / zoom). Se abre un link en pestaña nueva, sin login, listo para pantalla completa en TVs de ~65″. También podés superponer un logo PNG transparente: lo arrastrás para ubicarlo, y regulás tamaño y opacidad.',
       },
     ],
   },

@@ -11,6 +11,11 @@ type PantallasPayload = {
   transitionMs: number;
   animation: 'fade' | 'slide' | 'zoom';
   fit: 'cover' | 'contain';
+  logoUrl?: string;
+  logoXPct: number;
+  logoYPct: number;
+  logoWidthPct: number;
+  logoOpacityPct: number;
 };
 
 export default function PublicPantallasPage() {
@@ -49,6 +54,7 @@ export default function PublicPantallasPage() {
   const transitionMs = Math.max(100, data?.transitionMs ?? 900);
   const animation = data?.animation ?? 'fade';
   const fit = data?.fit ?? 'cover';
+  const logoUrl = data?.logoUrl?.trim() || '';
 
   useEffect(() => {
     if (urls.length <= 1) return;
@@ -172,11 +178,28 @@ export default function PublicPantallasPage() {
         );
       })}
 
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute z-30 object-contain drop-shadow-[0_4px_18px_rgba(0,0,0,0.45)]"
+          style={{
+            left: `${data.logoXPct}%`,
+            top: `${data.logoYPct}%`,
+            width: `${data.logoWidthPct}%`,
+            opacity: Math.min(1, Math.max(0, data.logoOpacityPct / 100)),
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      ) : null}
+
       {!isFs && (
         <button
           type="button"
           onClick={() => void toggleFullscreen()}
-          className="absolute bottom-4 right-4 z-20 rounded-full bg-black/60 px-4 py-2 text-sm text-white/90 backdrop-blur hover:bg-black/80"
+          className="absolute bottom-4 right-4 z-40 rounded-full bg-black/60 px-4 py-2 text-sm text-white/90 backdrop-blur hover:bg-black/80"
         >
           Pantalla completa
         </button>
