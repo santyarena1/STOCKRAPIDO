@@ -1,4 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import {
+  argentinaDayOfMonth,
+  argentinaDayStart,
+  argentinaMonthBounds,
+} from '../common/argentina-date-range';
 import { PrismaService } from '../prisma/prisma.service';
 import { arsToCents, collectedForChannel } from '../../../../shared/loyalty-money';
 
@@ -7,22 +12,6 @@ export type ReportPeriod = 'today' | 'week' | 'month' | 'year';
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
-
-  /** Conserva los rangos históricos de los endpoints existentes. */
-  private getLegacyDateRange(period: 'today' | 'week' | 'month') {
-    const now = new Date();
-    const from = new Date(now);
-    if (period === 'today') {
-      from.setHours(0, 0, 0, 0);
-    } else if (period === 'week') {
-      from.setDate(from.getDate() - 7);
-      from.setHours(0, 0, 0, 0);
-    } else {
-      from.setMonth(from.getMonth() - 1);
-      from.setHours(0, 0, 0, 0);
-    }
-    return { from, to: now };
-  }
 
   private getDateRange(period: ReportPeriod, explicitFrom?: Date, explicitTo?: Date) {
     if (explicitFrom || explicitTo) {
@@ -62,7 +51,7 @@ export class ReportsService {
   }
 
   async salesSummary(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getLegacyDateRange(period);
+    const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -73,7 +62,7 @@ export class ReportsService {
   }
 
   async topProducts(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getLegacyDateRange(period);
+    const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -99,7 +88,7 @@ export class ReportsService {
    * El costo sale del producto; ítems manuales sin producto cuentan costo 0.
    */
   async marginEstimate(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getLegacyDateRange(period);
+    const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -126,7 +115,7 @@ export class ReportsService {
 
   /** Ganancia = Ventas - Compras - Gastos (del período). */
   async netProfit(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getLegacyDateRange(period);
+    const { from, to } = this.getDateRange(period);
     const [sales, purchases, registers] = await Promise.all([
       this.prisma.sale.findMany({
         where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
@@ -187,11 +176,9 @@ export class ReportsService {
 
   /** Por producto: solo cantidad de lotes que vencen en la fecha más cercana (mismo día). No usa product.stock. */
   async expiringSoon(businessId: string, days = 30): Promise<{ name: string; expiresAt: string; qtyExpiring: number }[]> {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const limit = new Date();
-    limit.setDate(limit.getDate() + days);
-    limit.setHours(23, 59, 59, 999);
+    // Ventana en día de calendario AR (no medianoche UTC del server).
+    const now = argentinaDayStart();
+    const limit = new Date(now.getTime() + (days + 1) * 24 * 60 * 60 * 1000 - 1);
     const batches = await this.prisma.productBatch.findMany({
       where: {
         businessId,
@@ -257,11 +244,8 @@ export class ReportsService {
       if (p.stockControl && st <= p.minStock) lowStockCount += 1;
     }
 
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const limit = new Date();
-    limit.setDate(limit.getDate() + expiringDays);
-    limit.setHours(23, 59, 59, 999);
+    const now = argentinaDayStart();
+    const limit = new Date(now.getTime() + (expiringDays + 1) * 24 * 60 * 60 * 1000 - 1);
 
     const [batchCostRows, expiringAgg, expiringBatches, expiringByProduct] = await Promise.all([
       this.prisma.productBatch.findMany({
@@ -416,12 +400,7 @@ export class ReportsService {
 
   /** Ventas agregadas por día del mes actual (para gráfico). */
   async salesByDayOfMonth(businessId: string, year?: number, month?: number) {
-    const now = new Date();
-    const y = year ?? now.getFullYear();
-    const m = month ?? now.getMonth();
-    const from = new Date(y, m, 1, 0, 0, 0, 0);
-    const to = new Date(y, m + 1, 0, 23, 59, 59, 999);
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const { from, to, daysInMonth } = argentinaMonthBounds(year, month);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       select: { totalFinal: true, createdAt: true },
@@ -429,11 +408,11 @@ export class ReportsService {
     const byDay = new Map<number, { total: number; count: number }>();
     for (let d = 1; d <= daysInMonth; d++) byDay.set(d, { total: 0, count: 0 });
     for (const s of sales) {
-      const day = s.createdAt.getDate();
-      const cur = byDay.get(day)!;
+      const day = argentinaDayOfMonth(s.createdAt);
+      const cur = byDay.get(day);
+      if (!cur) continue;
       cur.total += Number(s.totalFinal);
       cur.count += 1;
-      byDay.set(day, cur);
     }
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
@@ -444,7 +423,7 @@ export class ReportsService {
 
   /** Top productos por ganancia bruta (ingreso neto de línea − costo × cantidad; mismo criterio que /reports/margin). */
   async topProductsByProfit(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getLegacyDateRange(period);
+    const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -476,7 +455,7 @@ export class ReportsService {
 
   /** Productos menos vendidos en el período (los que tienen ventas pero menor cantidad). */
   async leastSoldProducts(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getLegacyDateRange(period);
+    const { from, to } = this.getDateRange(period);
     const sales = await this.prisma.sale.findMany({
       where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
       include: { items: { include: { product: true } } },
@@ -512,12 +491,7 @@ export class ReportsService {
 
   /** Compras agregadas por día del mes (para gráfico). */
   async purchasesByDayOfMonth(businessId: string, year?: number, month?: number) {
-    const now = new Date();
-    const y = year ?? now.getFullYear();
-    const m = month ?? now.getMonth();
-    const from = new Date(y, m, 1, 0, 0, 0, 0);
-    const to = new Date(y, m + 1, 0, 23, 59, 59, 999);
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const { from, to, daysInMonth } = argentinaMonthBounds(year, month);
     const purchases = await this.prisma.purchase.findMany({
       where: { businessId, createdAt: { gte: from, lte: to } },
       select: { total: true, createdAt: true },
@@ -525,11 +499,11 @@ export class ReportsService {
     const byDay = new Map<number, { total: number; count: number }>();
     for (let d = 1; d <= daysInMonth; d++) byDay.set(d, { total: 0, count: 0 });
     for (const p of purchases) {
-      const day = p.createdAt.getDate();
-      const cur = byDay.get(day)!;
+      const day = argentinaDayOfMonth(p.createdAt);
+      const cur = byDay.get(day);
+      if (!cur) continue;
       cur.total += Number(p.total);
       cur.count += 1;
-      byDay.set(day, cur);
     }
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
@@ -540,12 +514,7 @@ export class ReportsService {
 
   /** Gastos de caja (movimientos tipo expense) por día del mes. */
   async expensesByDayOfMonth(businessId: string, year?: number, month?: number) {
-    const now = new Date();
-    const y = year ?? now.getFullYear();
-    const m = month ?? now.getMonth();
-    const from = new Date(y, m, 1, 0, 0, 0, 0);
-    const to = new Date(y, m + 1, 0, 23, 59, 59, 999);
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const { from, to, daysInMonth } = argentinaMonthBounds(year, month);
     const registers = await this.prisma.cashRegister.findMany({
       where: { businessId },
       select: { id: true },
@@ -565,11 +534,11 @@ export class ReportsService {
     const byDay = new Map<number, { total: number; count: number }>();
     for (let d = 1; d <= daysInMonth; d++) byDay.set(d, { total: 0, count: 0 });
     for (const mov of movements) {
-      const day = mov.createdAt.getDate();
-      const cur = byDay.get(day)!;
+      const day = argentinaDayOfMonth(mov.createdAt);
+      const cur = byDay.get(day);
+      if (!cur) continue;
       cur.total += Number(mov.amount);
       cur.count += 1;
-      byDay.set(day, cur);
     }
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;

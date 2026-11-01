@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.44',
+    date: '2026-10-31',
+    summary: 'El día del sistema es el de Argentina (00 a 24 hs).',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Hoy ya no salta a las 21 hs',
+        desc: 'Dashboard, reportes, caja y delivery usaban la medianoche UTC del servidor. A partir de las 21 hs de Argentina ya contaba como día siguiente. Ahora “hoy” es el día de calendario en horario de Argentina, de 00 a 24 hs.',
+      },
+    ],
+  },
+  {
     version: 'v1.43',
     date: '2026-10-31',
     summary: 'Teatro: control de stock en todo el inventario y corrección de egresos.',

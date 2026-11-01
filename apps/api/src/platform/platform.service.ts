@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { argentinaDayStart, argentinaMonthStart } from '../common/argentina-date-range';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { getPlan } from '../billing/plans';
@@ -14,8 +15,7 @@ export class PlatformService {
   ) {}
 
   async overview() {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = argentinaDayStart();
     const [
       businesses,
       trials,
@@ -156,9 +156,8 @@ export class PlatformService {
     });
     if (!business) throw new NotFoundException('Cuenta no encontrada');
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1);
+    const startOfDay = argentinaDayStart();
+    const startOfMonth = argentinaMonthStart();
 
     const [products, salesToday, salesMonth, lastSales, openCajas] = await Promise.all([
       this.prisma.product.count({ where: { businessId: id } }),
