@@ -1,6 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { mergePosConfigUpdate, sanitizePosConfigForApi } from './pos-config.util';
+import { isTeatroTenant } from '../common/teatro';
+import {
+  PANTALLAS_DEFAULT_DWELL_SEC,
+  PANTALLAS_DEFAULT_LOGO_OPACITY,
+  PANTALLAS_DEFAULT_LOGO_WIDTH,
+  PANTALLAS_DEFAULT_LOGO_X,
+  PANTALLAS_DEFAULT_LOGO_Y,
+  PANTALLAS_DEFAULT_TRANSITION_MS,
+  mergePosConfigUpdate,
+  sanitizePosConfigForApi,
+  type PantallasPosConfig,
+} from './pos-config.util';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import { decryptSecret, encryptSecret } from '../fiscal/fiscal-crypto';
 
@@ -130,11 +142,35 @@ export class BusinessService {
     return decryptSecret(fromPos);
   }
 
+  private newPantallasToken() {
+    return randomBytes(24).toString('base64url');
+  }
+
   async update(businessId: string, data: UpdateBusinessDto) {
     const existing = await this.prisma.business.findUnique({
       where: { id: businessId },
     });
     if (!existing) throw new NotFoundException('Negocio no encontrado');
+
+    if (data.posConfig?.pantallas) {
+      if (!isTeatroTenant(existing.name, existing.id)) {
+        throw new ForbiddenException('Pantallas solo está habilitado para el tenant Teatro.');
+      }
+      const prevP =
+        existing.posConfig && typeof existing.posConfig === 'object'
+          ? (existing.posConfig as Record<string, unknown>).pantallas
+          : null;
+      const prevToken =
+        prevP && typeof prevP === 'object' && typeof (prevP as PantallasPosConfig).shareToken === 'string'
+          ? (prevP as PantallasPosConfig).shareToken
+          : undefined;
+      const incoming = data.posConfig.pantallas;
+      if (!incoming.shareToken && !prevToken) {
+        incoming.shareToken = this.newPantallasToken();
+      } else if (!incoming.shareToken && prevToken) {
+        incoming.shareToken = prevToken;
+      }
+    }
 
     let mergedPos: Record<string, unknown> | undefined;
     try {
@@ -166,6 +202,93 @@ export class BusinessService {
       },
     });
     return this.sanitize(updated);
+  }
+
+  /** Regenera el token público de Pantallas (solo Teatro). */
+  async regeneratePantallasToken(businessId: string) {
+    const existing = await this.prisma.business.findUnique({ where: { id: businessId } });
+    if (!existing) throw new NotFoundException('Negocio no encontrado');
+    if (!isTeatroTenant(existing.name, existing.id)) {
+      throw new ForbiddenException('Pantallas solo está habilitado para el tenant Teatro.');
+    }
+    const base =
+      existing.posConfig && typeof existing.posConfig === 'object'
+        ? { ...(existing.posConfig as Record<string, unknown>) }
+        : {};
+    const prev =
+      base.pantallas && typeof base.pantallas === 'object'
+        ? { ...(base.pantallas as Record<string, unknown>) }
+        : {};
+    prev.shareToken = this.newPantallasToken();
+    base.pantallas = prev;
+    const updated = await this.prisma.business.update({
+      where: { id: businessId },
+      data: { posConfig: base as any },
+    });
+    return this.sanitize(updated);
+  }
+
+  /** Vista pública del slideshow (sin auth). */
+  async getPantallasByToken(token: string) {
+    const clean = String(token ?? '').trim();
+    if (!clean || clean.length < 8) throw new NotFoundException('Pantalla no encontrada');
+    const business = await this.prisma.business.findFirst({
+      where: {
+        posConfig: {
+          path: ['pantallas', 'shareToken'],
+          equals: clean,
+        },
+      },
+      select: { id: true, name: true, posConfig: true },
+    });
+    if (!business) throw new NotFoundException('Pantalla no encontrada');
+    if (!isTeatroTenant(business.name, business.id)) {
+      throw new NotFoundException('Pantalla no encontrada');
+    }
+    const raw =
+      business.posConfig && typeof business.posConfig === 'object'
+        ? (business.posConfig as Record<string, unknown>).pantallas
+        : null;
+    const p = raw && typeof raw === 'object' ? (raw as PantallasPosConfig) : {};
+    if (p.enabled === false) {
+      throw new NotFoundException('Pantalla desactivada');
+    }
+    const imageUrls = Array.isArray(p.imageUrls)
+      ? p.imageUrls.filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+      : [];
+    const logoUrl =
+      typeof p.logoUrl === 'string' && p.logoUrl.trim() ? p.logoUrl.trim() : undefined;
+    return {
+      businessName: business.name,
+      imageUrls,
+      dwellSec:
+        typeof p.dwellSec === 'number' && Number.isFinite(p.dwellSec)
+          ? p.dwellSec
+          : PANTALLAS_DEFAULT_DWELL_SEC,
+      transitionMs:
+        typeof p.transitionMs === 'number' && Number.isFinite(p.transitionMs)
+          ? p.transitionMs
+          : PANTALLAS_DEFAULT_TRANSITION_MS,
+      animation: p.animation === 'slide' || p.animation === 'zoom' ? p.animation : 'fade',
+      fit: p.fit === 'contain' ? 'contain' : 'cover',
+      logoUrl,
+      logoXPct:
+        typeof p.logoXPct === 'number' && Number.isFinite(p.logoXPct)
+          ? p.logoXPct
+          : PANTALLAS_DEFAULT_LOGO_X,
+      logoYPct:
+        typeof p.logoYPct === 'number' && Number.isFinite(p.logoYPct)
+          ? p.logoYPct
+          : PANTALLAS_DEFAULT_LOGO_Y,
+      logoWidthPct:
+        typeof p.logoWidthPct === 'number' && Number.isFinite(p.logoWidthPct)
+          ? p.logoWidthPct
+          : PANTALLAS_DEFAULT_LOGO_WIDTH,
+      logoOpacityPct:
+        typeof p.logoOpacityPct === 'number' && Number.isFinite(p.logoOpacityPct)
+          ? p.logoOpacityPct
+          : PANTALLAS_DEFAULT_LOGO_OPACITY,
+    };
   }
 
   async listCategories(businessId: string) {

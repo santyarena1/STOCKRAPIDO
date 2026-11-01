@@ -15,6 +15,20 @@ export type Business = {
     aiInvoice?: { n8nWebhookUrl?: string; publicApiUrl?: string; hasWebhookSecret?: boolean };
     branding?: { accentColor?: string; logoUrl?: string; faviconUrl?: string; ticketLogoUrl?: string; appTitle?: string; receiptName?: string; receiptTemplate?: 'clasico' | 'moderno'; linkColor?: string; primaryButtonColor?: string; focusRingColor?: string; navActiveColor?: string; selectionColor?: string; shadowTintColor?: string };
     customerDisplay?: { mercadopagoAlias?: string; mercadopagoQrUrl?: string; promoImageUrls?: string[] };
+    pantallas?: {
+      imageUrls?: string[];
+      dwellSec?: number;
+      transitionMs?: number;
+      animation?: 'fade' | 'slide' | 'zoom';
+      fit?: 'cover' | 'contain';
+      shareToken?: string;
+      enabled?: boolean;
+      logoUrl?: string;
+      logoXPct?: number;
+      logoYPct?: number;
+      logoWidthPct?: number;
+      logoOpacityPct?: number;
+    };
   };
 };
 export type BusinessCategory = { id: string; name: string };

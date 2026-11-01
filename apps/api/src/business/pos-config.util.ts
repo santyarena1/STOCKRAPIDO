@@ -78,11 +78,44 @@ export type CustomerDisplayPosConfig = {
   promoImageUrls?: string[];
 };
 
+/** Pantallas TV Teatro: slideshow horizontal a pantalla completa. */
+export type PantallasPosConfig = {
+  imageUrls?: string[];
+  /** Segundos que se ve cada imagen (antes de pasar a la siguiente). */
+  dwellSec?: number;
+  /** Duración de la animación de transición en ms. */
+  transitionMs?: number;
+  animation?: 'fade' | 'slide' | 'zoom';
+  /** cover llena el tele; contain muestra la foto entera. */
+  fit?: 'cover' | 'contain';
+  shareToken?: string;
+  enabled?: boolean;
+  /** Logo PNG (ideal sin fondo) superpuesto sobre las fotos. */
+  logoUrl?: string;
+  /** Posición del centro del logo: % del ancho (0–100). */
+  logoXPct?: number;
+  /** Posición del centro del logo: % del alto (0–100). */
+  logoYPct?: number;
+  /** Ancho del logo como % del ancho de la pantalla (2–60). */
+  logoWidthPct?: number;
+  /** Opacidad 0–100. */
+  logoOpacityPct?: number;
+};
+
+export const PANTALLAS_MAX_IMAGES = 30;
+export const PANTALLAS_DEFAULT_DWELL_SEC = 8;
+export const PANTALLAS_DEFAULT_TRANSITION_MS = 900;
+export const PANTALLAS_DEFAULT_LOGO_X = 88;
+export const PANTALLAS_DEFAULT_LOGO_Y = 88;
+export const PANTALLAS_DEFAULT_LOGO_WIDTH = 14;
+export const PANTALLAS_DEFAULT_LOGO_OPACITY = 100;
+
 type PosConfigPatchBody = {
   posConfig?: {
     aiInvoice?: Partial<AiInvoicePosConfig>;
     branding?: Partial<BrandingPosConfig>;
     customerDisplay?: Partial<CustomerDisplayPosConfig>;
+    pantallas?: Partial<PantallasPosConfig>;
     hiddenCategoryIds?: string[] | null;
     silentItemLabel?: string;
     /** Plaintext: el service la encripta en posConfig.serperKeyEncrypted */
@@ -137,6 +170,7 @@ export function mergePosConfigUpdate(
   const incomingAi = patch.posConfig?.aiInvoice;
   const incomingBrand = patch.posConfig?.branding;
   const incomingCd = patch.posConfig?.customerDisplay;
+  const incomingPantallas = patch.posConfig?.pantallas;
   const incomingPc = patch.posConfig?.preciosClaros;
   const hasHiddenCategoryIds =
     patch.posConfig !== undefined && 'hiddenCategoryIds' in patch.posConfig;
@@ -157,11 +191,16 @@ export function mergePosConfigUpdate(
     incomingCd !== undefined &&
     typeof incomingCd === 'object' &&
     Object.keys(incomingCd as object).length > 0;
+  const hasPantallas =
+    incomingPantallas !== undefined &&
+    typeof incomingPantallas === 'object' &&
+    Object.keys(incomingPantallas as object).length > 0;
 
   if (
     !hasAi &&
     !hasBrand &&
     !hasCd &&
+    !hasPantallas &&
     !hasHiddenCategoryIds &&
     !hasSilentItemLabel &&
     !hasSerperKey &&
@@ -288,6 +327,100 @@ export function mergePosConfigUpdate(
       }
     }
     base.customerDisplay = next;
+  }
+
+  if (hasPantallas) {
+    const prev =
+      base.pantallas && typeof base.pantallas === 'object'
+        ? { ...(base.pantallas as Record<string, unknown>) }
+        : {};
+    const inc = incomingPantallas as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...prev };
+    if ('imageUrls' in inc) {
+      const v = inc.imageUrls;
+      if (Array.isArray(v)) {
+        const urls: string[] = [];
+        for (const item of v.slice(0, PANTALLAS_MAX_IMAGES)) {
+          if (typeof item !== 'string') continue;
+          const s = item.trim();
+          if (!s) continue;
+          if (!s.startsWith('http://') && !s.startsWith('https://') && !s.startsWith('data:')) {
+            throw new Error('Cada imagen de pantallas debe ser una URL http(s) o data:.');
+          }
+          if (s.length > MAX_LOGO_DATA_URL_CHARS) {
+            throw new Error('Una imagen de pantallas es demasiado grande (máx. ~350 KB en data URL).');
+          }
+          urls.push(s);
+        }
+        next.imageUrls = urls;
+      }
+    }
+    if ('dwellSec' in inc) {
+      const n = Number(inc.dwellSec);
+      if (!Number.isFinite(n)) throw new Error('El tiempo por imagen debe ser un número.');
+      next.dwellSec = Math.min(120, Math.max(2, Math.round(n)));
+    }
+    if ('transitionMs' in inc) {
+      const n = Number(inc.transitionMs);
+      if (!Number.isFinite(n)) throw new Error('La transición debe ser un número en milisegundos.');
+      next.transitionMs = Math.min(5000, Math.max(100, Math.round(n)));
+    }
+    if ('animation' in inc) {
+      const a = inc.animation;
+      if (a !== 'fade' && a !== 'slide' && a !== 'zoom') {
+        throw new Error('La animación debe ser fade, slide o zoom.');
+      }
+      next.animation = a;
+    }
+    if ('fit' in inc) {
+      const f = inc.fit;
+      if (f !== 'cover' && f !== 'contain') {
+        throw new Error('El ajuste de imagen debe ser cover o contain.');
+      }
+      next.fit = f;
+    }
+    if ('shareToken' in inc) {
+      const t = inc.shareToken;
+      if (typeof t === 'string' && t.trim()) next.shareToken = t.trim().slice(0, 80);
+      else delete next.shareToken;
+    }
+    if ('enabled' in inc) next.enabled = Boolean(inc.enabled);
+    if ('logoUrl' in inc) {
+      const v = inc.logoUrl;
+      if (typeof v === 'string' && v.trim() !== '') {
+        const s = v.trim();
+        if (!s.startsWith('http://') && !s.startsWith('https://') && !s.startsWith('data:')) {
+          throw new Error('El logo debe usar una URL http(s) o data:.');
+        }
+        if (s.length > MAX_LOGO_DATA_URL_CHARS) {
+          throw new Error('El logo es demasiado grande (máx. ~350 KB en data URL).');
+        }
+        next.logoUrl = s;
+      } else {
+        delete next.logoUrl;
+      }
+    }
+    if ('logoXPct' in inc) {
+      const n = Number(inc.logoXPct);
+      if (!Number.isFinite(n)) throw new Error('La posición X del logo debe ser un número.');
+      next.logoXPct = Math.min(100, Math.max(0, Math.round(n * 10) / 10));
+    }
+    if ('logoYPct' in inc) {
+      const n = Number(inc.logoYPct);
+      if (!Number.isFinite(n)) throw new Error('La posición Y del logo debe ser un número.');
+      next.logoYPct = Math.min(100, Math.max(0, Math.round(n * 10) / 10));
+    }
+    if ('logoWidthPct' in inc) {
+      const n = Number(inc.logoWidthPct);
+      if (!Number.isFinite(n)) throw new Error('El tamaño del logo debe ser un número.');
+      next.logoWidthPct = Math.min(60, Math.max(2, Math.round(n * 10) / 10));
+    }
+    if ('logoOpacityPct' in inc) {
+      const n = Number(inc.logoOpacityPct);
+      if (!Number.isFinite(n)) throw new Error('La opacidad del logo debe ser un número.');
+      next.logoOpacityPct = Math.min(100, Math.max(0, Math.round(n)));
+    }
+    base.pantallas = next;
   }
 
   if (hasAi) {
