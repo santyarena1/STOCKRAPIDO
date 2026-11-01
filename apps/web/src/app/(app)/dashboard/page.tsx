@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   BarChart,
@@ -18,6 +18,13 @@ import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import {
+  type AnalyticsDatePresetId,
+  labelForDateRange,
+  rangeForAnalyticsPreset,
+} from '@/lib/argentina-date';
+import { usePersistedState } from '@/lib/use-persisted-state';
 
 const ResponsiveGrid = WidthProvider(Responsive);
 
@@ -34,7 +41,7 @@ const defaultLayout = [
   { i: 'top-vencer', x: 9, y: 7, w: 3, h: 4, minW: 2, minH: 2 },
 ];
 
-type ByDay = { day: number; total: number; count: number };
+type ByDay = { day: number; label?: string; date?: string; total: number; count: number };
 type TopProduct = { name: string; qty: number; total?: number; profit?: number };
 type TopExpiringSoon = { name: string; qty: number; nextExpiry: string };
 
@@ -71,9 +78,17 @@ function saveLayout(layout: typeof defaultLayout) {
 }
 
 export default function DashboardPage() {
-  const [salesToday, setSalesToday] = useState<{ total: number; count: number } | null>(null);
+  const defaultRange = rangeForAnalyticsPreset('hoy');
+  const [preset, setPreset, presetReady] = usePersistedState<AnalyticsDatePresetId>(
+    'sr-filters:dashboard:preset',
+    'hoy',
+  );
+  const [from, setFrom, fromReady] = usePersistedState('sr-filters:dashboard:from', defaultRange.from);
+  const [to, setTo, toReady] = usePersistedState('sr-filters:dashboard:to', defaultRange.to);
+
+  const [salesPeriod, setSalesPeriod] = useState<{ total: number; count: number } | null>(null);
   const [salesMonth, setSalesMonth] = useState<{ total: number; count: number } | null>(null);
-  const [marginToday, setMarginToday] = useState<{ revenue: number; cost: number; margin: number } | null>(null);
+  const [marginPeriod, setMarginPeriod] = useState<{ revenue: number; cost: number; margin: number } | null>(null);
   const [marginMonth, setMarginMonth] = useState<{ revenue: number; cost: number; margin: number } | null>(null);
   const [salesByDay, setSalesByDay] = useState<ByDay[]>([]);
   const [purchasesByDay, setPurchasesByDay] = useState<ByDay[]>([]);
@@ -89,35 +104,52 @@ export default function DashboardPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [layout, setLayout] = useState<typeof defaultLayout>(defaultLayout);
 
+  const filtersReady = presetReady && fromReady && toReady;
+  const rangeParams = useMemo(() => ({ from, to }), [from, to]);
+  const rangeLabel = labelForDateRange(from, to);
+  const monthRange = useMemo(() => rangeForAnalyticsPreset('mes_actual'), []);
+
   useEffect(() => {
     setLayout(loadLayout());
   }, []);
 
   useEffect(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    if (!filtersReady) return;
+    if (preset !== 'personalizado') {
+      const next = rangeForAnalyticsPreset(preset);
+      if (next.from !== from || next.to !== to) {
+        setFrom(next.from);
+        setTo(next.to);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersReady, preset]);
+
+  useEffect(() => {
+    if (!filtersReady || !from || !to) return;
+    let cancelled = false;
+    setLoading(true);
 
     Promise.allSettled([
-      api<{ total: number; count: number }>('/reports/sales?period=today'),
-      api<{ total: number; count: number }>('/reports/sales?period=month'),
-      api<{ revenue: number; cost: number; margin: number }>('/reports/margin?period=today'),
-      api<{ revenue: number; cost: number; margin: number }>('/reports/margin?period=month'),
-      api<ByDay[]>(`/reports/sales-by-day?year=${year}&month=${month}`),
-      api<ByDay[]>(`/reports/purchases-by-day?year=${year}&month=${month}`),
-      api<ByDay[]>(`/reports/expenses-by-day?year=${year}&month=${month}`),
+      api<{ total: number; count: number }>('/reports/sales', { params: rangeParams }),
+      api<{ total: number; count: number }>('/reports/sales', { params: monthRange }),
+      api<{ revenue: number; cost: number; margin: number }>('/reports/margin', { params: rangeParams }),
+      api<{ revenue: number; cost: number; margin: number }>('/reports/margin', { params: monthRange }),
+      api<ByDay[]>('/reports/sales-by-day', { params: rangeParams }),
+      api<ByDay[]>('/reports/purchases-by-day', { params: rangeParams }),
+      api<ByDay[]>('/reports/expenses-by-day', { params: rangeParams }),
       api<unknown[]>('/reports/low-stock'),
-      api<unknown[]>('/reports/expiring?days=30'),
+      api<unknown[]>('/reports/expiring', { params: { days: '30' } }),
       api<{ id: string } | null>('/caja/open'),
-      api<TopProduct[]>('/reports/top-products?period=month&limit=10'),
-      api<TopProduct[]>('/reports/top-products-profit?period=month&limit=10'),
-      api<TopProduct[]>('/reports/least-sold-products?period=month&limit=10'),
-      api<TopExpiringSoon[]>('/reports/top-products-expiring?limit=10'),
+      api<TopProduct[]>('/reports/top-products', { params: { ...rangeParams, limit: '10' } }),
+      api<TopProduct[]>('/reports/top-products-profit', { params: { ...rangeParams, limit: '10' } }),
+      api<TopProduct[]>('/reports/least-sold-products', { params: { ...rangeParams, limit: '10' } }),
+      api<TopExpiringSoon[]>('/reports/top-products-expiring', { params: { limit: '10' } }),
     ]).then(
       ([
-        sToday,
+        sPeriod,
         sMonth,
-        marginTodayRes,
+        marginPeriodRes,
         marginMonthRes,
         byDayRes,
         purchasesByDayRes,
@@ -130,9 +162,10 @@ export default function DashboardPage() {
         leastRes,
         topExpRes,
       ]) => {
-        setSalesToday(sToday.status === 'fulfilled' ? sToday.value : null);
+        if (cancelled) return;
+        setSalesPeriod(sPeriod.status === 'fulfilled' ? sPeriod.value : null);
         setSalesMonth(sMonth.status === 'fulfilled' ? sMonth.value : null);
-        setMarginToday(marginTodayRes.status === 'fulfilled' ? marginTodayRes.value : null);
+        setMarginPeriod(marginPeriodRes.status === 'fulfilled' ? marginPeriodRes.value : null);
         setMarginMonth(marginMonthRes.status === 'fulfilled' ? marginMonthRes.value : null);
         setSalesByDay(byDayRes.status === 'fulfilled' && Array.isArray(byDayRes.value) ? byDayRes.value : []);
         setPurchasesByDay(purchasesByDayRes.status === 'fulfilled' && Array.isArray(purchasesByDayRes.value) ? purchasesByDayRes.value : []);
@@ -145,8 +178,13 @@ export default function DashboardPage() {
         setLeastSold(leastRes.status === 'fulfilled' && Array.isArray(leastRes.value) ? leastRes.value : []);
         setTopExpiringSoon(topExpRes.status === 'fulfilled' && Array.isArray(topExpRes.value) ? topExpRes.value : []);
       },
-    ).finally(() => setLoading(false));
-  }, []);
+    ).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filtersReady, from, to, rangeParams, monthRange]);
 
   const onLayoutChange = useCallback((_layout: unknown, allLayouts: { lg?: typeof defaultLayout }) => {
     const lg = allLayouts.lg;
@@ -156,17 +194,18 @@ export default function DashboardPage() {
     }
   }, []);
 
-  if (loading) return <Loader full />;
+  if (loading && !filtersReady) return <Loader full />;
+  if (loading && !salesPeriod && salesByDay.length === 0) return <Loader full />;
 
-  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  const currentMonth = monthNames[new Date().getMonth()];
+  const chartXKey = salesByDay.some((d) => d.label) ? 'label' : 'day';
+  const periodChartTitle = `por día · ${rangeLabel}`;
 
   return (
     <Container>
       <PageHeader
         title="Dashboard"
-        subtitle="Tu operación diaria, ventas e inventario en un solo lugar."
-        className="mb-6"
+        subtitle={`Tu operación · ${rangeLabel}`}
+        className="mb-4"
         actions={<div className="hidden items-center gap-2 lg:flex">
           {isEditing && (
             <button
@@ -187,6 +226,19 @@ export default function DashboardPage() {
         </div>}
       />
 
+      <div className="mb-6">
+        <DateRangeFilter
+          preset={preset}
+          from={from}
+          to={to}
+          onChange={({ preset: nextPreset, from: nextFrom, to: nextTo }) => {
+            setPreset(nextPreset);
+            setFrom(nextFrom);
+            setTo(nextTo);
+          }}
+        />
+      </div>
+
       {/* KPIs fijos */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <Link
@@ -198,13 +250,13 @@ export default function DashboardPage() {
           <p className="text-fg-muted text-xs">Ir al punto de venta</p>
         </Link>
         <div data-tour="dashboard-ventas-hoy" className="rounded-xl border border-hair-soft bg-surface p-4">
-          <h3 className="text-fg-muted font-medium mb-1 text-sm">Ventas hoy</h3>
-          <p className="text-lg font-bold text-fg">${salesToday?.total?.toFixed(0) ?? 0}</p>
-          <p className="text-fg-faint text-xs">{salesToday?.count ?? 0} ventas</p>
+          <h3 className="text-fg-muted font-medium mb-1 text-sm">Ventas · {rangeLabel}</h3>
+          <p className="text-lg font-bold text-fg">${salesPeriod?.total?.toFixed(0) ?? 0}</p>
+          <p className="text-fg-faint text-xs">{salesPeriod?.count ?? 0} ventas</p>
         </div>
         <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4">
-          <h3 className="text-ok font-medium mb-1 text-sm">Ganancia hoy</h3>
-          <p className="text-lg font-bold text-ok">${marginToday?.margin?.toFixed(0) ?? 0}</p>
+          <h3 className="text-ok font-medium mb-1 text-sm">Ganancia · {rangeLabel}</h3>
+          <p className="text-lg font-bold text-ok">${marginPeriod?.margin?.toFixed(0) ?? 0}</p>
           <p className="text-fg-faint text-xs">Ingresos − costo mercadería</p>
         </div>
         <div data-tour="dashboard-stock-bajo" className="rounded-xl border border-hair-soft bg-surface p-4">
@@ -223,7 +275,7 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-ok/30 bg-[var(--ok-soft)] p-4">
           <h3 className="text-ok font-medium mb-1 text-sm">Ganancia mes</h3>
           <p className="text-lg font-bold text-ok">${marginMonth?.margin?.toFixed(0) ?? 0}</p>
-          <p className="text-fg-faint text-xs">Ingresos − costo mercadería</p>
+          <p className="text-fg-faint text-xs">Mes calendario actual</p>
         </div>
       </div>
 
@@ -246,66 +298,66 @@ export default function DashboardPage() {
       >
         <div key="ventas" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
           {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
-          <h3 className="text-fg font-semibold mb-2 shrink-0">Ventas por día · {currentMonth}</h3>
+          <h3 className="text-fg font-semibold mb-2 shrink-0">Ventas {periodChartTitle}</h3>
           <div className="flex-1 min-h-[160px] w-full">
-            {salesByDay.length > 0 ? (
+            {salesByDay.some((d) => d.total > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={salesByDay} margin={chartDefaults.margin}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartDefaults.gridStroke} />
-                  <XAxis dataKey="day" tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} />
+                  <XAxis dataKey={chartXKey} tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} />
                   <YAxis tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, 'Ventas']} labelFormatter={(l) => `Día ${l}`} />
+                  <Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, 'Ventas']} labelFormatter={(l) => `${l}`} />
                   <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={28}>
                     {salesByDay.map((_, i) => <Cell key={i} fill="#0ea5e9" fillOpacity={0.85} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin ventas este mes</p>
+              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin ventas en el período</p>
             )}
           </div>
         </div>
 
         <div key="compras" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
           {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
-          <h3 className="text-fg font-semibold mb-2 shrink-0">Compras por día · {currentMonth}</h3>
+          <h3 className="text-fg font-semibold mb-2 shrink-0">Compras {periodChartTitle}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {purchasesByDay.some((d) => d.total > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={purchasesByDay} margin={chartDefaults.margin}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartDefaults.gridStroke} />
-                  <XAxis dataKey="day" tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} />
+                  <XAxis dataKey={chartXKey} tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} />
                   <YAxis tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, 'Compras']} labelFormatter={(l) => `Día ${l}`} />
+                  <Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, 'Compras']} labelFormatter={(l) => `${l}`} />
                   <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={28}>
                     {purchasesByDay.map((_, i) => <Cell key={i} fill="#8b5cf6" fillOpacity={0.85} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin compras este mes</p>
+              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin compras en el período</p>
             )}
           </div>
         </div>
 
         <div key="gastos" className="relative flex min-h-0 flex-col rounded-xl border border-hair-soft bg-surface p-4 shadow-lg">
           {isEditing && <div className="drag-handle absolute top-1.5 right-1.5 z-20 cursor-move rounded border border-hair bg-raised2 px-1.5 py-0.5 text-fg-faint text-[11px] leading-none" title="Arrastrar">⋮⋮</div>}
-          <h3 className="text-fg font-semibold mb-2 shrink-0">Gastos por día · {currentMonth}</h3>
+          <h3 className="text-fg font-semibold mb-2 shrink-0">Gastos {periodChartTitle}</h3>
           <div className="flex-1 min-h-[160px] w-full">
             {expensesByDay.some((d) => d.total > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={expensesByDay} margin={chartDefaults.margin}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartDefaults.gridStroke} />
-                  <XAxis dataKey="day" tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} />
+                  <XAxis dataKey={chartXKey} tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} />
                   <YAxis tick={chartDefaults.tickStyle} tickLine={chartDefaults.tickLine} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, 'Gastos']} labelFormatter={(l) => `Día ${l}`} />
+                  <Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, 'Gastos']} labelFormatter={(l) => `${l}`} />
                   <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={28}>
                     {expensesByDay.map((_, i) => <Cell key={i} fill="#f43f5e" fillOpacity={0.85} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin gastos este mes</p>
+              <p className="text-fg-faint text-sm flex items-center h-full justify-center">Sin gastos en el período</p>
             )}
           </div>
         </div>
@@ -376,10 +428,10 @@ export default function DashboardPage() {
 
       <div className="space-y-3 lg:hidden">
         {[
-          { title: `Ventas por día · ${currentMonth}`, data: salesByDay, label: 'Ventas', color: 'var(--brand-accent)', empty: 'Sin ventas este mes' },
-          { title: `Compras por día · ${currentMonth}`, data: purchasesByDay, label: 'Compras', color: 'var(--warn)', empty: 'Sin compras este mes' },
-          { title: `Gastos por día · ${currentMonth}`, data: expensesByDay, label: 'Gastos', color: 'var(--crit)', empty: 'Sin gastos este mes' },
-        ].map((widget) => <section key={widget.label} className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className="mb-3 font-semibold text-fg">{widget.title}</h3><div className="h-40 w-full">{widget.data.some((item) => item.total > 0) ? <ResponsiveContainer width="100%" height="100%"><BarChart data={widget.data} margin={chartDefaults.margin}><CartesianGrid strokeDasharray="3 3" stroke="var(--hair-soft)" /><XAxis dataKey="day" tick={chartDefaults.tickStyle} tickLine={false} /><YAxis tick={chartDefaults.tickStyle} tickLine={false} tickFormatter={(value) => `$${value}`} /><Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, widget.label]} labelFormatter={(label) => `Día ${label}`} /><Bar dataKey="total" fill={widget.color} radius={[4, 4, 0, 0]} maxBarSize={24} /></BarChart></ResponsiveContainer> : <p className="flex h-full items-center justify-center text-sm text-fg-faint">{widget.empty}</p>}</div></section>)}
+          { title: `Ventas ${periodChartTitle}`, data: salesByDay, label: 'Ventas', color: 'var(--brand-accent)', empty: 'Sin ventas en el período' },
+          { title: `Compras ${periodChartTitle}`, data: purchasesByDay, label: 'Compras', color: 'var(--warn)', empty: 'Sin compras en el período' },
+          { title: `Gastos ${periodChartTitle}`, data: expensesByDay, label: 'Gastos', color: 'var(--crit)', empty: 'Sin gastos en el período' },
+        ].map((widget) => <section key={widget.label} className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className="mb-3 font-semibold text-fg">{widget.title}</h3><div className="h-40 w-full">{widget.data.some((item) => item.total > 0) ? <ResponsiveContainer width="100%" height="100%"><BarChart data={widget.data} margin={chartDefaults.margin}><CartesianGrid strokeDasharray="3 3" stroke="var(--hair-soft)" /><XAxis dataKey={chartXKey} tick={chartDefaults.tickStyle} tickLine={false} /><YAxis tick={chartDefaults.tickStyle} tickLine={false} tickFormatter={(value) => `$${value}`} /><Tooltip contentStyle={chartDefaults.tooltipStyle} labelStyle={chartDefaults.labelStyle} formatter={(value) => [`$${Number(value ?? 0).toFixed(0)}`, widget.label]} labelFormatter={(label) => `${label}`} /><Bar dataKey="total" fill={widget.color} radius={[4, 4, 0, 0]} maxBarSize={24} /></BarChart></ResponsiveContainer> : <p className="flex h-full items-center justify-center text-sm text-fg-faint">{widget.empty}</p>}</div></section>)}
         <section className="rounded-xl border border-hair-soft bg-surface p-4"><h3 className="mb-3 font-semibold text-fg">Resumen del mes</h3><div className="space-y-2"><div className="flex justify-between rounded-lg bg-raised2 px-3 py-2"><span className="text-fg-muted">Ventas</span><span className="font-mono font-bold text-fg">${salesMonth?.total?.toFixed(0) ?? 0}</span></div><div className="flex justify-between rounded-lg bg-raised2 px-3 py-2"><span className="text-fg-muted">Cant. ventas</span><span className="font-mono font-bold text-fg">{salesMonth?.count ?? 0}</span></div><div className="flex justify-between rounded-lg border border-ok/30 bg-[var(--ok-soft)] px-3 py-2"><span className="text-ok">Ganancia</span><span className="font-mono font-bold text-ok">${marginMonth?.margin?.toFixed(0) ?? 0}</span></div></div></section>
         {[
           { title: 'Más vendidos', items: topSold, tone: 'text-brand', value: (item: TopProduct) => `${item.qty} un.` },

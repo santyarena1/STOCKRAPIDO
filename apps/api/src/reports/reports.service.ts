@@ -3,6 +3,9 @@ import {
   argentinaDayOfMonth,
   argentinaDayStart,
   argentinaMonthBounds,
+  argentinaTodayYmd,
+  parseArgentinaDayEnd,
+  parseArgentinaDayStart,
 } from '../common/argentina-date-range';
 import { PrismaService } from '../prisma/prisma.service';
 import { arsToCents, collectedForChannel } from '../../../../shared/loyalty-money';
@@ -50,10 +53,10 @@ export class ReportsService {
     return new Date(date.getTime() - 3 * 60 * 60 * 1000).getUTCDay();
   }
 
-  async salesSummary(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getDateRange(period);
+  async salesSummary(businessId: string, period: ReportPeriod = 'today', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
     const sales = await this.prisma.sale.findMany({
-      where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
       include: { items: { include: { product: true } } },
     });
     const total = sales.reduce((s, v) => s + Number(v.totalFinal), 0);
@@ -61,10 +64,10 @@ export class ReportsService {
     return { total, count, sales };
   }
 
-  async topProducts(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getDateRange(period);
+  async topProducts(businessId: string, period: ReportPeriod = 'today', limit = 10, from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
     const sales = await this.prisma.sale.findMany({
-      where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
       include: { items: { include: { product: true } } },
     });
     const map = new Map<string, { name: string; qty: number; total: number }>();
@@ -87,10 +90,10 @@ export class ReportsService {
    * Ganancia bruta = ingreso neto por línea (subtotal prorrateado con descuento global de la venta) − costo × cantidad.
    * El costo sale del producto; ítems manuales sin producto cuentan costo 0.
    */
-  async marginEstimate(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getDateRange(period);
+  async marginEstimate(businessId: string, period: ReportPeriod = 'today', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
     const sales = await this.prisma.sale.findMany({
-      where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
       include: { items: { include: { product: true } } },
     });
     let revenue = 0;
@@ -114,15 +117,15 @@ export class ReportsService {
   }
 
   /** Ganancia = Ventas - Compras - Gastos (del período). */
-  async netProfit(businessId: string, period: 'today' | 'week' | 'month') {
-    const { from, to } = this.getDateRange(period);
+  async netProfit(businessId: string, period: ReportPeriod = 'today', from?: Date, to?: Date) {
+    const range = this.getDateRange(period, from, to);
     const [sales, purchases, registers] = await Promise.all([
       this.prisma.sale.findMany({
-        where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+        where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
         select: { totalFinal: true },
       }),
       this.prisma.purchase.findMany({
-        where: { businessId, createdAt: { gte: from, lte: to } },
+        where: { businessId, createdAt: { gte: range.from, lte: range.to } },
         select: { total: true },
       }),
       this.prisma.cashRegister.findMany({
@@ -138,7 +141,7 @@ export class ReportsService {
         where: {
           cashRegisterId: { in: registers.map((r) => r.id) },
           type: 'expense',
-          createdAt: { gte: from, lte: to },
+          createdAt: { gte: range.from, lte: range.to },
         },
         select: { amount: true },
       });
@@ -422,10 +425,16 @@ export class ReportsService {
   }
 
   /** Top productos por ganancia bruta (ingreso neto de línea − costo × cantidad; mismo criterio que /reports/margin). */
-  async topProductsByProfit(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getDateRange(period);
+  async topProductsByProfit(
+    businessId: string,
+    period: ReportPeriod = 'today',
+    limit = 10,
+    from?: Date,
+    to?: Date,
+  ) {
+    const range = this.getDateRange(period, from, to);
     const sales = await this.prisma.sale.findMany({
-      where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
       include: { items: { include: { product: true } } },
     });
     const map = new Map<string, { name: string; qty: number; revenue: number; profit: number }>();
@@ -454,10 +463,16 @@ export class ReportsService {
   }
 
   /** Productos menos vendidos en el período (los que tienen ventas pero menor cantidad). */
-  async leastSoldProducts(businessId: string, period: 'today' | 'week' | 'month', limit = 10) {
-    const { from, to } = this.getDateRange(period);
+  async leastSoldProducts(
+    businessId: string,
+    period: ReportPeriod = 'month',
+    limit = 10,
+    from?: Date,
+    to?: Date,
+  ) {
+    const range = this.getDateRange(period, from, to);
     const sales = await this.prisma.sale.findMany({
-      where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+      where: { businessId, status: 'completed', createdAt: { gte: range.from, lte: range.to } },
       include: { items: { include: { product: true } } },
     });
     const map = new Map<string, { name: string; qty: number; total: number }>();
@@ -474,6 +489,106 @@ export class ReportsService {
     return Array.from(map.values())
       .sort((a, b) => a.qty - b.qty)
       .slice(0, limit);
+  }
+
+  /**
+   * Agregado por día calendario AR en un rango arbitrario (dashboard / filtros).
+   * `day` = día del mes; `label` = DD o DD/MM si el rango cruza meses.
+   */
+  private async aggregateByDayInRange(
+    businessId: string,
+    kind: 'sales' | 'purchases' | 'expenses',
+    from: Date,
+    to: Date,
+  ): Promise<{ day: number; label: string; date: string; total: number; count: number }[]> {
+    const startYmd = argentinaTodayYmd(from);
+    const endYmd = argentinaTodayYmd(to);
+    const days: string[] = [];
+    {
+      let cursor = parseArgentinaDayStart(startYmd)!;
+      const end = parseArgentinaDayEnd(endYmd)!;
+      // Cap ~92 días para no explotar el gráfico.
+      for (let i = 0; i < 93 && cursor.getTime() <= end.getTime(); i++) {
+        days.push(argentinaTodayYmd(cursor));
+        cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+      }
+    }
+    const multiMonth = startYmd.slice(0, 7) !== endYmd.slice(0, 7);
+    const byDay = new Map<string, { total: number; count: number }>();
+    for (const d of days) byDay.set(d, { total: 0, count: 0 });
+
+    if (kind === 'sales') {
+      const rows = await this.prisma.sale.findMany({
+        where: { businessId, status: 'completed', createdAt: { gte: from, lte: to } },
+        select: { totalFinal: true, createdAt: true },
+      });
+      for (const row of rows) {
+        const key = argentinaTodayYmd(row.createdAt);
+        const cur = byDay.get(key);
+        if (!cur) continue;
+        cur.total += Number(row.totalFinal);
+        cur.count += 1;
+      }
+    } else if (kind === 'purchases') {
+      const rows = await this.prisma.purchase.findMany({
+        where: { businessId, createdAt: { gte: from, lte: to } },
+        select: { total: true, createdAt: true },
+      });
+      for (const row of rows) {
+        const key = argentinaTodayYmd(row.createdAt);
+        const cur = byDay.get(key);
+        if (!cur) continue;
+        cur.total += Number(row.total);
+        cur.count += 1;
+      }
+    } else {
+      const registers = await this.prisma.cashRegister.findMany({
+        where: { businessId },
+        select: { id: true },
+      });
+      if (registers.length) {
+        const rows = await this.prisma.cashMovement.findMany({
+          where: {
+            cashRegisterId: { in: registers.map((r) => r.id) },
+            type: 'expense',
+            createdAt: { gte: from, lte: to },
+          },
+          select: { amount: true, createdAt: true },
+        });
+        for (const row of rows) {
+          const key = argentinaTodayYmd(row.createdAt);
+          const cur = byDay.get(key);
+          if (!cur) continue;
+          cur.total += Number(row.amount);
+          cur.count += 1;
+        }
+      }
+    }
+
+    return days.map((date) => {
+      const v = byDay.get(date) ?? { total: 0, count: 0 };
+      const [, mm, dd] = date.split('-');
+      const dayNum = Number(dd);
+      return {
+        day: dayNum,
+        label: multiMonth ? `${dd}/${mm}` : String(dayNum),
+        date,
+        total: v.total,
+        count: v.count,
+      };
+    });
+  }
+
+  async salesByDayRange(businessId: string, from: Date, to: Date) {
+    return this.aggregateByDayInRange(businessId, 'sales', from, to);
+  }
+
+  async purchasesByDayRange(businessId: string, from: Date, to: Date) {
+    return this.aggregateByDayInRange(businessId, 'purchases', from, to);
+  }
+
+  async expensesByDayRange(businessId: string, from: Date, to: Date) {
+    return this.aggregateByDayInRange(businessId, 'expenses', from, to);
   }
 
   /** Top productos por cantidad que vence en la fecha más cercana (misma lógica que expiringSoon). */

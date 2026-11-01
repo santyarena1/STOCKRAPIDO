@@ -1,14 +1,20 @@
 'use client';
 
-import { Children, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { Children, isValidElement, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '@/lib/api';
 import { Container } from '@/components/ui/Container';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Loader } from '@/components/ui/Loader';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import {
+  type AnalyticsDatePresetId,
+  labelForDateRange,
+  rangeForAnalyticsPreset,
+  todayYmdArgentina,
+} from '@/lib/argentina-date';
 import { usePersistedState } from '@/lib/use-persisted-state';
 
-type Period = 'today' | 'week' | 'month' | 'year';
 type SalesSummary = { total: number; count: number };
 type TopProduct = { name: string; qty: number; total: number };
 type Margin = { revenue: number; cost: number; margin: number };
@@ -76,36 +82,59 @@ function Table({ headers, children, empty }: { headers: string[]; children: Reac
 }
 
 export default function ReportesPage() {
-  const [period, setPeriod, periodReady] = usePersistedState<Period>('sr-filters:reportes:period', 'today');
+  const defaultRange = rangeForAnalyticsPreset('hoy');
+  const [preset, setPreset, presetReady] = usePersistedState<AnalyticsDatePresetId>(
+    'sr-filters:reportes:preset',
+    'hoy',
+  );
+  const [from, setFrom, fromReady] = usePersistedState('sr-filters:reportes:from', defaultRange.from);
+  const [to, setTo, toReady] = usePersistedState('sr-filters:reportes:to', defaultRange.to);
   const [activeTab, setActiveTab] = usePersistedState<(typeof TABS)[number][0]>('sr-filters:reportes:tab', 'sales');
   const [data, setData] = useState<ReportData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string[]>([]);
 
+  const filtersReady = presetReady && fromReady && toReady;
+  const rangeParams = useMemo(() => ({ from, to }), [from, to]);
+  const rangeLabel = labelForDateRange(from, to);
+
   useEffect(() => {
-    if (!periodReady) return;
+    if (!filtersReady) return;
+    // Re-anclar presets relativos (hoy/ayer/…) al día actual de Argentina.
+    if (preset !== 'personalizado') {
+      const next = rangeForAnalyticsPreset(preset);
+      if (next.from !== from || next.to !== to) {
+        setFrom(next.from);
+        setTo(next.to);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al hidratar / cambiar preset
+  }, [filtersReady, preset]);
+
+  useEffect(() => {
+    if (!filtersReady || !from || !to) return;
     let cancelled = false;
     setLoading(true);
     const requests: Array<[keyof ReportData, Promise<unknown>]> = [
-      ['sales', api<SalesSummary>('/reports/sales', { params: { period } })],
-      ['topProducts', api<TopProduct[]>('/reports/top-products', { params: { period } })],
-      ['legacyMargin', api<Margin>('/reports/margin', { params: { period } })],
+      ['sales', api<SalesSummary>('/reports/sales', { params: rangeParams })],
+      ['topProducts', api<TopProduct[]>('/reports/top-products', { params: rangeParams })],
+      ['legacyMargin', api<Margin>('/reports/margin', { params: rangeParams })],
       ['lowStock', api('/reports/low-stock')], ['expiring', api('/reports/expiring', { params: { days: '30' } })],
-      ['salesByHour', api('/reports/sales-by-hour', { params: { period } })],
-      ['salesByWeekday', api('/reports/sales-by-weekday', { params: { period } })],
-      ['salesByPayment', api('/reports/sales-by-payment', { params: { period } })],
-      ['salesByUser', api('/reports/sales-by-user', { params: { period } })],
-      ['salesByCategory', api('/reports/sales-by-category', { params: { period } })],
-      ['salesByBrand', api('/reports/sales-by-brand', { params: { period } })],
-      ['averageTicket', api('/reports/average-ticket', { params: { period } })],
+      ['salesByHour', api('/reports/sales-by-hour', { params: rangeParams })],
+      ['salesByWeekday', api('/reports/sales-by-weekday', { params: rangeParams })],
+      ['salesByPayment', api('/reports/sales-by-payment', { params: rangeParams })],
+      ['salesByUser', api('/reports/sales-by-user', { params: rangeParams })],
+      ['salesByCategory', api('/reports/sales-by-category', { params: rangeParams })],
+      ['salesByBrand', api('/reports/sales-by-brand', { params: rangeParams })],
+      ['averageTicket', api('/reports/average-ticket', { params: rangeParams })],
       ['comparison', api('/reports/sales-comparison')], ['deadStock', api('/reports/dead-stock', { params: { days: '30' } })],
       ['stockOuts', api('/reports/stock-outs')], ['valuation', api('/reports/inventory-valuation')],
-      ['topCustomers', api('/reports/top-customers', { params: { period, limit: '10' } })], ['fiado', api('/reports/fiado-aging')],
-      ['purchases', api('/reports/purchases-by-supplier', { params: { period } })],
-      ['expenses', api('/reports/expenses-by-category', { params: { period } })],
-      ['grossMargin', api('/reports/gross-margin', { params: { period } })],
-      ['fiscal', api('/reports/fiscal-summary', { params: { period } })],
-      ['cashSessions', api('/reports/cash-sessions', { params: { period } })],
+      ['topCustomers', api('/reports/top-customers', { params: { ...rangeParams, limit: '10' } })], ['fiado', api('/reports/fiado-aging')],
+      ['purchases', api('/reports/purchases-by-supplier', { params: rangeParams })],
+      ['expenses', api('/reports/expenses-by-category', { params: rangeParams })],
+      ['grossMargin', api('/reports/gross-margin', { params: rangeParams })],
+      ['fiscal', api('/reports/fiscal-summary', { params: rangeParams })],
+      ['cashSessions', api('/reports/cash-sessions', { params: rangeParams })],
     ];
     Promise.allSettled(requests.map(([, request]) => request)).then((results) => {
       if (cancelled) return;
@@ -116,17 +145,18 @@ export default function ReportesPage() {
         if (result.status === 'fulfilled') (next as Record<keyof ReportData, unknown>)[key] = result.value;
         else failures.push(String(key));
       });
-      // El nuevo agregado cubre correctamente también el período anual para los KPIs principales.
       if (next.averageTicket) next.sales = { total: next.averageTicket.total, count: next.averageTicket.count };
       if (next.grossMargin) next.legacyMargin = { revenue: next.grossMargin.revenue, cost: next.grossMargin.cogs, margin: next.grossMargin.grossMargin };
       setData(next); setFailed(failures);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [periodReady, period]);
+  }, [filtersReady, from, to, rangeParams]);
 
   const handleExportCsv = async () => {
     try {
-      const { csv, filename } = await api<{ csv: string; filename: string }>('/reports/export/sales');
+      const { csv, filename } = await api<{ csv: string; filename: string }>('/reports/export/sales', {
+        params: { from: from || todayYmdArgentina(), to: to || todayYmdArgentina() },
+      });
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); URL.revokeObjectURL(a.href);
     } catch (err) { alert(err instanceof Error ? err.message : 'Error'); }
@@ -137,7 +167,25 @@ export default function ReportesPage() {
   const num = `${td} text-right font-mono tabular-nums`;
 
   return <Container className="space-y-6">
-    <PageHeader title="Reportes" subtitle="Analizá ventas, inventario, clientes, compras y caja." actions={<div data-tour="reportes-periodo" className="flex gap-2"><select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className="rounded-lg border border-hair bg-raised px-3 py-2 text-fg"><option value="today">Hoy</option><option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option></select><button data-tour="reportes-export" onClick={handleExportCsv} className="btn-brand rounded-lg px-4 py-2">Exportar CSV</button></div>} />
+    <PageHeader
+      title="Reportes"
+      subtitle={`Analizá ventas, inventario, clientes, compras y caja · ${rangeLabel}`}
+      actions={
+        <button data-tour="reportes-export" onClick={handleExportCsv} className="btn-brand rounded-lg px-4 py-2">
+          Exportar CSV
+        </button>
+      }
+    />
+    <DateRangeFilter
+      preset={preset}
+      from={from}
+      to={to}
+      onChange={({ preset: nextPreset, from: nextFrom, to: nextTo }) => {
+        setPreset(nextPreset);
+        setFrom(nextFrom);
+        setTo(nextTo);
+      }}
+    />
 
     <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"><Kpi label="Ventas totales" value={money(data.sales?.total)} detail={`${data.sales?.count ?? 0} ventas`} /><Kpi label="Ticket promedio" value={money(data.averageTicket?.avg)} /><Kpi label="Margen estimado" value={money(data.legacyMargin?.margin)} detail={`Ingresos ${money(data.legacyMargin?.revenue)} · Costo ${money(data.legacyMargin?.cost)}`} tone="text-ok" /><Kpi label="Comparativa mensual" value={`${number(data.comparison?.deltaPct)}%`} detail={`${money(data.comparison?.current.total)} actual · ${money(data.comparison?.previous.total)} anterior`} tone={(data.comparison?.deltaPct ?? 0) >= 0 ? 'text-ok' : 'text-crit'} /></div>
 

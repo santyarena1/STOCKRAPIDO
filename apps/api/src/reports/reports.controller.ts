@@ -137,15 +137,32 @@ export class ReportsController {
   }
 
   @Get('sales')
-  salesSummary(@CurrentUser() user: User, @Query('period') period?: string) {
-    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
-    return this.reports.salesSummary(user.businessId, p);
+  salesSummary(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = reportParams(period ?? 'today', from, to);
+    return this.reports.salesSummary(user.businessId, range.period, range.from, range.to);
   }
 
   @Get('top-products')
-  topProducts(@CurrentUser() user: User, @Query('period') period?: string, @Query('limit') limit?: string) {
-    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
-    return this.reports.topProducts(user.businessId, p, limit ? parseInt(limit, 10) : 10);
+  topProducts(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = reportParams(period ?? 'today', from, to);
+    return this.reports.topProducts(
+      user.businessId,
+      range.period,
+      positiveInt(limit, 10, 200),
+      range.from,
+      range.to,
+    );
   }
 
   @Get('purchases-by-day')
@@ -153,7 +170,13 @@ export class ReportsController {
     @CurrentUser() user: User,
     @Query('year') year?: string,
     @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
+    const dates = saleDateRangeFromQuery(from, to);
+    if (dates.from && dates.to) {
+      return this.reports.purchasesByDayRange(user.businessId, dates.from, dates.to);
+    }
     const y = year ? parseInt(year, 10) : undefined;
     const m = month ? parseInt(month, 10) - 1 : undefined;
     return this.reports.purchasesByDayOfMonth(user.businessId, y, m);
@@ -164,22 +187,38 @@ export class ReportsController {
     @CurrentUser() user: User,
     @Query('year') year?: string,
     @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
+    const dates = saleDateRangeFromQuery(from, to);
+    if (dates.from && dates.to) {
+      return this.reports.expensesByDayRange(user.businessId, dates.from, dates.to);
+    }
     const y = year ? parseInt(year, 10) : undefined;
     const m = month ? parseInt(month, 10) - 1 : undefined;
     return this.reports.expensesByDayOfMonth(user.businessId, y, m);
   }
 
   @Get('margin')
-  margin(@CurrentUser() user: User, @Query('period') period?: string) {
-    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
-    return this.reports.marginEstimate(user.businessId, p);
+  margin(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = reportParams(period ?? 'today', from, to);
+    return this.reports.marginEstimate(user.businessId, range.period, range.from, range.to);
   }
 
   @Get('net-profit')
-  netProfit(@CurrentUser() user: User, @Query('period') period?: string) {
-    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
-    return this.reports.netProfit(user.businessId, p);
+  netProfit(
+    @CurrentUser() user: User,
+    @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = reportParams(period ?? 'today', from, to);
+    return this.reports.netProfit(user.businessId, range.period, range.from, range.to);
   }
 
   @Get('sales-by-day')
@@ -187,7 +226,13 @@ export class ReportsController {
     @CurrentUser() user: User,
     @Query('year') year?: string,
     @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
+    const dates = saleDateRangeFromQuery(from, to);
+    if (dates.from && dates.to) {
+      return this.reports.salesByDayRange(user.businessId, dates.from, dates.to);
+    }
     const y = year ? parseInt(year, 10) : undefined;
     const m = month ? parseInt(month, 10) - 1 : undefined;
     return this.reports.salesByDayOfMonth(user.businessId, y, m);
@@ -198,9 +243,17 @@ export class ReportsController {
     @CurrentUser() user: User,
     @Query('period') period?: string,
     @Query('limit') limit?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    const p = (period === 'week' || period === 'month' ? period : 'today') as 'today' | 'week' | 'month';
-    return this.reports.topProductsByProfit(user.businessId, p, limit ? parseInt(limit, 10) : 10);
+    const range = reportParams(period ?? 'today', from, to);
+    return this.reports.topProductsByProfit(
+      user.businessId,
+      range.period,
+      positiveInt(limit, 10, 200),
+      range.from,
+      range.to,
+    );
   }
 
   @Get('least-sold-products')
@@ -208,9 +261,17 @@ export class ReportsController {
     @CurrentUser() user: User,
     @Query('period') period?: string,
     @Query('limit') limit?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    const p = (period === 'week' || period === 'month' ? period : 'month') as 'today' | 'week' | 'month';
-    return this.reports.leastSoldProducts(user.businessId, p, limit ? parseInt(limit, 10) : 10);
+    const range = reportParams(period ?? 'month', from, to);
+    return this.reports.leastSoldProducts(
+      user.businessId,
+      range.period,
+      positiveInt(limit, 10, 200),
+      range.from,
+      range.to,
+    );
   }
 
   @Get('top-products-expiring')

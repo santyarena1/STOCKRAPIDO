@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.46',
+    date: '2026-11-01',
+    summary: 'Más filtros de fechas en Dashboard y Reportes.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Filtros Hoy / Ayer / 7 días / fechas',
+        desc: 'En Dashboard y Reportes podés elegir Hoy, Ayer, Últimos 7 días, Esta semana, Este mes, Mes anterior o un rango Desde–Hasta. Los gráficos y totales siguen ese período (horario Argentina).',
+      },
+    ],
+  },
+  {
     version: 'v1.45',
     date: '2026-11-01',
     summary: 'Teatro: módulo Pantallas para TVs a pantalla completa.',
