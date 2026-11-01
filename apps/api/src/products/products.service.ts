@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
+import { isTeatroTenant } from '../common/teatro';
 import { assertProductLimit } from '../billing/plan-guard';
 import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
@@ -1374,16 +1375,7 @@ export class ProductsService {
   }
 
   private isTeatroTenant(businessName: string, businessId: string): boolean {
-    const allow = (process.env.INVENTORY_WIPE_BUSINESS_IDS || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (allow.includes(businessId)) return true;
-    const n = businessName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-    return n.includes('teatro');
+    return isTeatroTenant(businessName, businessId);
   }
 
   private nameSearchTokens(name: string): string[] {

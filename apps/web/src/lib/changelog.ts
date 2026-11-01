@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.45',
+    date: '2026-11-01',
+    summary: 'Teatro: módulo Pantallas para TVs a pantalla completa.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Pantallas (Teatro)',
+        desc: 'En Configuración → Pantallas podés subir fotos horizontales en alta resolución, elegir tiempo por imagen, transición y animación (fade / deslizar / zoom). Se abre un link en pestaña nueva, sin login, listo para pantalla completa en TVs de ~65″. También podés superponer un logo PNG transparente: lo arrastrás para ubicarlo, y regulás tamaño y opacidad.',
+      },
+    ],
+  },
+  {
     version: 'v1.44',
     date: '2026-10-31',
     summary: 'El día del sistema es el de Argentina (00 a 24 hs).',

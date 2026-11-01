@@ -23,6 +23,11 @@ export class BusinessController {
     return this.business.update(user.businessId, body);
   }
 
+  @Post('pantallas/regenerate-token')
+  regeneratePantallasToken(@CurrentUser() user: User) {
+    return this.business.regeneratePantallasToken(user.businessId);
+  }
+
   @Patch('openai-key')
   setOpenaiKey(@CurrentUser() user: User, @Body() body: SetApiKeyDto) {
     return this.business.setOpenaiKey(user.businessId, body?.key ?? '');

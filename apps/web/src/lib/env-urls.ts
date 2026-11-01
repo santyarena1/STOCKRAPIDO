@@ -39,3 +39,10 @@ export function getPublicCuentaCorrienteUrl(token: string): string {
   if (!base) return `/public/cuenta-corriente/${token}`;
   return `${base}/public/cuenta-corriente/${token}`;
 }
+
+/** Link público del slideshow Pantallas (Teatro / TV). */
+export function getPublicPantallasUrl(token: string): string {
+  const base = getPublicAppUrl();
+  if (!base) return `/public/pantallas/${token}`;
+  return `${base}/public/pantallas/${token}`;
+}

@@ -40,6 +40,7 @@ import { api } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/env-urls';
 import { STOCKRAPIDO_BRANDING_EVENT } from '@/lib/branding';
 import { cn } from '@/lib/cn';
+import { isTeatroTenantName } from '@/lib/teatro';
 import { Loader } from '@/components/ui/Loader';
 import { useSessionUser } from '@/lib/use-session-user';
 
@@ -132,6 +133,7 @@ const GROUPS = [
       { href: '/config/vendedores', label: 'Vendedores' },
       { href: '/config/proveedores', label: 'Proveedores' },
       { href: '/config/pantalla', label: 'Pantalla cliente' },
+      { href: '/config/pantallas', label: 'Pantallas', teatroOnly: true },
       { href: '/config/compras-ia', label: 'Compras IA' },
       { href: '/config/serper', label: 'Imágenes Serper' },
       { href: '/config/categorias', label: 'Categorías' },
@@ -232,7 +234,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [brand, setBrand] = useState<Branding>({});
+  const [businessName, setBusinessName] = useState('');
   const [sidebarTitle, setSidebarTitle] = useState('StockRápido');
+  const isTeatro = isTeatroTenantName(businessName);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => activeGroups(pathname, GROUPS));
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -243,6 +247,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       .then((b) => {
         const br = b.posConfig?.branding;
         setBrand(br ?? {});
+        setBusinessName(b.name || '');
         setSidebarTitle(br?.appTitle?.trim() || b.name || 'StockRápido');
         applyCssBrandVars(br);
         document.title = `${br?.appTitle?.trim() || b.name || 'StockRápido'}`;
@@ -376,7 +381,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
         <div className="mt-4 space-y-1">
-          {navGroups.map(({ title, icon: Icon, items }) => {
+          {navGroups.map(({ title, icon: Icon, items: rawItems }) => {
+            const items = rawItems.filter(
+              (item) => !('teatroOnly' in item && item.teatroOnly) || isTeatro,
+            );
+            if (!items.length) return null;
             const open = openGroups[title] ?? false;
             const groupActive = items.some(({ href }) => isActivePath(pathname, href));
             return (
