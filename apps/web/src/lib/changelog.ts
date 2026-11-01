@@ -22,6 +22,28 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.47',
+    date: '2026-11-01',
+    summary: 'POS: nombres más legibles, cantidad editable y modo espera con alias.',
+    items: [
+      {
+        tag: 'MEJORA',
+        title: 'Nombres de producto más legibles en el POS',
+        desc: 'En la lista de resultados y en el carrito el nombre se ve más grande y puede ocupar hasta dos líneas, sin cortarse tanto.',
+      },
+      {
+        tag: 'FIX',
+        title: 'Cantidad: borrar y escribir',
+        desc: 'En el carrito podés vaciar el campo de cantidad y tipear el número que quieras. Antes solo dejaba agregar dígitos al final.',
+      },
+      {
+        tag: 'MEJORA',
+        title: 'Modo espera: alias + próxima venta',
+        desc: 'Si dejás una venta esperando el pago (transferencia / Mercado Pago), la pantalla cliente mantiene el alias, muestra esa venta en tamaño chico y deja espacio para la próxima que estás armando.',
+      },
+    ],
+  },
+  {
     version: 'v1.46',
     date: '2026-11-01',
     summary: 'Más filtros de fechas en Dashboard y Reportes.',

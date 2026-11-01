@@ -23,6 +23,14 @@ export function paymentShowsQrOnCustomer(methodId: string): boolean {
   return methodId === 'tarjeta_debito' || methodId === 'tarjeta_credito';
 }
 
+/** Venta dejada en espera (p. ej. transferencia/MP) mientras el cajero atiende al siguiente. */
+export type CustomerDisplayWaitingPayment = {
+  total: number;
+  paymentMethod: string;
+  itemCount: number;
+  customerName?: string | null;
+};
+
 export type CustomerDisplayBroadcast =
   | {
       kind: 'sale';
@@ -34,6 +42,11 @@ export type CustomerDisplayBroadcast =
       discount: number;
       total: number;
       fiadoCustomerName?: string | null;
+      /**
+       * Si el cajero dejó una venta esperando el pago (alias/QR), se mantiene en pantalla
+       * en tamaño chico mientras se arma la próxima.
+       */
+      waitingPayment?: CustomerDisplayWaitingPayment | null;
     }
   | {
       kind: 'success';

@@ -137,6 +137,12 @@ function CartItemRow({
   onRemove: () => void;
   onSilent?: () => void;
 }) {
+  /** Borrador local: permite vaciar el campo y reescribir (antes solo se podían agregar dígitos). */
+  const [qtyDraft, setQtyDraft] = useState(String(item.qty));
+  useEffect(() => {
+    setQtyDraft(String(item.qty));
+  }, [item.qty]);
+
   const handleMinus = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -155,7 +161,7 @@ function CartItemRow({
       ) : (
         <div className="w-8 h-8 rounded bg-raised2 shrink-0" />
       )}
-      <span className="flex min-w-0 flex-1 basis-full items-center gap-1.5 text-fg-muted sm:basis-0">
+      <span className="flex min-w-0 flex-1 basis-full items-center gap-1.5 sm:basis-0">
         {(item.silentTicket || item.productSilent) ? (
           <span
             className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-red-500/30"
@@ -163,7 +169,7 @@ function CartItemRow({
             aria-label="Producto silencioso"
           />
         ) : null}
-        <span className="truncate">{item.name}</span>
+        <span className="line-clamp-2 text-[15px] font-semibold leading-snug text-fg">{item.name}</span>
         {(item.silentTicket || item.productSilent) ? (
           <span className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-1 text-[9px] font-bold uppercase text-red-400">
             {item.silentTicket && !item.productSilent ? 'PS carrito' : 'PS'}
@@ -177,18 +183,26 @@ function CartItemRow({
         <input
           type="text"
           inputMode="numeric"
-          value={String(item.qty)}
+          value={qtyDraft}
           onChange={(e) => {
             const v = e.target.value.replace(/\D/g, '');
+            setQtyDraft(v);
             if (v === '') return;
             const n = parseInt(v, 10);
             if (!Number.isNaN(n) && n >= 1) onQtyChange(n);
           }}
-          onBlur={(e) => {
-            const v = e.target.value.replace(/\D/g, '');
+          onBlur={() => {
+            const v = qtyDraft.replace(/\D/g, '');
             const n = parseInt(v, 10);
-            if (v === '' || Number.isNaN(n) || n < 1) onQtyChange(1);
+            if (v === '' || Number.isNaN(n) || n < 1) {
+              setQtyDraft('1');
+              onQtyChange(1);
+            } else {
+              setQtyDraft(String(n));
+              onQtyChange(n);
+            }
           }}
+          onFocus={(e) => e.target.select()}
           className="w-10 text-center rounded bg-raised2 border border-hair text-fg py-1 text-sm"
           aria-label="Cantidad"
         />
@@ -292,6 +306,13 @@ export default function POSPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; balance?: number } | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [pausedList,setPausedList]=useState<PausedSale[]>([]);
+  /** Venta en espera de pago (alias/QR) que debe seguir en la pantalla cliente mientras se atiende la próxima. */
+  const [waitingOnDisplay, setWaitingOnDisplay] = useState<{
+    total: number;
+    paymentMethod: string;
+    itemCount: number;
+    customerName?: string | null;
+  } | null>(null);
   const [discountInput, setDiscountInput] = useState('');
   const [manualName, setManualName] = useState('');
   const [manualPrice, setManualPrice] = useState('');
@@ -410,8 +431,9 @@ export default function POSPage() {
       discount: discountTotal,
       total,
       fiadoCustomerName: selectedCustomer?.name ?? null,
+      waitingPayment: waitingOnDisplay,
     });
-  }, [cart, discountTotal, showPayment, paymentMethodPending, selectedCustomer?.name]);
+  }, [cart, discountTotal, showPayment, paymentMethodPending, selectedCustomer?.name, waitingOnDisplay]);
 
   useEffect(() => {
     if (!showPayment) { setPaymentMethodPending(null); setCashPaidText(''); }
@@ -500,8 +522,23 @@ export default function POSPage() {
     try {
       const res = await fetch(`${getApiBaseUrl()}/paused-sales`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as PausedSale[];
         setPausedList(data);
+        // Si hay ventas esperando pago, mantener la más antigua en la pantalla cliente (alias/QR).
+        const awaiting = data.find((p) => p.payload?.status === 'awaiting_payment' && p.payload.paymentMethod);
+        if (awaiting) {
+          const items = (awaiting.payload?.items as CartItem[]) || [];
+          const sub = items.reduce((s, i) => s + (i.subtotal || 0), 0);
+          const disc = Number(awaiting.payload?.discount) || 0;
+          setWaitingOnDisplay({
+            total: Math.max(0, sub - disc),
+            paymentMethod: awaiting.payload.paymentMethod as string,
+            itemCount: items.length,
+            customerName: awaiting.payload?.selectedCustomer?.name ?? null,
+          });
+        } else {
+          setWaitingOnDisplay(null);
+        }
       }
     } catch {
       setPausedList([]);
@@ -1143,8 +1180,84 @@ export default function POSPage() {
     setDiscountInput('');
   };
 
-  const savePaused=async(paymentMethod:string|null=null,status:'building'|'awaiting_payment'='building')=>{if(!cart.length){setShowPaused(false);return}const token=getToken();if(!token)return;try{const r=await fetch(getApiBaseUrl()+'/paused-sales',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({items:cart,discount:discountTotal,selectedCustomer,paymentMethod,status,loyaltyAttachment,loyaltyPoints})});if(!r.ok)throw Error();clearPosSession();setCart([]);setDiscountTotal(0);setSelectedCustomer(null);setLoyaltyAttachment(null);setLoyaltyPoints(0);setPaymentMethodPending(null);setShowPayment(false);setShowPaused(false);await fetchPaused();searchRef.current?.focus()}catch{alert('Error al guardar venta en espera')}};
-  const restorePaused=async(p:PausedSale)=>{const v=p.payload||{items:[]};setCart(v.items||[]);setDiscountTotal(v.discount||0);setSelectedCustomer(v.selectedCustomer||null);setLoyaltyAttachment((v as {loyaltyAttachment?:PosLoyaltyAttachment}).loyaltyAttachment||null);setLoyaltyPoints(Number((v as {loyaltyPoints?:number}).loyaltyPoints)||0);setShowPaused(false);setPausedList(x=>x.filter(i=>i.id!==p.id));const token=getToken();if(token)void fetch(getApiBaseUrl()+'/paused-sales/'+p.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});if(v.status==='awaiting_payment'&&v.paymentMethod){setPaymentMethodPending(v.paymentMethod);openPaymentModal()}else{setPaymentMethodPending(null);setTimeout(()=>searchRef.current?.focus(),0)}};
+  const savePaused = async (paymentMethod: string | null = null, status: 'building' | 'awaiting_payment' = 'building') => {
+    if (!cart.length) {
+      setShowPaused(false);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    try {
+      const subtotal = cart.reduce((s, i) => s + i.subtotal, 0);
+      const total = Math.max(0, subtotal - discountTotal);
+      const waitingSnapshot =
+        status === 'awaiting_payment' && paymentMethod
+          ? {
+              total,
+              paymentMethod,
+              itemCount: cart.length,
+              customerName: selectedCustomer?.name ?? null,
+            }
+          : null;
+      const r = await fetch(getApiBaseUrl() + '/paused-sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          items: cart,
+          discount: discountTotal,
+          selectedCustomer,
+          paymentMethod,
+          status,
+          loyaltyAttachment,
+          loyaltyPoints,
+        }),
+      });
+      if (!r.ok) throw Error();
+      // Dejar alias/QR en pantalla cliente con la venta en espera (chica) antes de armar la próxima.
+      if (waitingSnapshot) setWaitingOnDisplay(waitingSnapshot);
+      clearPosSession();
+      setCart([]);
+      setDiscountTotal(0);
+      setSelectedCustomer(null);
+      setLoyaltyAttachment(null);
+      setLoyaltyPoints(0);
+      setPaymentMethodPending(null);
+      setShowPayment(false);
+      setShowPaused(false);
+      await fetchPaused();
+      searchRef.current?.focus();
+    } catch {
+      alert('Error al guardar venta en espera');
+    }
+  };
+  const restorePaused = async (p: PausedSale) => {
+    const v = p.payload || { items: [] };
+    setCart(v.items || []);
+    setDiscountTotal(v.discount || 0);
+    setSelectedCustomer(v.selectedCustomer || null);
+    setLoyaltyAttachment((v as { loyaltyAttachment?: PosLoyaltyAttachment }).loyaltyAttachment || null);
+    setLoyaltyPoints(Number((v as { loyaltyPoints?: number }).loyaltyPoints) || 0);
+    setShowPaused(false);
+    setPausedList((x) => x.filter((i) => i.id !== p.id));
+    // Al retomar, esta venta deja de ser "waiting"; si quedan otras esperando pago, fetchPaused las pone.
+    if (v.status === 'awaiting_payment') setWaitingOnDisplay(null);
+    const token = getToken();
+    if (token) {
+      try {
+        await fetch(getApiBaseUrl() + '/paused-sales/' + p.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+      } catch {
+        /* ignore */
+      }
+      await fetchPaused();
+    }
+    if (v.status === 'awaiting_payment' && v.paymentMethod) {
+      setPaymentMethodPending(v.paymentMethod);
+      openPaymentModal();
+    } else {
+      setPaymentMethodPending(null);
+      setTimeout(() => searchRef.current?.focus(), 0);
+    }
+  };
 
   const addManualProduct = () => {
     const name = manualName.trim() || 'Producto manual';
@@ -1365,7 +1478,7 @@ export default function POSPage() {
                                 aria-label="Producto silencioso"
                               />
                             ) : null}
-                            <span className="truncate text-[15px] font-semibold text-fg">{highlightedName(p.name, search)}</span>
+                            <span className="line-clamp-2 text-base font-semibold leading-snug text-fg">{highlightedName(p.name, search)}</span>
                             {p.silent ? (
                               <span className="rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-400">PS</span>
                             ) : null}
@@ -1895,20 +2008,53 @@ export default function POSPage() {
               <p className="text-fg-faint text-sm">No hay ventas pausadas.</p>
             ) : (
               <ul className="space-y-2">
-                {pausedList.map((p) => (
-                  <li key={p.id} className="flex justify-between items-center gap-2 p-2 rounded bg-raised">
-                    <span className="text-fg-muted text-sm truncate">
-                      {(p.payload?.items as CartItem[])?.length || 0} ítems · {new Date(p.createdAt).toLocaleString()}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={()=>void restorePaused(p)}
-                      className="px-3 py-1 rounded btn-brand text-sm"
+                {pausedList.map((p, idx) => {
+                  const items = (p.payload?.items as CartItem[]) || [];
+                  const sub = items.reduce((s, i) => s + (i.subtotal || 0), 0);
+                  const disc = Number(p.payload?.discount) || 0;
+                  const total = Math.max(0, sub - disc);
+                  const awaiting = p.payload?.status === 'awaiting_payment';
+                  const methodLabel = p.payload?.paymentMethod
+                    ? PAYMENT_METHODS.find((m) => m.id === p.payload?.paymentMethod)?.label ?? p.payload.paymentMethod
+                    : null;
+                  return (
+                    <li
+                      key={p.id}
+                      className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 ${
+                        awaiting ? 'border border-warn/40 bg-[var(--warn-soft)]' : 'bg-raised'
+                      }`}
                     >
-                      Retomar
-                    </button>
-                  </li>
-                ))}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {awaiting ? (
+                            <span className="rounded bg-warn/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-warn">
+                              Esperando pago{idx === 0 ? '' : ` · #${idx + 1}`}
+                            </span>
+                          ) : (
+                            <span className="rounded bg-raised2 px-1.5 py-0.5 text-[10px] font-bold uppercase text-fg-faint">
+                              Pausada{idx === 0 ? ' · próxima' : ''}
+                            </span>
+                          )}
+                          {methodLabel ? <span className="text-[11px] text-fg-muted">{methodLabel}</span> : null}
+                        </span>
+                        <span className="mt-0.5 block truncate text-sm text-fg">
+                          <span className="font-mono font-semibold tabular-nums">${total.toFixed(0)}</span>
+                          <span className="text-fg-faint"> · {items.length} ítems · {new Date(p.createdAt).toLocaleString()}</span>
+                        </span>
+                        {p.payload?.selectedCustomer?.name ? (
+                          <span className="block truncate text-xs text-fg-faint">{p.payload.selectedCustomer.name}</span>
+                        ) : null}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void restorePaused(p)}
+                        className="shrink-0 rounded px-3 py-1 btn-brand text-sm"
+                      >
+                        Retomar
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <button type="button" onClick={() => setShowPaused(false)} className="mt-4 w-full py-2 rounded-lg border border-hair text-fg-muted">Cerrar</button>

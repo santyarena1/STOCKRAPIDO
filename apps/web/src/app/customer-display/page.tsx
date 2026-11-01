@@ -116,8 +116,20 @@ export default function CustomerDisplayPage() {
   }
 
   const sale = live?.kind === 'sale' ? live : null;
-  const showIdleCarousel = !success && phase === 'idle' && promos.length > 0;
-  const showIdleFallback = !success && phase === 'idle' && promos.length === 0;
+  const waiting = sale?.waitingPayment ?? null;
+  const hasCurrentSale = !!sale && sale.phase !== 'idle';
+  // Con venta en espera no ocultamos el alias: idle solo si no hay waiting.
+  const showIdleCarousel = !success && phase === 'idle' && !waiting && promos.length > 0;
+  const showIdleFallback = !success && phase === 'idle' && !waiting && promos.length === 0;
+  const showWaitingOnlyNext = !success && !!waiting && phase === 'idle';
+  // Si la venta activa también pide alias, no duplicamos el bloque grande: el waiting ya lo muestra.
+  const currentNeedsAlias =
+    hasCurrentSale &&
+    sale.phase === 'payment' &&
+    !!sale.selectedPaymentMethod &&
+    paymentShowsAliasOnCustomer(sale.selectedPaymentMethod);
+  const waitingShowsAlias = !!waiting && paymentShowsAliasOnCustomer(waiting.paymentMethod);
+  const waitingShowsQr = !!waiting && paymentShowsQrOnCustomer(waiting.paymentMethod);
 
   return (
     <div
@@ -143,7 +155,7 @@ export default function CustomerDisplayPage() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col min-h-0 p-6 md:p-10">
+      <main className="flex-1 flex flex-col min-h-0 p-6 md:p-10 gap-4">
         {success && (
           <div className="flex-1 flex flex-col items-center justify-center rounded-3xl border-2 border-emerald-500/40 bg-emerald-950/40 px-6 py-16 text-center">
             <div
@@ -157,6 +169,44 @@ export default function CustomerDisplayPage() {
             <p className="text-emerald-300 text-2xl md:text-4xl font-bold mb-3">Compra confirmada</p>
             <p className="text-emerald-100/90 text-xl md:text-3xl font-semibold">{formatMoney(success.total)}</p>
             <p className="text-emerald-200/70 text-lg mt-4">{success.paymentLabel}</p>
+          </div>
+        )}
+
+        {!success && waiting && (
+          <div className="shrink-0 max-w-4xl mx-auto w-full rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-3 md:px-5 md:py-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/80">
+                  Venta en espera de pago
+                </p>
+                <p className="mt-0.5 text-lg font-semibold tabular-nums text-white md:text-xl">
+                  {formatMoney(waiting.total)}
+                  <span className="ml-2 text-sm font-normal text-slate-400">
+                    · {waiting.itemCount} {waiting.itemCount === 1 ? 'ítem' : 'ítems'}
+                  </span>
+                </p>
+                {waiting.customerName ? (
+                  <p className="truncate text-xs text-slate-400">{waiting.customerName}</p>
+                ) : null}
+              </div>
+              {waitingShowsAlias ? (
+                <div className="min-w-0 text-right">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Alias</p>
+                  {mpAlias ? (
+                    <p className="break-all font-mono text-xl font-bold text-white md:text-2xl">{mpAlias}</p>
+                  ) : (
+                    <p className="text-sm text-amber-300">Sin alias configurado</p>
+                  )}
+                </div>
+              ) : null}
+              {waitingShowsQr && mpQr &&
+              (mpQr.startsWith('data:') || mpQr.startsWith('http://') || mpQr.startsWith('https://')) ? (
+                <div className="rounded-lg bg-white p-1.5 shadow">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={mpQr} alt="QR de pago" className="h-16 w-16 object-contain md:h-20 md:w-20" />
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
 
@@ -185,11 +235,22 @@ export default function CustomerDisplayPage() {
           </div>
         )}
 
-        {!success && sale && sale.phase !== 'idle' && (
-          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full gap-6">
+        {!success && showWaitingOnlyNext && (
+          <div className="flex-1 flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-10 text-center max-w-4xl mx-auto w-full">
+            <p className="text-slate-300 text-xl md:text-2xl font-semibold">Próxima venta</p>
+            <p className="mt-2 text-slate-500 text-base md:text-lg max-w-md">
+              El cajero está armando el siguiente pedido. El alias de arriba sigue disponible para quien está pagando.
+            </p>
+          </div>
+        )}
+
+        {!success && hasCurrentSale && sale && (
+          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full gap-6 min-h-0">
             <div className="rounded-2xl border border-slate-700 bg-slate-900/60 overflow-hidden shadow-xl">
               <div className="px-6 py-4 border-b border-slate-700 bg-slate-800/50">
-                <h2 className="text-lg md:text-xl font-semibold text-white">Tu pedido</h2>
+                <h2 className="text-lg md:text-xl font-semibold text-white">
+                  {waiting ? 'Próxima venta' : 'Tu pedido'}
+                </h2>
               </div>
               <ul className="divide-y divide-slate-800">
                 {sale.items.map((line, idx) => (
@@ -246,8 +307,7 @@ export default function CustomerDisplayPage() {
                     </span>
                   </p>
                 )}
-                {sale.selectedPaymentMethod &&
-                  paymentShowsAliasOnCustomer(sale.selectedPaymentMethod) && (
+                {currentNeedsAlias && !(waitingShowsAlias && mpAlias) && (
                     <div className="space-y-4">
                       <p className="text-center text-slate-400 text-sm uppercase tracking-wide">
                         Transferencia / Mercado Pago — alias para pagar
@@ -264,6 +324,11 @@ export default function CustomerDisplayPage() {
                       )}
                     </div>
                   )}
+                {currentNeedsAlias && waitingShowsAlias && mpAlias ? (
+                  <p className="text-center text-slate-400 text-base">
+                    Usá el mismo alias de arriba para pagar esta venta.
+                  </p>
+                ) : null}
                 {sale.selectedPaymentMethod &&
                   paymentShowsQrOnCustomer(sale.selectedPaymentMethod) && (
                     <div className="space-y-4">
