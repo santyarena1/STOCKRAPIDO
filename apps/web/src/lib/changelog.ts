@@ -22,7 +22,6 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
-<<<<<<< HEAD
     version: 'v1.46',
     date: '2026-11-01',
     summary: 'Más filtros de fechas en Dashboard y Reportes.',
@@ -31,7 +30,10 @@ export const CHANGELOG: ChangelogVersion[] = [
         tag: 'MEJORA',
         title: 'Filtros Hoy / Ayer / 7 días / fechas',
         desc: 'En Dashboard y Reportes podés elegir Hoy, Ayer, Últimos 7 días, Esta semana, Este mes, Mes anterior o un rango Desde–Hasta. Los gráficos y totales siguen ese período (horario Argentina).',
-=======
+      },
+    ],
+  },
+  {
     version: 'v1.45',
     date: '2026-11-01',
     summary: 'Teatro: módulo Pantallas para TVs a pantalla completa.',
@@ -40,7 +42,6 @@ export const CHANGELOG: ChangelogVersion[] = [
         tag: 'NUEVO',
         title: 'Pantallas (Teatro)',
         desc: 'En Configuración → Pantallas podés subir fotos horizontales en alta resolución, elegir tiempo por imagen, transición y animación (fade / deslizar / zoom). Se abre un link en pestaña nueva, sin login, listo para pantalla completa en TVs de ~65″. También podés superponer un logo PNG transparente: lo arrastrás para ubicarlo, y regulás tamaño y opacidad.',
->>>>>>> origin/main
       },
     ],
   },
