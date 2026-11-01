@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.44',
+    date: '2026-10-31',
+    summary: 'El “día” del sistema sigue el horario de Argentina.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Hoy ya no salta a las 21 hs',
+        desc: 'Dashboard, reportes, caja y delivery usaban la medianoche UTC del servidor. A partir de las 21 hs de Argentina ya contaba como día siguiente. Ahora el día comercial es America/Argentina/Buenos_Aires (hasta las 24 hs locales).',
+      },
+    ],
+  },
+  {
     version: 'v1.42',
     date: '2026-10-31',
     summary: 'El ajuste de stock baja de verdad (y se puede fijar el número).',

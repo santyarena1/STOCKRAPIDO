@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
+import { argentinaDayStart } from '../common/argentina-date-range';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
 import { assertPlanFeature, assertPlanFeatureRead } from '../billing/plan-guard';
@@ -495,9 +496,7 @@ export class DeliveryOrdersService {
 }
 
 function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return argentinaDayStart();
 }
 
 function mapExternalStatus(status: string): DeliveryOrderStatus | null {

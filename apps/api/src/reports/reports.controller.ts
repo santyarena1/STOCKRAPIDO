@@ -1,5 +1,5 @@
 import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { saleDateRangeFromQuery } from '../common/argentina-date-range';
+import { argentinaTodayYmd, saleDateRangeFromQuery } from '../common/argentina-date-range';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ReportPeriod, ReportsService } from './reports.service';
@@ -267,8 +267,9 @@ export class ReportsController {
 
   @Get('caja')
   caja(@CurrentUser() user: User, @Query('from') from?: string, @Query('to') to?: string) {
-    const f = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const t = to ? new Date(to) : new Date();
+    const r = saleDateRangeFromQuery(from, to);
+    const f = r.from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const t = r.to ?? new Date();
     return this.reports.cajaByDay(user.businessId, f, t);
   }
 
@@ -283,6 +284,8 @@ export class ReportsController {
     const f = r.from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const t = r.to ?? new Date();
     const csv = await this.reports.salesCsv(user.businessId, f, t);
-    return { csv, filename: `ventas-${f.toISOString().slice(0, 10)}-${t.toISOString().slice(0, 10)}.csv` };
+    const fromLabel = from?.trim() || argentinaTodayYmd(f);
+    const toLabel = to?.trim() || argentinaTodayYmd(t);
+    return { csv, filename: `ventas-${fromLabel}-${toLabel}.csv` };
   }
 }

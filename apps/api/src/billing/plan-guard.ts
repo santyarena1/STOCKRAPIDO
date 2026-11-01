@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import { argentinaMonthStart } from '../common/argentina-date-range';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   FEATURE_LABELS,
@@ -166,9 +167,7 @@ export async function assertCatalogImportLimit(prisma: PrismaService, businessId
   await assertPlanFeature(prisma, businessId, 'publicCatalog');
   const max = access.plan.limits.maxCatalogImportPerMonth;
   if (max == null) return access;
-  const start = new Date();
-  start.setDate(1);
-  start.setHours(0, 0, 0, 0);
+  const start = argentinaMonthStart();
   const count = await prisma.catalogImportLog.count({
     where: { businessId, importedAt: { gte: start } },
   });
