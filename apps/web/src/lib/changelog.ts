@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.43',
+    date: '2026-10-31',
+    summary: 'Teatro: control de stock en todo el inventario y corrección de egresos.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Teatro: activar control de stock y descontar lo pendiente',
+        desc: 'En Productos (Teatro) se activa el control de stock en todos los productos y se corrigen ventas/ajustes que se habían registrado sin bajar el número. De ahora en más las ventas siempre descuentan stock, aunque el control estuviera apagado.',
+      },
+    ],
+  },
+  {
     version: 'v1.42',
     date: '2026-10-31',
     summary: 'El ajuste de stock baja de verdad (y se puede fijar el número).',

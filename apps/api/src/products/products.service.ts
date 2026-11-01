@@ -85,12 +85,20 @@ export class ProductsService {
   }
 
   /**
-   * Descuenta stock por lotes (FIFO por vencimiento). Si no hay lotes, descuenta del stock total (legacy).
+   * Descuenta stock. Con control de stock: FIFO por lotes (o stock total si no hay lotes).
+   * Sin control: igual baja Product.stock (antes era no-op y las ventas/ajustes no descontaban).
    */
   async deductStockFromBatches(productId: string, businessId: string, qty: number): Promise<void> {
     const product = await this.prisma.product.findFirst({ where: { id: productId, businessId } });
     if (!product) throw new BadRequestException('Producto no encontrado');
-    if (!product.stockControl || qty <= 0) return;
+    if (qty <= 0) return;
+    if (!product.stockControl) {
+      await this.prisma.product.update({
+        where: { id: productId },
+        data: { stock: Math.max(0, product.stock - qty) },
+      });
+      return;
+    }
     const batches = await this.prisma.productBatch.findMany({
       where: { productId, businessId, qty: { gt: 0 } },
       orderBy: [{ expiresAt: 'asc' }, { createdAt: 'asc' }],
@@ -911,6 +919,13 @@ export class ProductsService {
       ? data.imageUrl.trim()
       : undefined;
     const flags = quickProductFlags({ silent: data.silent });
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    // Teatro siempre controla stock (aunque el alta rápida en otros locales lo deje off).
+    const stockControl =
+      business && this.isTeatroTenant(business.name, business.id) ? true : flags.stockControl;
     const percent =
       data.consignmentCommissionPercent == null || data.consignmentCommissionPercent === ('' as unknown)
         ? null
@@ -923,7 +938,7 @@ export class ProductsService {
       price,
       barcode: typeof data.barcode === 'string' && data.barcode.trim() ? data.barcode.trim() : undefined,
       imageUrl,
-      stockControl: flags.stockControl,
+      stockControl,
       incomplete: flags.incomplete,
       silent: flags.silent,
     });
@@ -2049,6 +2064,88 @@ export class ProductsService {
       matches: [],
       ids,
       parseErrors,
+    };
+  }
+
+  /**
+   * Teatro: activa control de stock en TODOS los productos y corrige egresos
+   * que se registraron en StockMove pero no bajaron Product.stock (bug previo
+   * con stockControl=false: ventas y ajustes negativos).
+   * Los egresos por escaneo (`egreso_escaneo`) ya descontaban y no se vuelven a aplicar.
+   */
+  async enableStockControlAndReconcile(businessId: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Negocio no encontrado');
+    if (!this.isTeatroTenant(business.name, business.id)) {
+      throw new ForbiddenException('Solo está habilitado para el tenant Teatro.');
+    }
+
+    const withoutControl = await this.prisma.product.findMany({
+      where: { businessId, stockControl: false },
+      select: { id: true, name: true, stock: true },
+    });
+
+    let enabled = 0;
+    let reconciled = 0;
+    let unitsFixed = 0;
+    const samples: { name: string; from: number; to: number; undeducted: number }[] = [];
+
+    for (const product of withoutControl) {
+      const negativeMoves = await this.prisma.stockMove.findMany({
+        where: {
+          productId: product.id,
+          qty: { lt: 0 },
+          NOT: { reason: 'egreso_escaneo' },
+        },
+        select: { qty: true },
+      });
+      const undeducted = negativeMoves.reduce((sum, move) => sum + Math.abs(move.qty), 0);
+      const nextStock = Math.max(0, product.stock - undeducted);
+      await this.prisma.product.update({
+        where: { id: product.id },
+        data: { stockControl: true, stock: nextStock },
+      });
+      enabled++;
+      if (undeducted > 0) {
+        reconciled++;
+        unitsFixed += product.stock - nextStock;
+        if (samples.length < 15) {
+          samples.push({
+            name: product.name,
+            from: product.stock,
+            to: nextStock,
+            undeducted,
+          });
+        }
+      }
+    }
+
+    // Por si quedó alguno raro: asegurar flag en todo el catálogo.
+    const alreadyOk = await this.prisma.product.updateMany({
+      where: { businessId, stockControl: false },
+      data: { stockControl: true },
+    });
+    enabled += alreadyOk.count;
+
+    const total = await this.prisma.product.count({ where: { businessId } });
+    const withControl = await this.prisma.product.count({
+      where: { businessId, stockControl: true },
+    });
+
+    return {
+      total,
+      withControl,
+      enabled,
+      reconciled,
+      unitsFixed,
+      samples,
+      message:
+        reconciled === 0
+          ? `Control de stock activado en ${enabled} producto(s). No había egresos pendientes de descontar.`
+          : `Control de stock activado en ${enabled} producto(s). Se corrigieron ${reconciled} con ${unitsFixed} unidad(es) que debían haberse descontado.`,
     };
   }
 
