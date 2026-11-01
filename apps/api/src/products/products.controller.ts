@@ -360,6 +360,12 @@ export class ProductsController {
     return this.products.bulkCreateFromText(user.businessId, text);
   }
 
+  /** Activar control de stock + reconciliar egresos no aplicados (solo Teatro). */
+  @Post('enable-stock-control')
+  enableStockControl(@CurrentUser() user: User) {
+    return this.products.enableStockControlAndReconcile(user.businessId);
+  }
+
   /** Redondear todos los precios hacia arriba a $500 (solo tenant Teatro). */
   @Post('round-prices-up')
   roundPricesUp(

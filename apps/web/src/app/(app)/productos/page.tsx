@@ -216,7 +216,9 @@ export default function ProductosPage() {
   const [businessName, setBusinessName] = useState('');
   const [wipingInventory, setWipingInventory] = useState(false);
   const [roundingPrices, setRoundingPrices] = useState(false);
+  const [enablingStockControl, setEnablingStockControl] = useState(false);
   const [quickPriceEdit, setQuickPriceEdit] = useState(false);
+  const teatroStockControlAutoRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
   const isTeatroTenant = /teatro/i.test(
@@ -369,6 +371,67 @@ export default function ProductosPage() {
       }
     });
   }, [hydrated]);
+
+  const enableTeatroStockControl = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!isTeatroTenant || enablingStockControl) return;
+      if (
+        !opts?.silent &&
+        !confirm(
+          '¿Activar control de stock en TODOS los productos de Teatro?\n\nTambién corrige egresos (ventas/ajustes) que se registraron pero no bajaron el número, como el caso del café.',
+        )
+      ) {
+        return;
+      }
+      setEnablingStockControl(true);
+      try {
+        const res = await api<{
+          enabled: number;
+          reconciled: number;
+          unitsFixed: number;
+          withControl: number;
+          total: number;
+          message: string;
+          samples?: { name: string; from: number; to: number; undeducted: number }[];
+        }>('/products/enable-stock-control', { method: 'POST', body: '{}' });
+        setBulkMessage(res.message || `Control de stock activo en ${res.withControl}/${res.total}.`);
+        if (res.samples?.length) {
+          const preview = res.samples
+            .slice(0, 5)
+            .map((s) => `${s.name}: ${s.from}→${s.to}`)
+            .join(' · ');
+          setBulkMessage((msg) => `${msg} Ej.: ${preview}`);
+        }
+        try {
+          localStorage.setItem('sr-teatro-stock-control-v1', 'done');
+        } catch {
+          /* ignore */
+        }
+        await fetchProducts();
+        await refreshStockSummary();
+      } catch (error) {
+        if (!opts?.silent) {
+          alert(error instanceof Error ? error.message : 'No se pudo activar el control de stock');
+        }
+      } finally {
+        setEnablingStockControl(false);
+      }
+    },
+    [isTeatroTenant, enablingStockControl, fetchProducts, refreshStockSummary],
+  );
+
+  // Teatro: al entrar a Productos, activar control + reconciliar egresos una sola vez.
+  useEffect(() => {
+    if (!hydrated || !isTeatroTenant || !businessName) return;
+    if (teatroStockControlAutoRef.current) return;
+    try {
+      if (localStorage.getItem('sr-teatro-stock-control-v1') === 'done') return;
+    } catch {
+      /* ignore */
+    }
+    teatroStockControlAutoRef.current = true;
+    void enableTeatroStockControl({ silent: true });
+  }, [hydrated, isTeatroTenant, businessName, enableTeatroStockControl]);
 
   const roundAllInventoryPrices = async () => {
     if (!isTeatroTenant || roundingPrices) return;
@@ -879,6 +942,14 @@ export default function ProductosPage() {
           </button>
           {isTeatroTenant ? (
             <>
+              <button
+                type="button"
+                disabled={enablingStockControl}
+                onClick={() => void enableTeatroStockControl()}
+                className="rounded-lg border border-ok/40 bg-[var(--ok-soft)] px-3 py-2 text-sm font-medium text-ok hover:bg-raised2 disabled:opacity-50"
+              >
+                {enablingStockControl ? 'Activando control…' : 'Control de stock + corregir'}
+              </button>
               <button
                 type="button"
                 onClick={() => setQuickPriceEdit((current) => !current)}
