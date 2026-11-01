@@ -85,6 +85,36 @@ export class BusinessCustomerDisplayDto {
   promoImageUrls?: string[];
 }
 
+export class BusinessPantallasDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @IsString({ each: true })
+  imageUrls?: string[];
+
+  @IsOptional()
+  dwellSec?: number;
+
+  @IsOptional()
+  transitionMs?: number;
+
+  @IsOptional()
+  @IsIn(['fade', 'slide', 'zoom'])
+  animation?: 'fade' | 'slide' | 'zoom';
+
+  @IsOptional()
+  @IsIn(['cover', 'contain'])
+  fit?: 'cover' | 'contain';
+
+  @IsOptional()
+  @IsString()
+  shareToken?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
 export class BusinessPreciosClarosDto {
   @IsOptional()
   @IsBoolean()
@@ -132,6 +162,11 @@ export class BusinessPosConfigDto {
   @ValidateNested()
   @Type(() => BusinessCustomerDisplayDto)
   customerDisplay?: BusinessCustomerDisplayDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BusinessPantallasDto)
+  pantallas?: BusinessPantallasDto;
 
   @IsOptional()
   @ValidateNested()
