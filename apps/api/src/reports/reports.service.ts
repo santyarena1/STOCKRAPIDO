@@ -176,7 +176,7 @@ export class ReportsService {
 
   /** Por producto: solo cantidad de lotes que vencen en la fecha más cercana (mismo día). No usa product.stock. */
   async expiringSoon(businessId: string, days = 30): Promise<{ name: string; expiresAt: string; qtyExpiring: number }[]> {
-    // Ventana en día comercial AR (no medianoche UTC del server).
+    // Ventana en día de calendario AR (no medianoche UTC del server).
     const now = argentinaDayStart();
     const limit = new Date(now.getTime() + (days + 1) * 24 * 60 * 60 * 1000 - 1);
     const batches = await this.prisma.productBatch.findMany({

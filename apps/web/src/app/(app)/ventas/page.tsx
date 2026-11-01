@@ -112,7 +112,7 @@ function formatMoneyArs(n: number) {
   return formatMoneyArsShared(n, 0);
 }
 
-/** Día comercial AR (America/Argentina/Buenos_Aires) como YYYY-MM-DD. */
+/** Día de calendario AR (America/Argentina/Buenos_Aires) como YYYY-MM-DD. */
 function todayYmdArgentina(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Argentina/Buenos_Aires',
@@ -171,7 +171,7 @@ const VENTAS_DATE_PRESETS: { id: VentasDatePresetId; label: string; title?: stri
 ];
 
 function rangeForVentasDatePreset(id: VentasDatePresetId): { from: string; to: string } {
-  // Anclar presets al día fiscal argentino (no al timezone del navegador/servidor).
+  // Anclar presets al día de calendario argentino (no al timezone del navegador/servidor).
   const today = parseYmdLocal(todayYmdArgentina());
 
   switch (id) {

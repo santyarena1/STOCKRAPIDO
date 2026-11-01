@@ -11,7 +11,7 @@ import {
 } from '../src/common/argentina-date-range';
 
 describe('argentina-date-range', () => {
-  it('después de las 21 hs ART sigue siendo el mismo día comercial', () => {
+  it('después de las 21 hs ART sigue siendo el mismo día de calendario', () => {
     // 22:30 ART del 31/10 = 01:30 UTC del 01/11
     const late = new Date('2026-11-01T01:30:00.000Z');
     assert.equal(argentinaTodayYmd(late), '2026-10-31');

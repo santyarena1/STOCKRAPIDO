@@ -5,6 +5,7 @@
  *
  * La API corre en Vercel (UTC). Usar setHours(0,0,0,0) o getDate() del servidor
  * hace que a partir de las 21:00 ART ya cuente como día siguiente.
+ * Acá “día” = día de calendario en Argentina (00:00–24:00), no un día laboral especial.
  */
 
 const AR = '-03:00';
@@ -51,12 +52,12 @@ export function argentinaTodayYmd(now: Date = new Date()): string {
   }).format(now);
 }
 
-/** Inicio del día comercial argentino que contiene `now` (00:00 ART). */
+/** Medianoche del día de calendario en Argentina que contiene `now` (00:00 ART). */
 export function argentinaDayStart(now: Date = new Date()): Date {
   return parseArgentinaDayStart(argentinaTodayYmd(now))!;
 }
 
-/** Fin del día comercial argentino que contiene `now` (23:59:59.999 ART). */
+/** Fin del día de calendario en Argentina que contiene `now` (23:59:59.999 ART). */
 export function argentinaDayEnd(now: Date = new Date()): Date {
   return parseArgentinaDayEnd(argentinaTodayYmd(now))!;
 }
@@ -76,7 +77,7 @@ export function argentinaDayOfMonth(date: Date): number {
   return argentinaYmdParts(date).day;
 }
 
-/** Primer día del mes comercial argentino que contiene `now` (00:00 ART del día 1). */
+/** Primer día del mes de calendario en Argentina que contiene `now` (00:00 ART del día 1). */
 export function argentinaMonthStart(now: Date = new Date()): Date {
   const { year, month } = argentinaYmdParts(now);
   const mm = String(month + 1).padStart(2, '0');
@@ -84,8 +85,8 @@ export function argentinaMonthStart(now: Date = new Date()): Date {
 }
 
 /**
- * Rango [inicio, fin] del mes calendario argentino `year`/`month` (month 0-indexado).
- * Si no se pasan, usa el mes comercial actual en Argentina.
+ * Rango [inicio, fin] del mes de calendario argentino `year`/`month` (month 0-indexado).
+ * Si no se pasan, usa el mes actual en Argentina.
  */
 export function argentinaMonthBounds(year?: number, month?: number, now: Date = new Date()) {
   const parts = argentinaYmdParts(now);
