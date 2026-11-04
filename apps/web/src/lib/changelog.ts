@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.48',
+    date: '2026-11-04',
+    summary: 'Carhué 1411: edición rápida y herramientas de stock/precios.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Carhué 1411: mismas herramientas de Productos que Teatro',
+        desc: 'En Productos, Carhué 1411 ahora tiene Edición rápida de precio, Control de stock + corregir egresos y Redondear precios a $500. Vaciar inventario y Pantallas siguen solo en Teatro.',
+      },
+    ],
+  },
+  {
     version: 'v1.47',
     date: '2026-11-01',
     summary: 'POS: nombres más legibles, cantidad editable y modo espera con alias.',
