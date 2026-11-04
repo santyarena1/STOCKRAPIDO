@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
-import { isTeatroTenant } from '../common/teatro';
+import { hasStockPriceTools, isTeatroTenant } from '../common/teatro';
 import { assertProductLimit } from '../billing/plan-guard';
 import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
@@ -924,9 +924,9 @@ export class ProductsService {
       where: { id: businessId },
       select: { id: true, name: true },
     });
-    // Teatro siempre controla stock (aunque el alta rápida en otros locales lo deje off).
+    // Teatro / Carhué 1411 siempre controlan stock (aunque el alta rápida en otros locales lo deje off).
     const stockControl =
-      business && this.isTeatroTenant(business.name, business.id) ? true : flags.stockControl;
+      business && this.hasStockPriceTools(business.name, business.id) ? true : flags.stockControl;
     const percent =
       data.consignmentCommissionPercent == null || data.consignmentCommissionPercent === ('' as unknown)
         ? null
@@ -1376,6 +1376,10 @@ export class ProductsService {
 
   private isTeatroTenant(businessName: string, businessId: string): boolean {
     return isTeatroTenant(businessName, businessId);
+  }
+
+  private hasStockPriceTools(businessName: string, businessId: string): boolean {
+    return hasStockPriceTools(businessName, businessId);
   }
 
   private nameSearchTokens(name: string): string[] {
@@ -2060,7 +2064,7 @@ export class ProductsService {
   }
 
   /**
-   * Teatro: activa control de stock en TODOS los productos y corrige egresos
+   * Teatro / Carhué 1411: activa control de stock en TODOS los productos y corrige egresos
    * que se registraron en StockMove pero no bajaron Product.stock (bug previo
    * con stockControl=false: ventas y ajustes negativos).
    * Los egresos por escaneo (`egreso_escaneo`) ya descontaban y no se vuelven a aplicar.
@@ -2071,8 +2075,8 @@ export class ProductsService {
       select: { id: true, name: true },
     });
     if (!business) throw new NotFoundException('Negocio no encontrado');
-    if (!this.isTeatroTenant(business.name, business.id)) {
-      throw new ForbiddenException('Solo está habilitado para el tenant Teatro.');
+    if (!this.hasStockPriceTools(business.name, business.id)) {
+      throw new ForbiddenException('Solo está habilitado para Teatro y Carhué 1411.');
     }
 
     const withoutControl = await this.prisma.product.findMany({
@@ -2143,7 +2147,7 @@ export class ProductsService {
 
   /**
    * Redondea TODOS los precios del inventario hacia arriba al múltiplo de `step`
-   * (por defecto 500). Solo tenant Teatro.
+   * (por defecto 500). Teatro y Carhué 1411.
    * Ej.: 1100→1500, 900→1000, 1000 se mantiene.
    */
   async roundAllPricesUp(businessId: string, step = 500) {
@@ -2155,8 +2159,10 @@ export class ProductsService {
       select: { id: true, name: true },
     });
     if (!business) throw new NotFoundException('Negocio no encontrado');
-    if (!this.isTeatroTenant(business.name, business.id)) {
-      throw new ForbiddenException('Redondear precios del inventario solo está habilitado para el tenant Teatro.');
+    if (!this.hasStockPriceTools(business.name, business.id)) {
+      throw new ForbiddenException(
+        'Redondear precios del inventario solo está habilitado para Teatro y Carhué 1411.',
+      );
     }
 
     const products = await this.prisma.product.findMany({

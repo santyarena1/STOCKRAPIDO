@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PublicCatalogPanel } from '@/components/productos/PublicCatalogPanel';
 import { BulkCreateProductsModal } from '@/components/productos/BulkCreateProductsModal';
 import { QuickPriceEdit } from '@/components/productos/QuickPriceEdit';
+import { hasStockPriceTools, isTeatroTenantName } from '@/lib/teatro';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
@@ -218,30 +219,33 @@ export default function ProductosPage() {
   const [roundingPrices, setRoundingPrices] = useState(false);
   const [enablingStockControl, setEnablingStockControl] = useState(false);
   const [quickPriceEdit, setQuickPriceEdit] = useState(false);
-  const teatroStockControlAutoRef = useRef(false);
+  const stockControlAutoRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
-  const isTeatroTenant = /teatro/i.test(
-    businessName.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
-  );
+  const isTeatroTenant = isTeatroTenantName(businessName);
+  const stockPriceTools = hasStockPriceTools(businessName);
   const canWipeInventory = isTeatroTenant;
-  const quickPriceEnabled = isTeatroTenant && quickPriceEdit;
+  const quickPriceEnabled = stockPriceTools && quickPriceEdit;
 
   useEffect(() => {
     try {
-      setQuickPriceEdit(localStorage.getItem('sr-teatro-quick-price-edit') === '1');
+      const on =
+        localStorage.getItem('sr-quick-price-edit') === '1' ||
+        localStorage.getItem('sr-teatro-quick-price-edit') === '1';
+      setQuickPriceEdit(on);
     } catch {
       /* ignore */
     }
   }, []);
   useEffect(() => {
-    if (!isTeatroTenant) return;
+    if (!stockPriceTools) return;
     try {
+      localStorage.setItem('sr-quick-price-edit', quickPriceEdit ? '1' : '0');
       localStorage.setItem('sr-teatro-quick-price-edit', quickPriceEdit ? '1' : '0');
     } catch {
       /* ignore */
     }
-  }, [isTeatroTenant, quickPriceEdit]);
+  }, [stockPriceTools, quickPriceEdit]);
 
   const applyLocalPrice = useCallback((productId: string, price: number) => {
     setProducts((current) =>
@@ -372,13 +376,13 @@ export default function ProductosPage() {
     });
   }, [hydrated]);
 
-  const enableTeatroStockControl = useCallback(
+  const enableStockControlTools = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!isTeatroTenant || enablingStockControl) return;
+      if (!stockPriceTools || enablingStockControl) return;
       if (
         !opts?.silent &&
         !confirm(
-          '¿Activar control de stock en TODOS los productos de Teatro?\n\nTambién corrige egresos (ventas/ajustes) que se registraron pero no bajaron el número, como el caso del café.',
+          '¿Activar control de stock en TODOS los productos?\n\nTambién corrige egresos (ventas/ajustes) que se registraron pero no bajaron el número.',
         )
       ) {
         return;
@@ -403,7 +407,12 @@ export default function ProductosPage() {
           setBulkMessage((msg) => `${msg} Ej.: ${preview}`);
         }
         try {
-          localStorage.setItem('sr-teatro-stock-control-v1', 'done');
+          const key = `sr-stock-control-reconcile-v1:${businessName.trim().toLowerCase()}`;
+          localStorage.setItem(key, 'done');
+          // Compat con la clave anterior de Teatro en el mismo navegador.
+          if (isTeatroTenantName(businessName)) {
+            localStorage.setItem('sr-teatro-stock-control-v1', 'done');
+          }
         } catch {
           /* ignore */
         }
@@ -417,27 +426,30 @@ export default function ProductosPage() {
         setEnablingStockControl(false);
       }
     },
-    [isTeatroTenant, enablingStockControl, fetchProducts, refreshStockSummary],
+    [stockPriceTools, enablingStockControl, fetchProducts, refreshStockSummary, businessName],
   );
 
-  // Teatro: al entrar a Productos, activar control + reconciliar egresos una sola vez.
+  // Teatro / Carhué 1411: al entrar a Productos, activar control + reconciliar egresos una sola vez.
   useEffect(() => {
-    if (!hydrated || !isTeatroTenant || !businessName) return;
-    if (teatroStockControlAutoRef.current) return;
+    if (!hydrated || !stockPriceTools || !businessName) return;
+    if (stockControlAutoRef.current) return;
     try {
-      if (localStorage.getItem('sr-teatro-stock-control-v1') === 'done') return;
+      const key = `sr-stock-control-reconcile-v1:${businessName.trim().toLowerCase()}`;
+      const legacyTeatroDone =
+        isTeatroTenantName(businessName) && localStorage.getItem('sr-teatro-stock-control-v1') === 'done';
+      if (localStorage.getItem(key) === 'done' || legacyTeatroDone) return;
     } catch {
       /* ignore */
     }
-    teatroStockControlAutoRef.current = true;
-    void enableTeatroStockControl({ silent: true });
-  }, [hydrated, isTeatroTenant, businessName, enableTeatroStockControl]);
+    stockControlAutoRef.current = true;
+    void enableStockControlTools({ silent: true });
+  }, [hydrated, stockPriceTools, businessName, enableStockControlTools]);
 
   const roundAllInventoryPrices = async () => {
-    if (!isTeatroTenant || roundingPrices) return;
+    if (!stockPriceTools || roundingPrices) return;
     if (
       !confirm(
-        '¿Redondear TODOS los precios del inventario hacia arriba a múltiplos de $500?\n\nEjemplos: $1.100 → $1.500 · $900 → $1.000 · $1.000 se mantiene.\n\nAfecta a todo el catálogo de Teatro, no solo a los seleccionados.',
+        '¿Redondear TODOS los precios del inventario hacia arriba a múltiplos de $500?\n\nEjemplos: $1.100 → $1.500 · $900 → $1.000 · $1.000 se mantiene.\n\nAfecta a todo el catálogo, no solo a los seleccionados.',
       )
     ) {
       return;
@@ -940,12 +952,12 @@ export default function ProductosPage() {
             <Upload className="h-4 w-4" />
             Carga masiva
           </button>
-          {isTeatroTenant ? (
+          {stockPriceTools ? (
             <>
               <button
                 type="button"
                 disabled={enablingStockControl}
-                onClick={() => void enableTeatroStockControl()}
+                onClick={() => void enableStockControlTools()}
                 className="rounded-lg border border-ok/40 bg-[var(--ok-soft)] px-3 py-2 text-sm font-medium text-ok hover:bg-raised2 disabled:opacity-50"
               >
                 {enablingStockControl ? 'Activando control…' : 'Control de stock + corregir'}
