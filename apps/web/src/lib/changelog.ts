@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.49',
+    date: '2026-11-04',
+    summary: 'Carhué 1411: herramientas sin cambios automáticos.',
+    items: [
+      {
+        tag: 'FIX',
+        title: 'Carhué 1411 sin auto control de stock ni cambios solos',
+        desc: 'Las herramientas (edición rápida, control de stock, redondeo) quedan disponibles en botones, pero ya no se activa el control de stock solo ni se fuerza en altas. Se revirtió el control en los productos que se habían activado automáticamente.',
+      },
+    ],
+  },
+  {
     version: 'v1.48',
     date: '2026-11-04',
     summary: 'Carhué 1411: edición rápida y herramientas de stock/precios.',
