@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { decorateProductUnits } from '../common/units';
 import { fuzzyCodeClause } from '../common/fuzzy-code';
-import { hasStockPriceTools, isTeatroTenant } from '../common/teatro';
+import { hasStockPriceTools, isCarhue1411Tenant, isTeatroTenant } from '../common/teatro';
 import { assertProductLimit } from '../billing/plan-guard';
 import { collectAllCodes } from '../common/codes';
 import { buildEan13, tenantPrefix } from '../common/ean13';
@@ -924,9 +924,10 @@ export class ProductsService {
       where: { id: businessId },
       select: { id: true, name: true },
     });
-    // Teatro / Carhué 1411 siempre controlan stock (aunque el alta rápida en otros locales lo deje off).
+    // Teatro siempre controla stock (aunque el alta rápida en otros locales lo deje off).
+    // Carhué 1411 solo tiene las herramientas en UI; no se fuerza el flag.
     const stockControl =
-      business && this.hasStockPriceTools(business.name, business.id) ? true : flags.stockControl;
+      business && this.isTeatroTenant(business.name, business.id) ? true : flags.stockControl;
     const percent =
       data.consignmentCommissionPercent == null || data.consignmentCommissionPercent === ('' as unknown)
         ? null
@@ -1380,6 +1381,45 @@ export class ProductsService {
 
   private hasStockPriceTools(businessName: string, businessId: string): boolean {
     return hasStockPriceTools(businessName, businessId);
+  }
+
+  private isCarhue1411Tenant(businessName: string, businessId: string): boolean {
+    return isCarhue1411Tenant(businessName, businessId);
+  }
+
+  /**
+   * Deshace el enable masivo automático en Carhué 1411: apaga stockControl
+   * solo en productos tocados desde el deploy de esa feature (los que ya
+   * tenían control desde antes no se actualizaron en ese job y se respetan).
+   */
+  async revertCarhueAutoStockControl(businessId: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Negocio no encontrado');
+    if (!this.isCarhue1411Tenant(business.name, business.id)) {
+      throw new ForbiddenException('Solo aplica a Carhué 1411.');
+    }
+
+    // Deploy + auto-enable ~ 2026-11-04 15:03 UTC
+    const since = new Date('2026-11-04T14:55:00.000Z');
+    const result = await this.prisma.product.updateMany({
+      where: {
+        businessId,
+        stockControl: true,
+        updatedAt: { gte: since },
+      },
+      data: { stockControl: false },
+    });
+
+    return {
+      disabled: result.count,
+      message:
+        result.count === 0
+          ? 'No había productos con control de stock activado automáticamente para revertir.'
+          : `Se desactivó el control de stock en ${result.count} producto(s) que se habían activado solos. Los que ya lo tenían antes se dejaron igual.`,
+    };
   }
 
   private nameSearchTokens(name: string): string[] {

@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PublicCatalogPanel } from '@/components/productos/PublicCatalogPanel';
 import { BulkCreateProductsModal } from '@/components/productos/BulkCreateProductsModal';
 import { QuickPriceEdit } from '@/components/productos/QuickPriceEdit';
-import { hasStockPriceTools, isTeatroTenantName } from '@/lib/teatro';
+import { hasStockPriceTools, isCarhue1411TenantName, isTeatroTenantName } from '@/lib/teatro';
 import { Loader } from '@/components/ui/Loader';
 import { LabelPrintDialog, type LabelItem } from '@/components/LabelPrintDialog';
 import { usePersistedState } from '@/lib/use-persisted-state';
@@ -220,9 +220,11 @@ export default function ProductosPage() {
   const [enablingStockControl, setEnablingStockControl] = useState(false);
   const [quickPriceEdit, setQuickPriceEdit] = useState(false);
   const stockControlAutoRef = useRef(false);
+  const carhueStockRevertRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
   const isTeatroTenant = isTeatroTenantName(businessName);
+  const isCarhue1411 = isCarhue1411TenantName(businessName);
   const stockPriceTools = hasStockPriceTools(businessName);
   const canWipeInventory = isTeatroTenant;
   const quickPriceEnabled = stockPriceTools && quickPriceEdit;
@@ -429,21 +431,54 @@ export default function ProductosPage() {
     [stockPriceTools, enablingStockControl, fetchProducts, refreshStockSummary, businessName],
   );
 
-  // Teatro / Carhué 1411: al entrar a Productos, activar control + reconciliar egresos una sola vez.
+  // Solo Teatro: al entrar a Productos, activar control + reconciliar egresos una sola vez.
+  // Carhué 1411 tiene los botones, pero no se modifica nada solo.
   useEffect(() => {
-    if (!hydrated || !stockPriceTools || !businessName) return;
+    if (!hydrated || !isTeatroTenant || !businessName) return;
     if (stockControlAutoRef.current) return;
     try {
       const key = `sr-stock-control-reconcile-v1:${businessName.trim().toLowerCase()}`;
-      const legacyTeatroDone =
-        isTeatroTenantName(businessName) && localStorage.getItem('sr-teatro-stock-control-v1') === 'done';
+      const legacyTeatroDone = localStorage.getItem('sr-teatro-stock-control-v1') === 'done';
       if (localStorage.getItem(key) === 'done' || legacyTeatroDone) return;
     } catch {
       /* ignore */
     }
     stockControlAutoRef.current = true;
     void enableStockControlTools({ silent: true });
-  }, [hydrated, stockPriceTools, businessName, enableStockControlTools]);
+  }, [hydrated, isTeatroTenant, businessName, enableStockControlTools]);
+
+  // Carhué 1411: una sola vez, deshacer el control de stock que se activó solo al habilitar las herramientas.
+  useEffect(() => {
+    if (!hydrated || !isCarhue1411 || !businessName) return;
+    if (carhueStockRevertRef.current) return;
+    const flagKey = `sr-carhue-auto-stock-reverted-v1:${businessName.trim().toLowerCase()}`;
+    try {
+      if (localStorage.getItem(flagKey) === '1') return;
+    } catch {
+      /* ignore */
+    }
+    carhueStockRevertRef.current = true;
+    void (async () => {
+      try {
+        const res = await api<{ disabled: number; message: string }>(
+          '/products/revert-carhue-auto-stock-control',
+          { method: 'POST', body: '{}' },
+        );
+        try {
+          localStorage.setItem(flagKey, '1');
+        } catch {
+          /* ignore */
+        }
+        if (res.disabled > 0) {
+          setBulkMessage(res.message);
+          await fetchProducts();
+          await refreshStockSummary();
+        }
+      } catch {
+        carhueStockRevertRef.current = false;
+      }
+    })();
+  }, [hydrated, isCarhue1411, businessName, fetchProducts, refreshStockSummary]);
 
   const roundAllInventoryPrices = async () => {
     if (!stockPriceTools || roundingPrices) return;

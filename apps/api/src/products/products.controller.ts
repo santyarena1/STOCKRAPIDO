@@ -360,10 +360,16 @@ export class ProductsController {
     return this.products.bulkCreateFromText(user.businessId, text);
   }
 
-  /** Activar control de stock + reconciliar egresos no aplicados (solo Teatro). */
+  /** Activar control de stock + reconciliar egresos no aplicados (Teatro / Carhué 1411, manual). */
   @Post('enable-stock-control')
   enableStockControl(@CurrentUser() user: User) {
     return this.products.enableStockControlAndReconcile(user.businessId);
+  }
+
+  /** Carhué 1411: deshacer el control de stock que se activó solo al habilitar las herramientas. */
+  @Post('revert-carhue-auto-stock-control')
+  revertCarhueAutoStockControl(@CurrentUser() user: User) {
+    return this.products.revertCarhueAutoStockControl(user.businessId);
   }
 
   /** Redondear todos los precios hacia arriba a $500 (solo tenant Teatro). */
