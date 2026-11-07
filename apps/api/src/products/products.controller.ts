@@ -302,6 +302,13 @@ export class ProductsController {
     return { filename, content: buffer.toString('base64') };
   }
 
+  /** Lista de precios PDF (producto + precio, A→Z). Solo Teatro. */
+  @Get('price-list-pdf')
+  async priceListPdf(@CurrentUser() user: User) {
+    const { filename, buffer } = await this.products.exportPriceListPdf(user.businessId);
+    return { filename, content: buffer.toString('base64') };
+  }
+
   @Post('import-stock')
   @UseInterceptors(FileInterceptor('file'))
   async importStock(

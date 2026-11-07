@@ -15,6 +15,7 @@ import { buildEan13, tenantPrefix } from '../common/ean13';
 import { PublicCatalogService } from '../public-catalog/public-catalog.service';
 import { parseBulkCreateText, scoreCatalogNameMatch } from './bulk-create-text';
 import { roundPriceUpToStep } from './round-price';
+import { buildPriceListPdf } from '../common/simple-pdf';
 
 export type ProductCatalogQuery = {
   q?: string;
@@ -1302,6 +1303,46 @@ export class ProductsService {
       take: limit,
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * PDF lista de precios (solo Teatro): producto + precio, A→Z.
+   * Sin stock, costo ni otros campos.
+   */
+  async exportPriceListPdf(businessId: string): Promise<{ filename: string; buffer: Buffer }> {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true },
+    });
+    if (!business) throw new NotFoundException('Negocio no encontrado');
+    if (!this.isTeatroTenant(business.name, business.id)) {
+      throw new ForbiddenException('La lista de precios en PDF solo está habilitada para Teatro.');
+    }
+
+    const list = await this.prisma.product.findMany({
+      where: { businessId, isActive: true },
+      select: { name: true, price: true },
+    });
+    list.sort((a, b) =>
+      a.name.localeCompare(b.name, 'es', { sensitivity: 'base', numeric: true }),
+    );
+
+    const money = new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      maximumFractionDigits: 0,
+    });
+    const today = new Date().toLocaleDateString('es-AR');
+    const buffer = buildPriceListPdf({
+      title: `Lista de precios — ${business.name}`,
+      subtitle: `${list.length} producto${list.length === 1 ? '' : 's'} · ${today}`,
+      items: list.map((p) => ({
+        name: p.name,
+        priceLabel: money.format(Number(p.price) || 0),
+      })),
+    });
+    const filename = `lista-precios-${new Date().toISOString().slice(0, 10)}.pdf`;
+    return { filename, buffer };
   }
 
   /** Exporta Excel con ExcelJS (formato estándar que Excel abre sin problemas). */
