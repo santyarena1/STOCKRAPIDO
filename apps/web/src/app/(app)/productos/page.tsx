@@ -218,6 +218,7 @@ export default function ProductosPage() {
   const [wipingInventory, setWipingInventory] = useState(false);
   const [roundingPrices, setRoundingPrices] = useState(false);
   const [enablingStockControl, setEnablingStockControl] = useState(false);
+  const [downloadingPricePdf, setDownloadingPricePdf] = useState(false);
   const [quickPriceEdit, setQuickPriceEdit] = useState(false);
   const stockControlAutoRef = useRef(false);
   const carhueStockRevertRef = useRef(false);
@@ -555,6 +556,29 @@ export default function ProductosPage() {
   const visibleColumns = columns.filter((column) => column.visible && (mode === 'stock' || !STOCK_COLUMNS.has(column.key)));
   const daysUntilExpiry = (value?: string | null) => value ? Math.ceil((new Date(value).getTime() - now.getTime()) / 86400000) : null;
 
+  const downloadBase64File = (parsed: { filename?: string; content?: string }, mime: string) => {
+    if (!parsed?.content || typeof parsed.filename !== 'string') {
+      throw new Error('La API no devolvió el archivo');
+    }
+    const base64 = String(parsed.content).replace(/\s/g, '');
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mime });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = parsed.filename;
+    link.style.position = 'fixed';
+    link.style.left = '-9999px';
+    link.style.top = '0';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }, 2000);
+  };
+
   const handleExportStock = (e?: React.MouseEvent) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (exporting) return;
@@ -568,13 +592,33 @@ export default function ProductosPage() {
         try { parsed = JSON.parse(raw) as { message?: string; filename?: string; content?: string }; }
         catch { throw new Error('La respuesta no es JSON válido'); }
         if (!ok) throw new Error(parsed?.message || 'Error al exportar');
-        if (!parsed?.content || typeof parsed.filename !== 'string') throw new Error(parsed?.message || 'La API no devolvió el archivo');
-        const base64 = String(parsed.content).replace(/\s/g, ''); const binary = atob(base64); const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = parsed.filename; link.style.position = 'fixed'; link.style.left = '-9999px'; link.style.top = '0'; document.body.appendChild(link); link.click();
-        setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(link.href); }, 2000); setExportMsg(null);
+        downloadBase64File(parsed, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        setExportMsg(null);
       }).catch((err) => { setExportMsg(null); alert(err instanceof Error ? err.message : 'Error al exportar'); }).finally(() => setExporting(false));
+  };
+
+  const handleDownloadPriceListPdf = () => {
+    if (!isTeatroTenant || downloadingPricePdf) return;
+    setDownloadingPricePdf(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    fetch(`${getApiBaseUrl()}/products/price-list-pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => res.text().then((raw) => ({ ok: res.ok, raw })))
+      .then(({ ok, raw }) => {
+        let parsed: { message?: string; filename?: string; content?: string };
+        try {
+          parsed = JSON.parse(raw) as { message?: string; filename?: string; content?: string };
+        } catch {
+          throw new Error('La respuesta no es JSON válido');
+        }
+        if (!ok) throw new Error(parsed?.message || 'Error al generar el PDF');
+        downloadBase64File(parsed, 'application/pdf');
+      })
+      .catch((err) => {
+        alert(err instanceof Error ? err.message : 'Error al descargar la lista de precios');
+      })
+      .finally(() => setDownloadingPricePdf(false));
   };
 
   const handleExportTxt = () => {
@@ -1018,6 +1062,16 @@ export default function ProductosPage() {
                 {roundingPrices ? 'Redondeando…' : 'Redondear precios a $500'}
               </button>
             </>
+          ) : null}
+          {isTeatroTenant ? (
+            <button
+              type="button"
+              disabled={downloadingPricePdf}
+              onClick={() => handleDownloadPriceListPdf()}
+              className="rounded-lg border border-hair bg-raised px-3 py-2 text-sm font-medium text-fg hover:bg-raised2 disabled:opacity-50"
+            >
+              {downloadingPricePdf ? 'Generando PDF…' : 'Lista de precios PDF'}
+            </button>
           ) : null}
           {canWipeInventory ? (
             <button

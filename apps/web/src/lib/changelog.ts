@@ -22,6 +22,18 @@ export type ChangelogVersion = {
 /** Más nueva primero. */
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: 'v1.50',
+    date: '2026-11-07',
+    summary: 'Teatro: descargar lista de precios en PDF.',
+    items: [
+      {
+        tag: 'NUEVO',
+        title: 'Lista de precios PDF (Teatro)',
+        desc: 'En Productos, Teatro tiene un botón para descargar un PDF con producto y precio, ordenado de la A a la Z. Sin stock ni otros campos.',
+      },
+    ],
+  },
+  {
     version: 'v1.49',
     date: '2026-11-04',
     summary: 'Carhué 1411: herramientas sin cambios automáticos.',
